@@ -96,3 +96,17 @@ The complete v1 backlog is tracked in the [v1.0 milestone](https://github.com/pa
 ## License
 
 Budget App is available under the [MIT License](./LICENSE).
+
+## Local Supabase database
+
+The database schema is versioned under `supabase/migrations/`. The local workflow requires Docker and uses the project-pinned Supabase CLI:
+
+```bash
+pnpm db:start
+pnpm test:db
+pnpm db:stop
+```
+
+`pnpm test:db` resets the local database from an empty state before running every pgTAP file under `supabase/tests/database/`, so repeated runs do not depend on data left by an earlier run. `pnpm db:reset` is available when only a migration replay is needed.
+
+The browser and SSR clients use the publishable key and remain constrained by explicit PostgreSQL grants and row-level security. The existing `src/lib/supabase/admin.ts` client imports `server-only` and uses `SUPABASE_SERVICE_ROLE_KEY`; that role intentionally bypasses RLS. Keep it confined to trusted server code for workspace bootstrap and invitation handling, Plaid item/token/account/transaction synchronization, sync-state writes, and append-only audit writes. Never import the admin client into a Client Component or expose its key, Plaid token ciphertext, encryption keys, or unsanitized provider errors to browser code.

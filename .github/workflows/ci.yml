@@ -11,7 +11,7 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Check out repository
@@ -40,6 +40,12 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Test database migrations and RLS
+        run: |
+          trap 'pnpm exec supabase stop --no-backup' EXIT
+          pnpm db:start
+          pnpm test:db
 
       - name: Build
         run: pnpm build
