@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+:root {
+  --background: #e8eee9;
+  --surface: #f8faf7;
+  --panel: #edf2ee;
+  --ink: #14231c;
+  --muted: #5b6c63;
+  --line: #cbd6ce;
+  --brand: #176044;
+  --brand-strong: #0d4431;
+  --mineral: #4e7180;
+  --alert: #a24f40;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-mineral: var(--mineral);
+  --color-alert: var(--alert);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+  --font-utility: var(--font-utility);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0c1712;
+    --surface: #111f19;
+    --panel: #172821;
+    --ink: #eef6f0;
+    --muted: #9eaea5;
+    --line: #31463b;
+    --brand: #67c79b;
+    --brand-strong: #83d8b1;
+    --mineral: #8eb5c3;
+    --alert: #e39787;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  background-color: var(--background);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--line) 42%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--line) 42%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 2rem 2rem;
+  color: var(--ink);
+  font-family: var(--font-body), sans-serif;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--brand) 28%, transparent);
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
