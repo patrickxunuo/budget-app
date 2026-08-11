@@ -43,9 +43,21 @@ jobs:
 
       - name: Test database migrations and RLS
         run: |
-          trap 'pnpm exec supabase stop --no-backup' EXIT
           pnpm db:start
           pnpm test:db
+          eval "$(pnpm exec supabase status -o env)"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SECRET_KEY"
+            echo "APP_URL=http://127.0.0.1:3100"
+            echo "CRON_SECRET=ci-local-cron-secret-00000000000000000000"
+            echo "PLAID_CLIENT_ID=ci-local-client"
+            echo "PLAID_ENV=sandbox"
+            echo "PLAID_SECRET=ci-local-secret"
+            echo "PLAID_TOKEN_ENCRYPTION_KEY=ci-local-token-key-000000000000000000"
+            echo "PLAID_WEBHOOK_URL=http://127.0.0.1:3100/api/plaid/webhook"
+          } >> "$GITHUB_ENV"
 
       - name: Build
         run: pnpm build
@@ -63,3 +75,7 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm exec supabase stop --no-backup
