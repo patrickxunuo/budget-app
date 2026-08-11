@@ -22,6 +22,9 @@
 - Authorization: database RLS is the primary boundary; privileged server paths must be narrow and documented.
 - Auth lifecycle mutations: expose setup and invitation finalization only to the service role; expose membership changes only through fixed-search-path RPCs, and revoke direct table writes that could bypass recent-password checks.
 - Cross-system deletion: enqueue Auth identity deletion transactionally before deleting database state, process the service-only outbox idempotently, and retain failures for a bearer-protected retry worker.
+- Plaid lifecycle mutations: keep pending candidates and encrypted access tokens service-only, revoke authenticated writes to protected Item/account state, and activate reviewed accounts through one fixed-search-path RPC.
+- Plaid duplicate identity: compare immutable provider-backed institution, type/subtype, normalized name, and mask fields; never use user-editable display names, and fail closed when duplicate lookup cannot complete.
+- External activation boundaries: once database activation commits, downstream import failures are retryable pending states rather than false activation failures; return only sanitized sync state and preserve idempotent partial progress.
 - Session security: bind signed HttpOnly recovery and absolute-session state to the Auth user; recovery state is short-lived and single-use, while protected sessions expire absolutely after 30 days.
 - RLS helpers: place narrow `security definer` predicates in the non-exposed `private` schema, pin `search_path`, revoke default execution, and authorize both a child row and its underlying parent privacy domain.
 - Privacy-domain invariants: scoped category references must match workspace/scope/owner; deferred triggers enforce cross-table owner consistency; guarded scope fields prevent shared data from being privatized indirectly.

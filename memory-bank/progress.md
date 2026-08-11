@@ -2,11 +2,14 @@
 
 ## Current Sprint / Focus
 
-GH-3 invite-only family authentication and membership is in review as [PR #17](https://github.com/patrickxunuo/budget-app/pull/17).
+GH-4 read-only Canadian Plaid account linking is ready to ship after independent review.
 
 ## Log
 
 <!-- Newest entries first. Format: - YYYY-MM-DDTHH:MMZ [status] feature-name — notes -->
+
+- 2026-08-11T23:20Z [READY] GH-4 read-only Canadian Plaid linking completed with server-authenticated institution identity, AES-256-GCM token storage, atomic Personal/Family activation, serialized duplicate enforcement, retryable initial sync, and an accessible Accounts dossier; lint, typecheck, build, 49 Vitest checks, 217 pgTAP assertions, 28 browser journeys, and independent review are green.
+- 2026-08-11T22:12Z [PLANNED] GH-4 approved: secure Canadian read-only Plaid Link, encrypted pending review, Personal-by-default mixed visibility activation, duplicate override, initial import, polished Accounts UI, and unit/pgTAP/Playwright verification.
 
 - 2026-08-11T22:35Z [PR] GH-3 invite-only auth, recovery, session expiry, invitations, guarded membership/deletion flows, and durable Auth cleanup shipped in commit `01c4f25` and [PR #17](https://github.com/patrickxunuo/budget-app/pull/17); 17 unit/component tests, 191 pgTAP assertions, lint/type/build, 14 browser tests, and independent review green. CI now retains its local Supabase stack and exports generated runtime credentials through the browser job.
 - 2026-08-11T19:12Z [READY] GH-2 Supabase family schema and privacy boundary implemented; clean migration replay, 157 pgTAP assertions, lint/type/unit/build, and independent review green.

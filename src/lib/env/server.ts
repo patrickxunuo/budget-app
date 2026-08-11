@@ -20,6 +20,7 @@ export function getServerEnv(): ServerEnv {
     PLAID_SECRET: process.env.PLAID_SECRET,
     PLAID_TOKEN_ENCRYPTION_KEY: process.env.PLAID_TOKEN_ENCRYPTION_KEY,
     PLAID_WEBHOOK_URL: process.env.PLAID_WEBHOOK_URL,
+    PLAID_E2E_PROVIDER: process.env.PLAID_E2E_PROVIDER,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   });
 

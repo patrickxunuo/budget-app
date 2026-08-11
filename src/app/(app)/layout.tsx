@@ -2,7 +2,7 @@
 import { LedgerMark } from "@/components/ledger-mark";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { requireActiveMembership } from "@/lib/auth/dal";
-const futureNavigation = ["Accounts", "Categories", "Budgets"] as const;
+const futureNavigation = ["Categories", "Budgets"] as const;
 export default async function ApplicationLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -39,6 +39,13 @@ export default async function ApplicationLayout({
             Household
             <span className="font-utility text-brand text-[.62rem]">02</span>
           </Link>
+          <Link
+            href="/accounts"
+            className="text-ink hover:bg-surface focus-visible:outline-brand mt-1 flex min-h-11 items-center justify-between rounded-xl px-3.5 text-sm font-semibold focus-visible:outline-2"
+          >
+            Accounts
+            <span className="font-utility text-brand text-[.62rem]">03</span>
+          </Link>
           {futureNavigation.map((label, index) => (
             <span
               key={label}
@@ -46,7 +53,7 @@ export default async function ApplicationLayout({
               className="text-muted/65 mt-1 hidden min-h-11 items-center justify-between px-3.5 text-sm lg:flex"
             >
               {label}
-              <span className="font-utility text-[.62rem]">0{index + 3}</span>
+              <span className="font-utility text-[.62rem]">0{index + 4}</span>
             </span>
           ))}
         </nav>

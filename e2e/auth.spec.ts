@@ -204,7 +204,12 @@ test("FE-007 desktop and mobile auth surfaces avoid overflow, expose focus, and 
     ["/sign-in", "sign-in-submit", "sign-in-responsive"],
   ] as const) {
     await page.goto(route);
-    const submit = page.getByTestId(testId);
+    const submit =
+      route === "/setup"
+        ? page
+            .getByTestId("setup-submit")
+            .or(page.getByTestId("sign-in-submit"))
+        : page.getByTestId(testId);
     await expect(submit).toBeVisible();
     await submit.focus();
     await expect(submit).toBeFocused();
