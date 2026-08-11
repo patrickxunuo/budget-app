@@ -5,6 +5,9 @@ import { AuthShell } from "@/components/auth/auth-shell";
 import { setupFamily } from "@/lib/auth/actions";
 import { getCurrentUser, workspaceExists } from "@/lib/auth/dal";
 import { idleAuthState } from "@/lib/auth/types";
+
+export const dynamic = "force-dynamic";
+
 export default async function SetupPage() {
   if (await workspaceExists())
     redirect((await getCurrentUser()) ? "/dashboard" : "/sign-in");
