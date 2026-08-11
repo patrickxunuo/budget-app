@@ -42,3 +42,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local workflow state
+memory-bank/activeTask.md
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/

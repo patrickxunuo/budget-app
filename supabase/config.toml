@@ -1,0 +1,35 @@
+﻿project_id = "budget-app"
+
+[api]
+enabled = true
+port = 55321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 55322
+shadow_port = 55320
+major_version = 17
+
+[db.seed]
+enabled = false
+
+[studio]
+enabled = false
+port = 55323
+
+[local_smtp]
+enabled = false
+port = 55324
+
+[analytics]
+enabled = false
+port = 55327
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://127.0.0.1:3000"]
+jwt_expiry = 3600
+enable_signup = true
