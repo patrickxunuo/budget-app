@@ -11,7 +11,7 @@ Project memory. Read this file first to find what you need.
 
 ## Topic Files
 
-(none yet — will be created as the project grows)
+- [testBaseline.md](testBaseline.md) — E2E coverage and fixture requirements
 
 ## Last Updated
 

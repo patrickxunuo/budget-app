@@ -24,21 +24,16 @@ test("communicates the read-only product boundary", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
-test("navigates from the landing page to the application shell", async ({
+test("routes anonymous visitors from the landing page to sign-in", async ({
   page,
 }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "View application shell" }).click();
 
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/sign-in\?next=%2Fdashboard$/);
   await expect(
-    page.getByRole("heading", {
-      level: 1,
-      name: "The ledger is ready for its rules.",
-    }),
+    page.getByRole("heading", { level: 1, name: "Welcome home." }),
   ).toBeVisible();
-  await expect(page.getByText("Family", { exact: true })).toBeVisible();
-  await expect(page.getByText("Personal", { exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 
@@ -55,7 +50,7 @@ test("provides a recovery path for unknown routes", async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("captures the landing page and application shell", async ({
+test("captures the landing page and protected sign-in boundary", async ({
   page,
 }, testInfo) => {
   await page.goto("/");
@@ -78,20 +73,18 @@ test("captures the landing page and application shell", async ({
   });
 
   await page.getByRole("link", { name: "View application shell" }).click();
+  await expect(page).toHaveURL(/\/sign-in\?next=%2Fdashboard$/);
   await expect(
-    page.getByRole("heading", {
-      level: 1,
-      name: "The ledger is ready for its rules.",
-    }),
+    page.getByRole("heading", { level: 1, name: "Welcome home." }),
   ).toBeVisible();
 
-  const dashboardPath = testInfo.outputPath("dashboard-shell.png");
+  const dashboardPath = testInfo.outputPath("sign-in-boundary.png");
   await page.screenshot({
     animations: "disabled",
     fullPage: true,
     path: dashboardPath,
   });
-  await testInfo.attach("dashboard shell", {
+  await testInfo.attach("sign-in boundary", {
     contentType: "image/png",
     path: dashboardPath,
   });

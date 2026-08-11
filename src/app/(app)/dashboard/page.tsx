@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
+import { requireActiveMembership } from "@/lib/auth/dal";
 
 export const metadata: Metadata = {
   title: "Dashboard foundation",
@@ -10,7 +11,8 @@ const setupPath = [
   ["04", "Connect a bank", "Read-only Plaid Link"],
 ] as const;
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  await requireActiveMembership();
   return (
     <main className="px-5 py-10 sm:px-8 sm:py-12 lg:px-12 lg:py-14">
       <div className="mx-auto max-w-6xl">
