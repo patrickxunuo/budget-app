@@ -1,4 +1,4 @@
-import "server-only";
+﻿import "server-only";
 
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
@@ -19,7 +19,8 @@ export function getPlaidClient(): PlaidApi {
         "PLAID-SECRET": env.PLAID_SECRET,
       },
     },
-    basePath: PlaidEnvironments[env.PLAID_ENV],
+    basePath:
+      PlaidEnvironments[env.PLAID_ENV === "sandbox" ? "sandbox" : "production"],
   });
 
   plaidClient = new PlaidApi(configuration);

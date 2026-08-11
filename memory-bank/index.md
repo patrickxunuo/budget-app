@@ -8,6 +8,7 @@ Project memory. Read this file first to find what you need.
 - [techContext.md](techContext.md) — Tech stack, dependencies, and architecture
 - [systemPatterns.md](systemPatterns.md) — Code and security conventions
 - [progress.md](progress.md) — Current status and development progress
+- [devSetup.md](devSetup.md) — Local development, database, and E2E startup contract
 
 ## Topic Files
 

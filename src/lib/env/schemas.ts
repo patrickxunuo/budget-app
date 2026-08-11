@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 export const clientEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
@@ -9,10 +9,11 @@ export const serverEnvSchema = clientEnvSchema.extend({
   APP_URL: z.string().url(),
   CRON_SECRET: z.string().min(32),
   PLAID_CLIENT_ID: z.string().min(1),
-  PLAID_ENV: z.enum(["sandbox", "production"]),
+  PLAID_ENV: z.enum(["sandbox", "production", "trial"]),
   PLAID_SECRET: z.string().min(1),
   PLAID_TOKEN_ENCRYPTION_KEY: z.string().min(32),
   PLAID_WEBHOOK_URL: z.string().url(),
+  PLAID_E2E_PROVIDER: z.enum(["deterministic"]).optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 });
 

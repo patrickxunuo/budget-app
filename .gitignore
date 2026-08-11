@@ -45,6 +45,8 @@ next-env.d.ts
 
 # Local workflow state
 memory-bank/activeTask.md
+dev-start.ps1
+dev-stop.ps1
 
 # Supabase CLI local state
 supabase/.temp/
