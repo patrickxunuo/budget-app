@@ -382,4 +382,3 @@ describe("GH-5 Plaid sync route acceptance", () => {
     });
   });
 });
-
