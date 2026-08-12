@@ -30,6 +30,7 @@
 - Session security: bind signed HttpOnly recovery and absolute-session state to the Auth user; recovery state is short-lived and single-use, while protected sessions expire absolutely after 30 days.
 - RLS helpers: place narrow `security definer` predicates in the non-exposed `private` schema, pin `search_path`, revoke default execution, and authorize both a child row and its underlying parent privacy domain.
 - Privacy-domain invariants: scoped category references must match workspace/scope/owner; deferred triggers enforce cross-table owner consistency; guarded scope fields prevent shared data from being privatized indirectly.
+- Merchant categorization: derive stable merchant identity again inside authenticated mutation RPCs, treat provider entity IDs as opaque case-sensitive values, normalize only name fallbacks, and keep manual overrides above rules and Plaid defaults.
 - Validation: Zod validates environment boundaries before clients are constructed.
 
 ## API Conventions

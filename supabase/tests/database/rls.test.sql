@@ -110,24 +110,30 @@ select throws_ok($$insert into public.audit_events(workspace_id,actor_profile_id
 select throws_ok($$update public.audit_events set action='browser.update' where id='f1000000-0000-0000-0000-000000000001'$$,'42501',null,'DB-008 authenticated cannot update audit events');
 select throws_ok($$delete from public.audit_events where id='f1000000-0000-0000-0000-000000000001'$$,'42501',null,'DB-008 authenticated cannot delete audit events');
 
--- DB-009: scoped mutable tables expose authenticated CRUD only through RLS.
+-- DB-009: scoped tables expose only the authenticated mutations supported by
+-- their domain workflow; categories archive and rule creation uses a narrow RPC.
+select ok(
+  has_table_privilege('authenticated','public.categories','SELECT,INSERT,UPDATE')
+  and not has_table_privilege('authenticated','public.categories','DELETE')
+  and has_table_privilege('authenticated','public.merchant_rules','SELECT,DELETE')
+  and not has_table_privilege('authenticated','public.merchant_rules','INSERT,UPDATE')
+  and not exists(
+    select 1 from (values ('budgets'),('manual_entries'),('transaction_metadata')) v(tab)
+    where not (has_table_privilege('authenticated',format('public.%I',v.tab),'SELECT') and has_table_privilege('authenticated',format('public.%I',v.tab),'INSERT') and has_table_privilege('authenticated',format('public.%I',v.tab),'UPDATE') and has_table_privilege('authenticated',format('public.%I',v.tab),'DELETE'))
+  ), 'DB-009 scoped tables expose only supported authenticated mutations');
 select ok(not exists(
-  select 1 from (values ('categories'),('merchant_rules'),('budgets'),('manual_entries'),('transaction_metadata')) v(tab)
-  where not (has_table_privilege('authenticated',format('public.%I',v.tab),'SELECT') and has_table_privilege('authenticated',format('public.%I',v.tab),'INSERT') and has_table_privilege('authenticated',format('public.%I',v.tab),'UPDATE') and has_table_privilege('authenticated',format('public.%I',v.tab),'DELETE'))
-), 'DB-009 scoped mutable tables grant authenticated CRUD for RLS filtering');
-select ok(not exists(
-  select 1 from (values ('categories'),('merchant_rules'),('budgets'),('manual_entries'),('transaction_metadata')) v(tab)
+  select 1 from (values ('budgets'),('manual_entries'),('transaction_metadata')) v(tab)
   where (select count(*) from pg_policies p where p.schemaname='public' and p.tablename=v.tab and 'authenticated'=any(p.roles)) < 3
-), 'DB-009 scoped mutable tables have authenticated read/write policies');
+), 'DB-009 directly mutable scoped tables have authenticated read/write policies');
 select set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-000000000002","role":"authenticated"}',true);
 select lives_ok($$insert into public.categories(workspace_id,created_by,name,color,scope,owner_profile_id) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','Family Added','#111111','family',null)$$,'DB-009 active members create Family records');
 select lives_ok($$update public.categories set color='#222222' where id='c0000000-0000-0000-0000-000000000001'$$,'DB-009 active members update Family records');
-select lives_ok($$delete from public.categories where name='Family Added'$$,'DB-009 active members delete Family records');
+select throws_ok($$delete from public.categories where name='Family Added'$$,'42501',null,'DB-009 categories expose archive updates instead of destructive deletion');
 select lives_ok($$insert into public.manual_entries(workspace_id,created_by,scope,amount,currency_code,entry_date,description) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','family',3,'CAD',current_date,'Temporary manual')$$,'DB-009 active members create Family manual entries');
 select lives_ok($$update public.manual_entries set description='Updated family manual' where id='f2000000-0000-0000-0000-000000000001'$$,'DB-009 active members update Family manual entries');
 select lives_ok($$delete from public.manual_entries where description='Temporary manual'$$,'DB-009 active members delete Family manual entries');
-select lives_ok($$insert into public.merchant_rules(workspace_id,created_by,merchant_match,category_id,scope) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','temporary merchant','c0000000-0000-0000-0000-000000000001','family')$$,'DB-009 active members create Family merchant rules');
-select lives_ok($$update public.merchant_rules set priority=2 where id='f3000000-0000-0000-0000-000000000001'$$,'DB-009 active members update Family merchant rules');
+select throws_ok($$insert into public.merchant_rules(workspace_id,created_by,merchant_match,category_id,scope) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','temporary merchant','c0000000-0000-0000-0000-000000000001','family')$$,'42501',null,'DB-009 direct merchant-rule creation is denied in favor of the validating RPC');
+select throws_ok($$update public.merchant_rules set priority=2 where id='f3000000-0000-0000-0000-000000000001'$$,'42501',null,'DB-009 direct Family rule updates are denied');
 select lives_ok($$delete from public.merchant_rules where merchant_match='temporary merchant'$$,'DB-009 active members delete Family merchant rules');
 select lives_ok($$insert into public.budgets(workspace_id,created_by,amount,currency_code,start_date,end_date,scope) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002',25,'CAD',current_date,current_date + 7,'family')$$,'DB-009 active members create Family budgets');
 select lives_ok($$update public.budgets set amount=125 where id='f4000000-0000-0000-0000-000000000001'$$,'DB-009 active members update Family budgets');
@@ -141,8 +147,8 @@ select throws_ok($$update public.transaction_metadata set category_id='c0000000-
 select throws_ok($$update public.transaction_metadata set category_id='c0000000-0000-0000-0000-000000000001',updated_by='a0000000-0000-0000-0000-000000000002' where transaction_id='f0000000-0000-0000-0000-000000000002'$$,'23514',null,'DB-009 Personal transaction metadata cannot reference a Family category');
 select throws_ok($$insert into public.manual_entries(workspace_id,created_by,scope,amount,currency_code,entry_date,description,category_id) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','family',4,'CAD',current_date,'Bad family category','c0000000-0000-0000-0000-000000000002')$$,'23514',null,'DB-009 Family manual entries cannot reference a Personal category');
 select throws_ok($$insert into public.manual_entries(workspace_id,created_by,scope,owner_profile_id,amount,currency_code,entry_date,description,category_id) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','personal','a0000000-0000-0000-0000-000000000002',4,'CAD',current_date,'Bad personal category','c0000000-0000-0000-0000-000000000001')$$,'23514',null,'DB-009 Personal manual entries cannot reference a Family category');
-select throws_ok($$insert into public.merchant_rules(workspace_id,created_by,merchant_match,category_id,scope) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','bad family category','c0000000-0000-0000-0000-000000000002','family')$$,'23514',null,'DB-009 Family merchant rules cannot reference a Personal category');
-select throws_ok($$insert into public.merchant_rules(workspace_id,created_by,merchant_match,category_id,scope,owner_profile_id) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','bad personal category','c0000000-0000-0000-0000-000000000001','personal','a0000000-0000-0000-0000-000000000002')$$,'23514',null,'DB-009 Personal merchant rules cannot reference a Family category');
+select throws_ok($$insert into public.merchant_rules(workspace_id,created_by,merchant_match,category_id,scope) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','bad family category','c0000000-0000-0000-0000-000000000002','family')$$,'42501',null,'DB-009 direct Family rule insertion is denied');
+select throws_ok($$insert into public.merchant_rules(workspace_id,created_by,merchant_match,category_id,scope,owner_profile_id) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','bad personal category','c0000000-0000-0000-0000-000000000001','personal','a0000000-0000-0000-0000-000000000002')$$,'42501',null,'DB-009 direct Personal rule insertion is denied');
 select throws_ok($$insert into public.budgets(workspace_id,created_by,category_id,amount,currency_code,start_date,end_date,scope) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','c0000000-0000-0000-0000-000000000002',10,'CAD',current_date,current_date + 1,'family')$$,'23514',null,'DB-009 Family budgets cannot reference a Personal category');
 select throws_ok($$insert into public.budgets(workspace_id,created_by,category_id,amount,currency_code,start_date,end_date,scope,owner_profile_id) values ('b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','c0000000-0000-0000-0000-000000000001',10,'CAD',current_date,current_date + 1,'personal','a0000000-0000-0000-0000-000000000002')$$,'23514',null,'DB-009 Personal budgets cannot reference a Family category');
 select throws_ok($$update public.categories set scope='family',owner_profile_id=null where id='c0000000-0000-0000-0000-000000000002'$$,'23514',null,'DB-009 category authorization scope is immutable once referenced');
@@ -150,14 +156,14 @@ select lives_ok($$insert into public.categories(workspace_id,created_by,name,sco
 select lives_ok($$update public.categories set color='#abcdef' where name='Temporary Personal'$$,'DB-009 owners update Personal categories');
 select lives_ok($$insert into public.manual_entries(workspace_id,created_by,scope,owner_profile_id,amount,currency_code,entry_date,description,category_id) select 'b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','personal','a0000000-0000-0000-0000-000000000002',7,'CAD',current_date,'Temporary private manual',id from public.categories where name='Temporary Personal'$$,'DB-009 owners create Personal manual entries');
 select lives_ok($$update public.manual_entries set amount=8 where description='Temporary private manual'$$,'DB-009 owners update Personal manual entries');
-select lives_ok($$insert into public.merchant_rules(workspace_id,created_by,merchant_match,category_id,scope,owner_profile_id) select 'b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','temporary private merchant',id,'personal','a0000000-0000-0000-0000-000000000002' from public.categories where name='Temporary Personal'$$,'DB-009 owners create Personal merchant rules');
-select lives_ok($$update public.merchant_rules set priority=3 where merchant_match='temporary private merchant'$$,'DB-009 owners update Personal merchant rules');
+select throws_ok($$insert into public.merchant_rules(workspace_id,created_by,merchant_match,category_id,scope,owner_profile_id) select 'b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','temporary private merchant',id,'personal','a0000000-0000-0000-0000-000000000002' from public.categories where name='Temporary Personal'$$,'42501',null,'DB-009 owners also use the validating RPC for Personal rules');
+select throws_ok($$update public.merchant_rules set priority=3 where merchant_match='temporary private merchant'$$,'42501',null,'DB-009 direct Personal rule updates are denied');
 select lives_ok($$insert into public.budgets(workspace_id,created_by,category_id,amount,currency_code,start_date,end_date,scope,owner_profile_id) select 'b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002',id,30,'CAD',current_date,current_date + 7,'personal','a0000000-0000-0000-0000-000000000002' from public.categories where name='Temporary Personal'$$,'DB-009 owners create Personal budgets');
 select lives_ok($$update public.budgets set amount=35 where amount=30 and scope='personal'$$,'DB-009 owners update Personal budgets');
 select lives_ok($$delete from public.merchant_rules where merchant_match='temporary private merchant'$$,'DB-009 owners delete Personal merchant rules');
 select lives_ok($$delete from public.budgets where amount=35 and scope='personal'$$,'DB-009 owners delete Personal budgets');
 select lives_ok($$delete from public.manual_entries where description='Temporary private manual'$$,'DB-009 owners delete Personal manual entries');
-select lives_ok($$delete from public.categories where name='Temporary Personal'$$,'DB-009 owners delete Personal categories');
+select throws_ok($$delete from public.categories where name='Temporary Personal'$$,'42501',null,'DB-009 Personal categories also deny destructive deletion');
 select lives_ok($$update public.transaction_metadata set note='Private updated',updated_by='a0000000-0000-0000-0000-000000000002' where transaction_id='f0000000-0000-0000-0000-000000000002'$$,'DB-009 owners update Personal transaction metadata');
 select lives_ok($$delete from public.transaction_metadata where transaction_id='f0000000-0000-0000-0000-000000000002'$$,'DB-009 owners delete Personal transaction metadata');
 select throws_ok($$insert into public.transaction_metadata(transaction_id,workspace_id,updated_by,scope,note) values ('f0000000-0000-0000-0000-000000000002','b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','family','Improperly shared')$$,'23514',null,'DB-009 Family metadata cannot be created for a Personal transaction');
@@ -169,14 +175,14 @@ select results_eq($$select count(*)::bigint from public.budgets where id='f40000
 select results_eq($$select count(*)::bigint from public.transaction_metadata where transaction_id='f0000000-0000-0000-0000-000000000002'$$,array[1::bigint],'DB-009 owner reads their Personal transaction metadata');
 select set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
 select results_eq($$update public.categories set color='#000000' where id='c0000000-0000-0000-0000-000000000002' returning id$$,array[]::uuid[],'DB-009 non-owners cannot update Personal records');
-select results_eq($$delete from public.categories where id='c0000000-0000-0000-0000-000000000002' returning id$$,array[]::uuid[],'DB-009 non-owners cannot delete Personal records');
+select throws_ok($$delete from public.categories where id='c0000000-0000-0000-0000-000000000002'$$,'42501',null,'DB-009 category deletion is not exposed to authenticated clients');
 select results_eq($$select count(*)::bigint from public.manual_entries where id='f2000000-0000-0000-0000-000000000002'$$,array[0::bigint],'DB-009 family owner cannot read another member Personal manual entry');
 select results_eq($$select count(*)::bigint from public.merchant_rules where id='f3000000-0000-0000-0000-000000000002'$$,array[0::bigint],'DB-009 family owner cannot read another member Personal merchant rule');
 select results_eq($$select count(*)::bigint from public.budgets where id='f4000000-0000-0000-0000-000000000002'$$,array[0::bigint],'DB-009 family owner cannot read another member Personal budget');
 select results_eq($$select count(*)::bigint from public.transaction_metadata where transaction_id='f0000000-0000-0000-0000-000000000002'$$,array[0::bigint],'DB-009 family owner cannot read another member Personal transaction metadata');
 select results_eq($$update public.manual_entries set amount=999 where id='f2000000-0000-0000-0000-000000000002' returning id$$,array[]::uuid[],'DB-009 family owner cannot update another member Personal manual entry');
 select results_eq($$delete from public.manual_entries where id='f2000000-0000-0000-0000-000000000002' returning id$$,array[]::uuid[],'DB-009 family owner cannot delete another member Personal manual entry');
-select results_eq($$update public.merchant_rules set priority=999 where id='f3000000-0000-0000-0000-000000000002' returning id$$,array[]::uuid[],'DB-009 family owner cannot update another member Personal merchant rule');
+select throws_ok($$update public.merchant_rules set priority=999 where id='f3000000-0000-0000-0000-000000000002'$$,'42501',null,'DB-009 merchant-rule updates require the scoped RPC');
 select results_eq($$delete from public.merchant_rules where id='f3000000-0000-0000-0000-000000000002' returning id$$,array[]::uuid[],'DB-009 family owner cannot delete another member Personal merchant rule');
 select results_eq($$update public.budgets set amount=999 where id='f4000000-0000-0000-0000-000000000002' returning id$$,array[]::uuid[],'DB-009 family owner cannot update another member Personal budget');
 select results_eq($$delete from public.budgets where id='f4000000-0000-0000-0000-000000000002' returning id$$,array[]::uuid[],'DB-009 family owner cannot delete another member Personal budget');
