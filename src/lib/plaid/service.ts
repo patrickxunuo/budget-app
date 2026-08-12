@@ -219,6 +219,22 @@ export async function exchangePublicTokenForReview(
         eligible: account.eligible,
         eligibility_message: account.eligibilityMessage,
         duplicate_account_id: account.duplicate?.accountId ?? null,
+        available_balance_cents:
+          accounts.find(
+            (source) => source.accountId === account.providerAccountId,
+          )?.availableBalanceCents ?? null,
+        current_balance_cents:
+          accounts.find(
+            (source) => source.accountId === account.providerAccountId,
+          )?.currentBalanceCents ?? null,
+        credit_limit_cents:
+          accounts.find(
+            (source) => source.accountId === account.providerAccountId,
+          )?.creditLimitCents ?? null,
+        balance_updated_at:
+          accounts.find(
+            (source) => source.accountId === account.providerAccountId,
+          )?.balanceUpdatedAt ?? null,
         expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
       })),
     );
@@ -255,6 +271,12 @@ export async function activatePlaidReview(
   }
 
   const admin = createSupabaseAdminClient();
+  const { data: cachedBalanceRows } = await admin
+    .from("plaid_pending_accounts")
+    .select(
+      "provider_account_id,available_balance_cents,current_balance_cents,credit_limit_cents,balance_updated_at",
+    )
+    .eq("review_id", parsed.data.reviewId);
   const { data: activation, error } = await admin.rpc("activate_plaid_review", {
     p_review_id: parsed.data.reviewId,
     p_workspace_id: actor.workspaceId,
@@ -296,6 +318,31 @@ export async function activatePlaidReview(
     itemId: activationResult?.itemId ?? parsed.data.reviewId,
     activatedAccountIds: activationResult?.activatedAccountIds ?? [],
   };
+  const selectedProviderIds = new Set(
+    parsed.data.accounts.map((account) => account.providerAccountId),
+  );
+  await Promise.all(
+    (cachedBalanceRows ?? [])
+      .filter((row) => selectedProviderIds.has(row.provider_account_id))
+      .map(async (row) => {
+        const { error: balanceError } = await admin
+          .from("accounts")
+          .update({
+            available_balance_cents: row.available_balance_cents,
+            current_balance_cents: row.current_balance_cents,
+            credit_limit_cents: row.credit_limit_cents,
+            balance_updated_at: row.balance_updated_at,
+          })
+          .eq("plaid_item_id", result.itemId)
+          .eq("provider_account_id", row.provider_account_id);
+        if (balanceError) {
+          console.warn("Activated Plaid balance cache could not be persisted", {
+            itemId: result.itemId,
+            providerAccountId: row.provider_account_id,
+          });
+        }
+      }),
+  );
   let importedTransactions = 0;
   let importStatus: "complete" | "pending" = "complete";
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { ManualEntryWorkbench } from "@/components/transactions/manual-entry-workbench";
 import { TransactionLedger } from "@/components/transactions/transaction-ledger";
 import {
@@ -21,15 +22,21 @@ export const metadata: Metadata = {
   description: "Review connected and off-bank household activity.",
 };
 
-export default async function TransactionsPage() {
+export default async function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ scope?: string }>;
+}) {
+  const requestedScope = (await searchParams).scope;
+  const scope = requestedScope === "personal" ? "personal" : "family";
   const [categoryContext, manualContext] = await Promise.all([
     getApiContext(),
     getManualEntryContext(),
   ]);
   const [accountingPlaidEntries, data, manualEntries] = await Promise.all([
-    listTransactions(categoryContext),
+    listTransactions(categoryContext, undefined, undefined, { scope }),
     listCategoriesAndRules(categoryContext),
-    listManualEntries(manualContext),
+    listManualEntries(manualContext, { scope }),
   ]);
   const transactions = accountingPlaidEntries.slice(0, 50);
   const activeCategories = data.categories.filter(
@@ -62,19 +69,35 @@ export default async function TransactionsPage() {
           </p>
         </header>
 
+        <nav
+          aria-label="Transaction privacy scope"
+          className="border-line bg-panel mb-6 flex w-fit rounded-full border p-1"
+        >
+          {(["family", "personal"] as const).map((option) => (
+            <Link
+              key={option}
+              href={`/transactions?scope=${option}`}
+              aria-current={scope === option ? "page" : undefined}
+              className={`rounded-full px-5 py-2 text-sm font-semibold capitalize ${scope === option ? "bg-brand text-surface" : "text-muted"}`}
+            >
+              {option}
+            </Link>
+          ))}
+        </nav>
+
         <section
-          aria-label="Combined ledger summary"
+          aria-label={`${scope} ledger summary`}
           className="border-line bg-panel mb-9 grid overflow-hidden rounded-2xl border sm:grid-cols-3"
-          data-testid="combined-ledger-summary"
+          data-testid="scoped-ledger-summary"
         >
           {[
-            ["Income", summary.incomeCents, "combined-summary-income"],
+            ["Income", summary.incomeCents, "scoped-summary-income"],
             [
               "Spending after refunds",
               summary.spendingCents,
-              "combined-summary-spending",
+              "scoped-summary-spending",
             ],
-            ["Net flow", summary.netFlowCents, "combined-summary-net"],
+            ["Net flow", summary.netFlowCents, "scoped-summary-net"],
           ].map(([label, cents, testId]) => (
             <div
               key={String(label)}
@@ -104,6 +127,7 @@ export default async function TransactionsPage() {
           <ManualEntryWorkbench
             initialEntries={manualEntries}
             categories={activeCategories}
+            viewScope={scope}
           />
         </section>
 

@@ -41,10 +41,16 @@ const calendarDateSchema = z
 export const transactionListQuerySchema = z
   .object({
     limit: z.coerce.number().int().min(1).max(100).default(50),
-    scope: scopeSchema.optional(),
+    scope: scopeSchema,
     from: calendarDateSchema.optional(),
     to: calendarDateSchema.optional(),
     categoryId: uuidSchema.optional(),
+    accountId: uuidSchema.optional(),
+    status: z.enum(["all", "pending", "posted"]).optional(),
+    inclusion: z
+      .enum(["default", "included", "excluded", "transfers", "all"])
+      .default("default"),
+    search: z.string().trim().max(100).optional(),
   })
   .refine(({ from, to }) => !from || !to || from <= to, {
     path: ["to"],

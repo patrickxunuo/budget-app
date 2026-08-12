@@ -52,6 +52,17 @@ function stableClientUserId(userId: string): string {
   return createHash("sha256").update(`budget-app:${userId}`).digest("hex");
 }
 
+function balanceCents(value: number | null | undefined): number | null {
+  if (value == null) return null;
+  const cents = Math.round(value * 100);
+  if (
+    !Number.isSafeInteger(cents) ||
+    Math.abs(value * 100 - cents) > Number.EPSILON * 100
+  )
+    throw new RangeError("Plaid balance is outside safe CAD cents");
+  return cents;
+}
+
 function normalizeAccount(account: AccountBase): ProviderAccount {
   return {
     accountId: account.account_id,
@@ -61,6 +72,10 @@ function normalizeAccount(account: AccountBase): ProviderAccount {
     type: account.type,
     subtype: account.subtype ?? null,
     currencyCode: account.balances.iso_currency_code ?? null,
+    availableBalanceCents: balanceCents(account.balances.available),
+    currentBalanceCents: balanceCents(account.balances.current),
+    creditLimitCents: balanceCents(account.balances.limit),
+    balanceUpdatedAt: new Date().toISOString(),
   };
 }
 
@@ -171,6 +186,7 @@ class PlaidSdkProvider implements PlaidProvider {
   }
 }
 
+const deterministicAt = new Date().toISOString();
 const deterministicAccounts: ProviderAccount[] = [
   {
     accountId: "e2e-chequing",
@@ -180,6 +196,10 @@ const deterministicAccounts: ProviderAccount[] = [
     type: "depository",
     subtype: "checking",
     currencyCode: "CAD",
+    availableBalanceCents: 192500,
+    currentBalanceCents: 200000,
+    creditLimitCents: null,
+    balanceUpdatedAt: deterministicAt,
   },
   {
     accountId: "e2e-savings",
@@ -189,6 +209,10 @@ const deterministicAccounts: ProviderAccount[] = [
     type: "depository",
     subtype: "savings",
     currencyCode: "CAD",
+    availableBalanceCents: 192500,
+    currentBalanceCents: 200000,
+    creditLimitCents: null,
+    balanceUpdatedAt: deterministicAt,
   },
   {
     accountId: "e2e-usd",
@@ -198,6 +222,10 @@ const deterministicAccounts: ProviderAccount[] = [
     type: "depository",
     subtype: "checking",
     currencyCode: "USD",
+    availableBalanceCents: null,
+    currentBalanceCents: null,
+    creditLimitCents: null,
+    balanceUpdatedAt: deterministicAt,
   },
 ];
 

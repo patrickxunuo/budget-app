@@ -17,23 +17,43 @@ export async function GET(request: Request) {
       Object.fromEntries(url.searchParams),
     );
     const context = await getApiContext();
-    const [accountingPlaidEntries, manualEntries] = await Promise.all([
+    const [allTransactions, manualEntries] = await Promise.all([
       listTransactions(context, undefined, undefined, filters),
       listManualEntries(context, filters),
     ]);
-    const transactions = accountingPlaidEntries.slice(0, limit);
-    const accountingTransactions = accountingPlaidEntries.map(
-      plaidViewToAccountingTransaction,
+    const visible = [
+      ...allTransactions.map((transaction) => ({
+        source: "plaid" as const,
+        id: transaction.id,
+        date: transaction.transactionDate,
+      })),
+      ...manualEntries.map((entry) => ({
+        source: "manual" as const,
+        id: entry.id,
+        date: entry.entryDate,
+      })),
+    ]
+      .sort(
+        (left, right) =>
+          right.date.localeCompare(left.date) ||
+          left.id.localeCompare(right.id),
+      )
+      .slice(0, limit);
+    const visiblePlaidIds = new Set(
+      visible.filter(({ source }) => source === "plaid").map(({ id }) => id),
+    );
+    const visibleManualIds = new Set(
+      visible.filter(({ source }) => source === "manual").map(({ id }) => id),
     );
     return Response.json({
-      transactions,
-      manualEntries,
+      transactions: allTransactions.filter(({ id }) => visiblePlaidIds.has(id)),
+      manualEntries: manualEntries.filter(({ id }) => visibleManualIds.has(id)),
       summary: calculateSummary([
-        ...accountingTransactions,
+        ...allTransactions.map(plaidViewToAccountingTransaction),
         ...manualEntries.map(manualEntryToAccountingTransaction),
       ]),
     });
-  } catch (e) {
-    return toApiErrorResponse(e);
+  } catch (error) {
+    return toApiErrorResponse(error);
   }
 }

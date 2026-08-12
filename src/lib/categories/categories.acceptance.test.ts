@@ -93,11 +93,19 @@ describe("GH-7 category domain acceptance", () => {
     expect(
       updateCategorySchema.parse({ name: "Dining", archived: true }),
     ).toEqual({ name: "Dining", archived: true });
-    expect(transactionListQuerySchema.parse({ limit: "1" })).toEqual({
+    expect(
+      transactionListQuerySchema.parse({ limit: "1", scope: "family" }),
+    ).toEqual({
       limit: 1,
+      scope: "family",
+      inclusion: "default",
     });
-    expect(transactionListQuerySchema.parse({ limit: "100" })).toEqual({
+    expect(
+      transactionListQuerySchema.parse({ limit: "100", scope: "personal" }),
+    ).toEqual({
       limit: 100,
+      scope: "personal",
+      inclusion: "default",
     });
     expect(manualCategorySchema.parse({ categoryId })).toEqual({ categoryId });
     expect(
@@ -129,15 +137,20 @@ describe("GH-7 category domain acceptance", () => {
       expect(createCategorySchema.safeParse(invalid).success).toBe(false);
     }
     for (const limit of ["0", "101", "1.5", "many"]) {
-      expect(transactionListQuerySchema.safeParse({ limit }).success).toBe(
-        false,
-      );
+      expect(
+        transactionListQuerySchema.safeParse({ limit, scope: "family" })
+          .success,
+      ).toBe(false);
     }
     expect(
-      transactionListQuerySchema.safeParse({ from: "2026-02-30" }).success,
+      transactionListQuerySchema.safeParse({
+        scope: "family",
+        from: "2026-02-30",
+      }).success,
     ).toBe(false);
     expect(
       transactionListQuerySchema.safeParse({
+        scope: "family",
         from: "2026-08-31",
         to: "2026-08-01",
       }).success,
@@ -153,6 +166,7 @@ describe("GH-7 category domain acceptance", () => {
       scope: "family",
       from: "2026-08-01",
       to: "2026-08-31",
+      inclusion: "default",
     });
     expect(
       manualCategorySchema.safeParse({ categoryId: "not-a-uuid" }).success,

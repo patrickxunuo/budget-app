@@ -129,6 +129,13 @@ export async function listManualEntries(
   ctx: ManualEntryContext,
   filters: ManualEntryFilters = {},
 ): Promise<ManualEntry[]> {
+  if (
+    filters.accountId ||
+    filters.status === "pending" ||
+    filters.inclusion === "excluded" ||
+    filters.inclusion === "transfers"
+  )
+    return [];
   const rows = await collectAllPages<ManualEntryRow>(async (from, to) => {
     let query = ctx.supabase
       .from("manual_entries")
@@ -140,7 +147,13 @@ export async function listManualEntries(
       .order("entry_date", { ascending: false })
       .order("created_at", { ascending: false })
       .order("id", { ascending: true });
-    if (filters.scope) query = query.eq("scope", filters.scope);
+    if (filters.scope) {
+      query = query.eq("scope", filters.scope);
+      query =
+        filters.scope === "personal"
+          ? query.eq("owner_profile_id", ctx.userId)
+          : query.is("owner_profile_id", null);
+    }
     if (filters.from) query = query.gte("entry_date", filters.from);
     if (filters.to) query = query.lte("entry_date", filters.to);
     if (filters.categoryId) query = query.eq("category_id", filters.categoryId);
@@ -148,7 +161,12 @@ export async function listManualEntries(
     if (error) mutationError(error);
     return (data ?? []) as unknown as ManualEntryRow[];
   });
-  return rows.map(toEntry);
+  const entries = rows.map(toEntry);
+  if (!filters.search?.trim()) return entries;
+  const search = filters.search.trim().toLocaleLowerCase("en-CA");
+  return entries.filter((entry) =>
+    entry.description.toLocaleLowerCase("en-CA").includes(search),
+  );
 }
 
 export async function createManualEntry(

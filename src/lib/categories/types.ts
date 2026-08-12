@@ -23,6 +23,8 @@ export type OriginalPlaidCategory = {
 } | null;
 export type TransactionCategoryView = {
   id: string;
+  accountId?: string;
+  accountName?: string;
   scope: Scope;
   ownerProfileId: string | null;
   merchantName: string | null;
