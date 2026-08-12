@@ -6,7 +6,15 @@
 - Command: `npm run test:e2e`
 - Test directory: `e2e/`
 - GH-3 suite: `e2e/auth.spec.ts`
-- Latest run: 28 passed, 12 fixture-dependent scenarios skipped, 0 failed
+- Latest run: 14 passed, 34 fixture-dependent scenarios skipped, 0 failed (48 desktop/mobile cases; local Supabase environment)
+
+## GH-5 Idempotent Plaid Transaction Synchronization
+
+- [x] Database-backed freshness renders without a Plaid call on page load — component coverage passes; desktop/mobile Playwright authored
+- [x] Member “Check for updates” busy/success/error behavior — component coverage passes; real-backend Playwright authored
+- [x] Login-repair and consent-expiration guidance stays sanitized and actionable — component coverage passes; fixture-gated Playwright authored
+- [x] Mobile, keyboard, reduced-motion, and screenshot coverage — component coverage passes; fixture-gated Playwright authored
+- Test file: `e2e/plaid-sync.spec.ts`; latest GH-5 browser result: 8 fixture-dependent desktop/mobile cases skipped because deterministic active-Item credentials were not supplied, 0 failed.
 
 ## GH-4 Read-only Canadian Plaid Linking
 
@@ -34,7 +42,7 @@
 ## Database Regression Coverage
 
 - `supabase/tests/database/auth-lifecycle.test.sql` covers setup closure/serialization, service-role boundaries, hashed/revocable/single-use invitations, direct-DML denial, ownership transfer, departure cleanup, sole-owner workspace deletion, and recent-password authorization.
-- Latest database run: 217 pgTAP assertions passed across schema, RLS, auth lifecycle, and Plaid activation suites.
+- Latest database run: 246 pgTAP assertions passed across schema, RLS, auth lifecycle, Plaid activation, and atomic transaction-sync suites.
 
 ## Artifacts
 

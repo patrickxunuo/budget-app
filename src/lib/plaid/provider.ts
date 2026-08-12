@@ -30,6 +30,7 @@ export type SyncPage = {
   removedIds: string[];
   nextCursor: string;
   hasMore: boolean;
+  requestId: string;
 };
 
 export interface PlaidProvider {
@@ -42,6 +43,9 @@ export interface PlaidProvider {
   getInstitution(accessToken: string): Promise<PlaidInstitution>;
   getAccounts(accessToken: string): Promise<ProviderAccount[]>;
   syncTransactions(accessToken: string, cursor?: string): Promise<SyncPage>;
+  getWebhookVerificationKey(
+    keyId: string,
+  ): Promise<import("@/lib/plaid/types").PlaidVerificationKey>;
 }
 
 function stableClientUserId(userId: string): string {
@@ -71,6 +75,7 @@ function normalizeTransaction(transaction: Transaction): ProviderTransaction {
     merchantName: transaction.merchant_name ?? null,
     name: transaction.name,
     pending: transaction.pending,
+    pendingTransactionId: transaction.pending_transaction_id ?? null,
     payload: {
       paymentChannel: transaction.payment_channel,
       personalFinanceCategory: transaction.personal_finance_category,
@@ -143,6 +148,24 @@ class PlaidSdkProvider implements PlaidProvider {
       ),
       nextCursor: data.next_cursor,
       hasMore: data.has_more,
+      requestId: data.request_id,
+    };
+  }
+
+  async getWebhookVerificationKey(keyId: string) {
+    const { data } = await getPlaidClient().webhookVerificationKeyGet({
+      key_id: keyId,
+    });
+    const key = data.key;
+    return {
+      alg: key.alg as "ES256",
+      crv: key.crv as "P-256",
+      expiredAt: key.expired_at ?? null,
+      kid: key.kid,
+      kty: key.kty as "EC",
+      use: key.use as "sig",
+      x: key.x,
+      y: key.y,
     };
   }
 }
@@ -227,6 +250,7 @@ class DeterministicPlaidProvider implements PlaidProvider {
             merchantName: "Northern Grocer",
             name: "Northern Grocer",
             pending: false,
+            pendingTransactionId: null,
             payload: { paymentChannel: "in store" },
           },
         ],
@@ -234,6 +258,7 @@ class DeterministicPlaidProvider implements PlaidProvider {
         removedIds: [],
         nextCursor: "e2e-complete",
         hasMore: false,
+        requestId: "e2e-initial-request",
       };
     }
     return {
@@ -242,7 +267,16 @@ class DeterministicPlaidProvider implements PlaidProvider {
       removedIds: [],
       nextCursor: cursor,
       hasMore: false,
+      requestId: "e2e-idle-request",
     };
+  }
+
+  async getWebhookVerificationKey(): Promise<
+    import("@/lib/plaid/types").PlaidVerificationKey
+  > {
+    throw new Error(
+      "Webhook verification is unavailable in deterministic mode",
+    );
   }
 }
 
@@ -263,8 +297,9 @@ export function getPlaidProvider(): PlaidProvider {
         "Deterministic Plaid provider is restricted to local sandbox E2E runs",
       );
     }
-    provider = new DeterministicPlaidProvider();
-    return provider;
+    const deterministicProvider = new DeterministicPlaidProvider();
+    provider = deterministicProvider;
+    return deterministicProvider;
   }
   provider = new PlaidSdkProvider();
   return provider;

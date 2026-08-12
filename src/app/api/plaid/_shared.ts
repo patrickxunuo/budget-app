@@ -16,6 +16,17 @@ export function plaidApiError(error: unknown) {
       { status: error.status },
     );
   }
+  if (
+    error instanceof Error &&
+    typeof (error as { status?: unknown }).status === "number" &&
+    typeof (error as { code?: unknown }).code === "string"
+  ) {
+    const candidate = error as Error & { status: number; code: string };
+    return NextResponse.json(
+      { code: candidate.code, message: candidate.message },
+      { status: candidate.status },
+    );
+  }
   return NextResponse.json(
     {
       code: "unexpected_error",
