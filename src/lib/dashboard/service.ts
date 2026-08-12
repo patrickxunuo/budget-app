@@ -13,7 +13,7 @@ import {
   plaidViewToAccountingTransaction,
   reconcilePendingTransactions,
 } from "@/lib/transactions/accounting";
-import { aggregateDashboard, cadToCents, inclusionMatches } from "./domain";
+import { aggregateDashboard, inclusionMatches } from "./domain";
 import type {
   DashboardFilters,
   DashboardReadModel,
@@ -105,7 +105,12 @@ type ManualRow = {
   deleted_at: string | null;
   categories: CategoryValue | CategoryValue[] | null;
 };
-type BudgetRow = { category_id: string; amount: number | string };
+type BudgetRow = {
+  category_id: string;
+  amount_cents: number | string;
+  effective_month: string;
+  end_month: string | null;
+};
 type CategoryRow = CategoryValue & { system_key: string | null };
 function one<T>(v: T | T[] | null | undefined): T | null {
   return Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
@@ -162,6 +167,8 @@ export async function readDashboard(
       reference: ["Use YYYY-MM-DD."],
     });
   }
+  const budgetStartMonth = `${range.startDate.slice(0, 8)}01`;
+  const budgetEndMonth = `${range.endDate.slice(0, 8)}01`;
   const [
     accountsRaw,
     scopedCategoryRows,
@@ -224,13 +231,12 @@ export async function readDashboard(
       let query = ctx.supabase
         .from("budgets")
         .select(
-          "id,category_id,amount,start_date,end_date,scope,owner_profile_id",
+          "id,category_id,amount_cents,effective_month,end_month,scope,owner_profile_id",
         )
         .eq("workspace_id", ctx.workspaceId)
         .eq("scope", filters.scope)
-        .is("archived_at", null)
-        .lte("start_date", range.endDate)
-        .gte("end_date", range.startDate)
+        .lte("effective_month", budgetEndMonth)
+        .or(`end_month.is.null,end_month.gte.${budgetStartMonth}`)
         .order("id", { ascending: true });
       query =
         filters.scope === "personal"
@@ -425,7 +431,9 @@ export async function readDashboard(
       : categories,
     budgets: budgetsRaw.map((b) => ({
       categoryId: b.category_id,
-      amountCents: cadToCents(b.amount),
+      amountCents: nullableCents(b.amount_cents) ?? 0,
+      effectiveMonth: b.effective_month,
+      endMonth: b.end_month,
     })),
     accounts: filters.accountId
       ? accounts.filter((account) => account.id === filters.accountId)

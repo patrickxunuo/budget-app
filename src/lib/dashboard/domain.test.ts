@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregateDashboard,
+  aggregateMonthlyBudgetTargets,
   cadToCents,
   inclusionMatches,
   moveReference,
@@ -62,5 +63,55 @@ describe("dashboard domain", () => {
       pendingAmountCents: 0,
       pendingCount: 0,
     });
+  });
+  it("counts one recurring target for every calendar month touched", () => {
+    const totals = aggregateMonthlyBudgetTargets(
+      [
+        {
+          categoryId: "food",
+          amountCents: 40000,
+          effectiveMonth: "2026-07-01",
+          endMonth: null,
+        },
+      ],
+      { startDate: "2026-07-20", endDate: "2026-08-08" },
+    );
+    expect(totals.get("food")).toBe(80000);
+  });
+
+  it("uses exactly one effective version per category and month", () => {
+    const totals = aggregateMonthlyBudgetTargets(
+      [
+        {
+          categoryId: "food",
+          amountCents: 40000,
+          effectiveMonth: "2026-07-01",
+          endMonth: "2026-07-01",
+        },
+        {
+          categoryId: "food",
+          amountCents: 50000,
+          effectiveMonth: "2026-08-01",
+          endMonth: null,
+        },
+      ],
+      { startDate: "2026-07-01", endDate: "2026-08-31" },
+    );
+    expect(totals.get("food")).toBe(90000);
+  });
+
+  it("counts a recurring target once inside a single month", () => {
+    const totals = aggregateMonthlyBudgetTargets(
+      [
+        {
+          categoryId: "food",
+          amountCents: 40000,
+          effectiveMonth: "2026-01-01",
+          endMonth: null,
+        },
+      ],
+      { startDate: "2026-08-12", endDate: "2026-08-18" },
+    );
+    expect(totals.get("food")).toBe(40000);
   });
 });

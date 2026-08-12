@@ -2,7 +2,7 @@ import Link from "next/link";
 import { LedgerMark } from "@/components/ledger-mark";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { requireActiveMembership } from "@/lib/auth/dal";
-const futureNavigation = ["Budgets"] as const;
+
 export default async function ApplicationLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -60,16 +60,13 @@ export default async function ApplicationLayout({
             Categories
             <span className="font-utility text-brand text-[.62rem]">05</span>
           </Link>
-          {futureNavigation.map((label, index) => (
-            <span
-              key={label}
-              aria-disabled
-              className="text-muted/65 mt-1 hidden min-h-11 items-center justify-between px-3.5 text-sm lg:flex"
-            >
-              {label}
-              <span className="font-utility text-[.62rem]">0{index + 6}</span>
-            </span>
-          ))}
+          <Link
+            href="/budgets"
+            className="text-ink hover:bg-surface focus-visible:outline-brand mt-1 flex min-h-11 items-center justify-between rounded-xl px-3.5 text-sm font-semibold focus-visible:outline-2"
+          >
+            Budgets
+            <span className="font-utility text-brand text-[.62rem]">06</span>
+          </Link>
         </nav>
         <div className="border-line relative mx-6 mt-8 hidden border-t pt-6 lg:block">
           <span className="bg-brand absolute top-0 left-0 h-20 w-px" />
