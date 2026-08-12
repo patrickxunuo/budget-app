@@ -157,7 +157,7 @@ test.describe("GH-7 scoped categories and merchant rules", () => {
   }, testInfo) => {
     requireTransactionFixture();
     const transactionsResponse = await page.request.get(
-      "/api/transactions?limit=100",
+      "/api/transactions?scope=family&limit=100",
     );
     expect(transactionsResponse.ok()).toBe(true);
     const transactionBody = (await transactionsResponse.json()) as {

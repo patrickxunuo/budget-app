@@ -31,6 +31,10 @@ export type ProviderAccount = {
   type: string;
   subtype: string | null;
   currencyCode: string | null;
+  availableBalanceCents?: number | null;
+  currentBalanceCents?: number | null;
+  creditLimitCents?: number | null;
+  balanceUpdatedAt?: string;
 };
 
 export type ProviderTransaction = {

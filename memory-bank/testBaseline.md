@@ -3,10 +3,18 @@
 ## Overview
 
 - Framework: Playwright (`playwright`, desktop and mobile Chromium)
-- Command: `npm run test:e2e`
+- Command: `pnpm test:e2e`
 - Test directory: `e2e/`
 - GH-3 suite: `e2e/auth.spec.ts`
-- Latest run: 14 passed, 52 fixture-dependent scenarios skipped, 0 failed (66 desktop/mobile cases; local Supabase environment)
+- Latest run: 14 passed, 64 fixture-dependent scenarios skipped, 0 failed (78 desktop/mobile cases; local Supabase environment)
+
+## GH-9 Family and Personal Financial Dashboards
+
+- [x] Strict Family versus signed-in-member Personal scope switch across summaries, charts, budgets, accounts, and transaction rows — component/API/database coverage passes; desktop/mobile Playwright authored
+- [x] Calendar day, Monday-Sunday week, month, custom range, and previous/next navigation in the configured Canadian timezone — domain/component coverage passes; real-backend Playwright authored
+- [x] Search plus account, category, pending/posted, and included/excluded/transfer filters with complete pre-limit totals — API/component coverage passes; real-backend Playwright authored
+- [x] Cached nullable Plaid available/current balances, freshness, accessible cash-flow data, budget progress, mobile layout, keyboard focus, and reduced motion — provider/database/component coverage passes; screenshots authored
+- Test file: `e2e/dashboard.spec.ts`; latest GH-9 browser result: 12 desktop/mobile scenarios fixture-gated because `E2E_DASHBOARD_MEMBER_*` credentials were not supplied, 0 failed. Full browser suite: 14 runnable passed, 64 fixture-dependent skipped, 0 failed.
 
 ## GH-8 Manual/Cash Ledger
 
@@ -58,7 +66,7 @@
 ## Database Regression Coverage
 
 - `supabase/tests/database/auth-lifecycle.test.sql` covers setup closure/serialization, service-role boundaries, hashed/revocable/single-use invitations, direct-DML denial, ownership transfer, departure cleanup, sole-owner workspace deletion, and recent-password authorization.
-- Latest database run: 312 pgTAP assertions passed across schema, RLS, auth lifecycle, Plaid activation, atomic transaction sync, accounting, scoped categories, merchant rules, and Manual/Cash entries.
+- Latest database run: 316 pgTAP assertions passed across schema, RLS, auth lifecycle, Plaid activation, atomic transaction sync, accounting, scoped categories, merchant rules, Manual/Cash entries, and dashboard balance privacy.
 
 ## Artifacts
 

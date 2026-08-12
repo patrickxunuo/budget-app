@@ -234,6 +234,7 @@ export async function syncPlaidItem(
       Buffer.from(claim.accessTokenCiphertext, "hex"),
       getServerEnv().PLAID_TOKEN_ENCRYPTION_KEY,
     );
+    const provider = getPlaidProvider();
 
     for (let restart = 0; restart < 3; restart += 1) {
       const added: ProviderTransaction[] = [];
@@ -243,10 +244,7 @@ export async function syncPlaidItem(
       let cursor = originalCursor ?? undefined;
       try {
         do {
-          const page = await getPlaidProvider().syncTransactions(
-            accessToken,
-            cursor,
-          );
+          const page = await provider.syncTransactions(accessToken, cursor);
           added.push(...page.added);
           modified.push(...page.modified);
           removedIds.push(...page.removedIds);
@@ -280,6 +278,33 @@ export async function syncPlaidItem(
           requestId,
           providerRequestId: providerRequestIds.at(-1) ?? null,
         });
+        try {
+          const providerAccounts = await provider.getAccounts(accessToken);
+          await Promise.all(
+            providerAccounts.map(async (account) => {
+              const { error: balanceError } = await admin
+                .from("accounts")
+                .update({
+                  available_balance_cents:
+                    account.availableBalanceCents ?? null,
+                  current_balance_cents: account.currentBalanceCents ?? null,
+                  credit_limit_cents: account.creditLimitCents ?? null,
+                  balance_updated_at:
+                    account.balanceUpdatedAt ?? new Date().toISOString(),
+                })
+                .eq("plaid_item_id", itemId)
+                .eq("provider_account_id", account.accountId);
+              if (balanceError) throw balanceError;
+            }),
+          );
+        } catch {
+          // Transaction sync has already committed. Balance refresh is a
+          // separately retryable provider cache and must not falsify success.
+          console.warn("Plaid account balance cache refresh failed", {
+            itemId,
+            requestId,
+          });
+        }
         return {
           itemId,
           status:

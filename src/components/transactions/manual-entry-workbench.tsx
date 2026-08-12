@@ -12,6 +12,7 @@ import type {
 export type ManualEntryWorkbenchProps = {
   initialEntries: ManualEntry[];
   categories: Category[];
+  viewScope?: Scope;
 };
 type FormState = ManualEntryInput;
 
@@ -19,8 +20,8 @@ const today = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 };
-const blank = (): FormState => ({
-  scope: "personal",
+const blank = (scope: Scope = "personal"): FormState => ({
+  scope,
   kind: "spending",
   amount: "",
   entryDate: today(),
@@ -36,9 +37,12 @@ const money = new Intl.NumberFormat("en-CA", {
 export function ManualEntryWorkbench({
   initialEntries,
   categories,
+  viewScope,
 }: ManualEntryWorkbenchProps) {
   const [entries, setEntries] = useState(initialEntries);
-  const [form, setForm] = useState<FormState>(blank);
+  const [form, setForm] = useState<FormState>(() =>
+    blank(viewScope ?? "personal"),
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -57,7 +61,7 @@ export function ManualEntryWorkbench({
   }
   function reset() {
     setEditingId(null);
-    setForm(blank());
+    setForm(blank(viewScope ?? "personal"));
     setError("");
   }
   function beginEdit(entry: ManualEntry) {
@@ -110,7 +114,9 @@ export function ManualEntryWorkbench({
           ? current.map((entry) =>
               entry.id === editingId ? body.entry : entry,
             )
-          : [body.entry, ...current],
+          : viewScope === undefined || body.entry.scope === viewScope
+            ? [body.entry, ...current]
+            : current,
       );
       setStatus(
         editingId
@@ -335,7 +341,7 @@ export function ManualEntryWorkbench({
           </div>
           <a
             data-testid="manual-entry-export"
-            href="/api/manual-entries?format=csv"
+            href={`/api/manual-entries?scope=${viewScope ?? "personal"}&format=csv`}
             download
             className="border-brand text-brand focus-visible:outline-brand rounded-full border px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
           >

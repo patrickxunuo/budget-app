@@ -1,4 +1,4 @@
-﻿begin;
+begin;
 set local search_path = public, extensions;
 select no_plan();
 
@@ -24,10 +24,15 @@ insert into public.categories(id,workspace_id,created_by,name,color,scope,owner_
 ('c0000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000001','Family Seed','#123456','family',null),
 ('c0000000-0000-0000-0000-000000000002','b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','Member Personal','#654321','personal','a0000000-0000-0000-0000-000000000002');
 insert into public.plaid_items(id,workspace_id,linked_by,plaid_item_id,institution_id,institution_name,access_token_ciphertext,access_token_key_version,status) values
-('d0000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','rls-item','ins_rls','RLS Bank',decode('cafe','hex'),1,'active');
+('d0000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','rls-item','ins_rls','RLS Bank',decode('cafe','hex'),1,'active'),
+('d0000000-0000-0000-0000-000000000002','b0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000001','rls-owner-item','ins_rls_owner','Owner Bank',decode('face','hex'),1,'active');
 insert into public.accounts(id,workspace_id,plaid_item_id,linked_by,provider_account_id,type,subtype,currency_code,mask,name,display_name,scope,owner_profile_id) values
 ('e0000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000001','d0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','rls-account','depository','chequing','CAD','1234','Chequing','Household Chequing','family',null),
 ('e0000000-0000-0000-0000-000000000002','b0000000-0000-0000-0000-000000000001','d0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','rls-personal-account','depository','savings','CAD','5678','Savings','Private Savings','personal','a0000000-0000-0000-0000-000000000002');
+insert into public.accounts(id,workspace_id,plaid_item_id,linked_by,provider_account_id,type,subtype,currency_code,mask,name,display_name,scope,owner_profile_id,available_balance_cents,current_balance_cents,credit_limit_cents,balance_updated_at) values
+('e0000000-0000-0000-0000-000000000003','b0000000-0000-0000-0000-000000000001','d0000000-0000-0000-0000-000000000002','a0000000-0000-0000-0000-000000000001','rls-owner-personal-account','depository','savings','CAD','9012','Owner Savings','Owner Private Savings','personal','a0000000-0000-0000-0000-000000000001',50000,51000,null,'2026-08-12T12:00:00Z');
+update public.accounts set available_balance_cents=192500,current_balance_cents=200000,credit_limit_cents=null,balance_updated_at='2026-08-12T12:00:00Z' where id='e0000000-0000-0000-0000-000000000001';
+update public.accounts set available_balance_cents=null,current_balance_cents=750000,credit_limit_cents=null,balance_updated_at='2026-08-12T12:00:00Z' where id='e0000000-0000-0000-0000-000000000002';
 insert into public.transactions(id,workspace_id,account_id,plaid_transaction_id,amount,currency_code,transaction_date,name,pending,provider_payload) values
 ('f0000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000001','rls-txn',12.34,'CAD',current_date,'Grocer',false,'{}'),
 ('f0000000-0000-0000-0000-000000000002','b0000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000002','rls-personal-txn',45.67,'CAD',current_date,'Private Purchase',false,'{}');
@@ -222,6 +227,32 @@ select set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-00000000
 select results_eq($$select (select count(*) from public.categories) + (select count(*) from public.audit_events) + (select count(*) from public.workspace_memberships)$$,array[0::bigint],'DB-011 invited member sees nothing across scoped and membership policy paths');
 select set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-000000000005","role":"authenticated"}',true);
 select results_eq($$select (select count(*) from public.categories) + (select count(*) from public.audit_events) + (select count(*) from public.workspace_memberships)$$,array[0::bigint],'DB-011 outsider sees nothing across scoped and membership policy paths');
+
+-- GH-9 DB-001: balance reads follow the account privacy domain under RLS.
+select set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-000000000002","role":"authenticated"}',true);
+select results_eq(
+  $$select id from public.accounts where id in ('e0000000-0000-0000-0000-000000000001','e0000000-0000-0000-0000-000000000002','e0000000-0000-0000-0000-000000000003') order by id$$,
+  array['e0000000-0000-0000-0000-000000000001'::uuid,'e0000000-0000-0000-0000-000000000002'::uuid],
+  'GH-9 DB-001 member reads Family and own Personal account balances but not another member Personal balance'
+);
+select results_eq(
+  $$select available_balance_cents from public.accounts where id='e0000000-0000-0000-0000-000000000002'$$,
+  array[null::bigint],
+  'GH-9 DB-001 nullable provider available balance remains null under authenticated reads'
+);
+
+-- GH-9 DB-002: cached provider balances and freshness are service-written only.
+select throws_ok(
+  $$update public.accounts set available_balance_cents=999,current_balance_cents=999,credit_limit_cents=999,balance_updated_at=now() where id='e0000000-0000-0000-0000-000000000002'$$,
+  '42501',
+  null,
+  'GH-9 DB-002 authenticated member cannot mutate cached provider balance fields'
+);
+select results_eq(
+  $$select current_balance_cents from public.accounts where id='e0000000-0000-0000-0000-000000000002'$$,
+  array[750000::bigint],
+  'GH-9 DB-002 rejected direct mutation leaves the service-controlled balance unchanged'
+);
 
 reset role;
 select * from finish();

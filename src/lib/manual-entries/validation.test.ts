@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { manualEntryInputSchema } from "./validation";
+import {
+  manualEntryInputSchema,
+  manualEntryListQuerySchema,
+} from "./validation";
 
 const base = {
   scope: "family",
@@ -24,4 +27,11 @@ describe("manualEntryInputSchema", () => {
         amount: "1.00",
       }),
     ).toThrow());
+  it("requires an explicit privacy scope for ledger reads", () => {
+    expect(manualEntryListQuerySchema.safeParse({}).success).toBe(false);
+    expect(manualEntryListQuerySchema.parse({ scope: "family" })).toEqual({
+      scope: "family",
+      format: "json",
+    });
+  });
 });

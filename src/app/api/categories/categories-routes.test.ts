@@ -298,12 +298,12 @@ describe("GH-7 category route acceptance", () => {
     vi.mocked(listManualEntries).mockResolvedValue([manualRefund]);
 
     const response = await getTransactions(
-      new Request("http://localhost/api/transactions?limit=1"),
+      new Request("http://localhost/api/transactions?scope=family&limit=1"),
     );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      transactions: [transaction],
+      transactions: [],
       manualEntries: [manualRefund],
       summary: {
         spendingCents: 5025,
@@ -316,9 +316,12 @@ describe("GH-7 category route acceptance", () => {
       actor,
       undefined,
       undefined,
-      {},
+      { scope: "family", inclusion: "default" },
     );
-    expect(listManualEntries).toHaveBeenCalledExactlyOnceWith(actor, {});
+    expect(listManualEntries).toHaveBeenCalledExactlyOnceWith(actor, {
+      scope: "family",
+      inclusion: "default",
+    });
   });
 
   it("API-006 manual recategorization changes metadata only and returns actor/time attribution", async () => {

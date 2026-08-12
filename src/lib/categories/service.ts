@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { collectAllPages } from "@/lib/supabase/pagination";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  plaidViewToAccountingTransaction,
+  resolveAccountingLine,
+} from "@/lib/transactions/accounting";
 import { normalizeMerchantMatcher, normalizeMerchantName } from "./domain";
 import type { Category, MerchantRule, TransactionCategoryView } from "./types";
 export type CategoryContext = {
@@ -15,6 +19,10 @@ export type TransactionFilters = {
   from?: string;
   to?: string;
   categoryId?: string;
+  accountId?: string;
+  status?: "all" | "pending" | "posted";
+  inclusion?: "default" | "included" | "excluded" | "transfers" | "all";
+  search?: string;
 };
 export class CategoryServiceError extends Error {
   constructor(
@@ -51,6 +59,8 @@ type RuleRow = {
 };
 type TransactionRow = {
   id: string;
+  plaid_transaction_id: string;
+  pending_transaction_id: string | null;
   merchant_name: string | null;
   name: string;
   amount: number | string;
@@ -58,8 +68,20 @@ type TransactionRow = {
   pending: boolean;
   provider_payload: unknown;
   accounts:
-    | { scope: "family" | "personal"; owner_profile_id: string | null }
-    | { scope: "family" | "personal"; owner_profile_id: string | null }[];
+    | {
+        id: string;
+        name: string;
+        display_name: string | null;
+        scope: "family" | "personal";
+        owner_profile_id: string | null;
+      }
+    | {
+        id: string;
+        name: string;
+        display_name: string | null;
+        scope: "family" | "personal";
+        owner_profile_id: string | null;
+      }[];
   transaction_metadata:
     TransactionMetadataRow | TransactionMetadataRow[] | null;
 };
@@ -235,23 +257,28 @@ export async function listTransactions(
     let query = ctx.supabase
       .from("transactions")
       .select(
-        "id,merchant_name,name,amount,transaction_date,pending,provider_payload,accounts!inner(scope,owner_profile_id),transaction_metadata(category_id,merchant_rule_id,kind_override,excluded,updated_by,updated_at,categories(id,name,color))",
+        "id,plaid_transaction_id,pending_transaction_id,merchant_name,name,amount,transaction_date,pending,provider_payload,accounts!inner(id,name,display_name,scope,owner_profile_id),transaction_metadata(category_id,merchant_rule_id,kind_override,excluded,updated_by,updated_at,categories(id,name,color))",
       )
       .eq("workspace_id", ctx.workspaceId)
       .is("removed_at", null)
       .order("transaction_date", { ascending: false })
       .order("id", { ascending: true });
     if (transactionId) query = query.eq("id", transactionId);
-    if (filters.scope) query = query.eq("accounts.scope", filters.scope);
-    if (filters.from) query = query.gte("transaction_date", filters.from);
-    if (filters.to) query = query.lte("transaction_date", filters.to);
+    if (filters.scope) {
+      query = query.eq("accounts.scope", filters.scope);
+      query =
+        filters.scope === "personal"
+          ? query.eq("accounts.owner_profile_id", ctx.userId)
+          : query.is("accounts.owner_profile_id", null);
+    }
+    if (filters.accountId) query = query.eq("account_id", filters.accountId);
     const { data, error } = await query.range(from, to);
     if (error) dbError(error);
     return (data ?? []) as unknown as TransactionRow[];
   });
   const { categories } = await listCategoriesAndRules(ctx);
   const bySystem = new Map(categories.map((c) => [c.systemKey, c]));
-  const transactions = rows.map((r) => {
+  const transactions: TransactionCategoryView[] = rows.map((r) => {
     const account = Array.isArray(r.accounts) ? r.accounts[0] : r.accounts;
     if (!account)
       throw new CategoryServiceError(
@@ -271,6 +298,8 @@ export async function listTransactions(
     const chosen = cat ?? fallback;
     return {
       id: r.id,
+      accountId: account.id,
+      accountName: account.display_name ?? account.name,
       scope: account.scope,
       ownerProfileId: account.owner_profile_id,
       merchantName: r.merchant_name,
@@ -300,12 +329,68 @@ export async function listTransactions(
         normalizeMerchantName(r.merchant_name) || normalizeMerchantName(r.name),
     } satisfies TransactionCategoryView;
   });
-  const filtered = filters.categoryId
+  const sourceRowById = new Map(rows.map((row) => [row.id, row]));
+  const supersededProviderIds = new Set(
+    rows
+      .filter((row) => !row.pending && row.pending_transaction_id)
+      .map((row) => row.pending_transaction_id as string),
+  );
+  const accountingLineFor = (transaction: TransactionCategoryView) =>
+    resolveAccountingLine(
+      {
+        ...plaidViewToAccountingTransaction(transaction),
+        providerTransactionId: sourceRowById.get(transaction.id)
+          ?.plaid_transaction_id,
+        pendingTransactionId: sourceRowById.get(transaction.id)
+          ?.pending_transaction_id,
+      },
+      supersededProviderIds,
+    );
+  let filtered = filters.categoryId
     ? transactions.filter(
         (transaction) =>
           transaction.effectiveCategory?.id === filters.categoryId,
       )
     : transactions;
+  filtered = filtered.filter(
+    (transaction) => accountingLineFor(transaction).inclusion !== "superseded",
+  );
+  if (filters.from)
+    filtered = filtered.filter(
+      (transaction) => transaction.transactionDate >= filters.from!,
+    );
+  if (filters.to)
+    filtered = filtered.filter(
+      (transaction) => transaction.transactionDate <= filters.to!,
+    );
+  if (filters.search?.trim()) {
+    const needle = filters.search.trim().toLocaleLowerCase("en-CA");
+    filtered = filtered.filter(
+      (transaction) =>
+        (transaction.merchantName ?? transaction.name)
+          .toLocaleLowerCase("en-CA")
+          .includes(needle) ||
+        (transaction.accountName ?? "")
+          .toLocaleLowerCase("en-CA")
+          .includes(needle),
+    );
+  }
+  if (filters.status && filters.status !== "all")
+    filtered = filtered.filter((transaction) =>
+      filters.status === "pending" ? transaction.pending : !transaction.pending,
+    );
+  if (filters.inclusion && filters.inclusion !== "all") {
+    filtered = filtered.filter((transaction) => {
+      const line = accountingLineFor(transaction);
+      if (filters.inclusion === "excluded") {
+        return line.inclusion === "excluded";
+      }
+      if (filters.inclusion === "transfers") {
+        return line.inclusion === "transfer";
+      }
+      return line.inclusion === "included";
+    });
+  }
   return limit === undefined ? filtered : filtered.slice(0, limit);
 }
 export async function setManualCategory(

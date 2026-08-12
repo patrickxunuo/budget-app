@@ -30,14 +30,12 @@ function routeError(error: unknown) {
 }
 export async function GET(request: Request) {
   try {
+    const context = await getManualEntryContext();
     const url = new URL(request.url);
     const { format, ...filters } = manualEntryListQuerySchema.parse(
       Object.fromEntries(url.searchParams),
     );
-    const entries = await listManualEntries(
-      await getManualEntryContext(),
-      filters,
-    );
+    const entries = await listManualEntries(context, filters);
     if (format === "csv")
       return new Response(manualEntriesToCsv(entries), {
         headers: {

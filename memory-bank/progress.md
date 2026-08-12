@@ -2,9 +2,13 @@
 
 ## Current Sprint / Focus
 
-GH-8 Manual/Cash ledger is review-ready.
+GH-9 Family and Personal financial dashboards are review-ready.
 
 ## Log
+
+- 2026-08-12T22:19Z [READY] GH-9 adds strict Family/Personal dashboard and ledger reads, Canadian period cash flow, budgets, cached Plaid balance freshness, complete searchable transactions, and no Combined privacy view; 175 Vitest checks, 316 pgTAP assertions, lint/typecheck/build, the runnable browser baseline, and independent review are green.
+
+- 2026-08-13T04:00Z [PLANNED] GH-9 approved: build strict Family/Personal dashboard read models, period-aware cash-flow and budget views, cached account freshness, and complete searchable transaction exploration with privacy, unit/API/component/database, and Playwright coverage.
 
 - 2026-08-12T20:58Z [READY] GH-8 adds private Personal and collaborative audited Family Manual/Cash entries, validated RPC-only CRUD, refund/category accounting, complete paged summaries and filtered CSV, and a responsive ledger workflow; 153 Vitest checks, 312 pgTAP assertions, lint/typecheck/build, 14 runnable browser journeys, and independent review are green.
 

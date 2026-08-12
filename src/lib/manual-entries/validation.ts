@@ -101,7 +101,7 @@ export const manualEntryUpdateSchema = z
 
 export const manualEntryListQuerySchema = z
   .object({
-    scope: scopeSchema.optional(),
+    scope: scopeSchema,
     from: calendarDateSchema.optional(),
     to: calendarDateSchema.optional(),
     categoryId: uuidSchema.optional(),

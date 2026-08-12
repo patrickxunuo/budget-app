@@ -39,5 +39,9 @@ export type ManualEntryFilters = {
   from?: string;
   to?: string;
   categoryId?: string;
+  accountId?: string;
+  status?: "all" | "pending" | "posted";
+  inclusion?: "default" | "included" | "excluded" | "transfers" | "all";
+  search?: string;
   format?: "json" | "csv";
 };
