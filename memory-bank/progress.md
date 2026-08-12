@@ -6,6 +6,10 @@ GH-6 transaction accounting and analytics semantics are review-ready.
 
 ## Log
 
+- 2026-08-12T19:08Z [READY] GH-7 scoped categories and merchant rules are review-ready with immutable Plaid source facts, privacy-domain category selection, audited manual/rule attribution, exact opaque merchant identity, RPC-only rule mutations, responsive Categories/Transactions workflows, 121 Vitest checks, 292 pgTAP assertions, lint/typecheck/build, and independent review green.
+
+- 2026-08-12T17:48Z [PLANNED] GH-7 approved: seed Plaid categories, add scoped custom categories and durable transaction overrides, apply audited merchant rules to existing/future imports with preview, and ship responsive Categories/Transactions workflows with database, unit, API, and Playwright coverage.
+
 - 2026-08-12T17:35Z [READY] GH-6 shipped a cent-safe CAD accounting domain, metadata-only kind/rule overrides, exact Plaid income/transfer/refund classification, pending reconciliation, Canadian calendar ranges, and category summaries; 105 Vitest checks, 260 pgTAP assertions, lint/typecheck/build, and independent review are green.
 
 - 2026-08-12T00:45Z [PLANNED] GH-6 approved: metadata-only classification overrides/rule attribution plus a pure CAD accounting engine for signs, transaction kinds, pending reconciliation, exclusions, Canadian calendar ranges, and summary/category totals with Vitest and pgTAP coverage.

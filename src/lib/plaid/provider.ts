@@ -79,6 +79,7 @@ function normalizeTransaction(transaction: Transaction): ProviderTransaction {
     payload: {
       paymentChannel: transaction.payment_channel,
       personalFinanceCategory: transaction.personal_finance_category,
+      stableMerchantId: transaction.merchant_entity_id ?? null,
     },
   };
 }

@@ -1,4 +1,4 @@
-﻿export type AccountScope = "personal" | "family";
+export type AccountScope = "personal" | "family";
 
 export type ReviewDuplicate = {
   accountId: string;
@@ -45,6 +45,7 @@ export type ProviderTransaction = {
   pending: boolean;
   pendingTransactionId: string | null;
   payload: Record<string, unknown>;
+  stableMerchantId?: string | null;
 };
 
 export type SyncTrigger = "activation" | "member" | "webhook" | "nightly";

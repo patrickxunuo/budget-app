@@ -8,6 +8,14 @@
 - GH-3 suite: `e2e/auth.spec.ts`
 - Latest run: 14 passed, 34 fixture-dependent scenarios skipped, 0 failed (48 desktop/mobile cases; local Supabase environment)
 
+## GH-7 Scoped Categories and Merchant Rules
+
+- [x] Family/Personal category creation, privacy labels, archive controls, and rule register — component/API coverage passes; desktop/mobile Playwright authored
+- [x] Original Plaid versus effective category display and one-off recategorization — component/API/database coverage passes; real-backend Playwright authored
+- [x] Merchant identity preview, confirmation count, existing/future application, manual precedence, and shared audit history — domain/API/database coverage passes; real-backend Playwright authored
+- [x] Mobile stacking, keyboard focus, reduced motion, and screenshots — Playwright authored
+- Test file: `e2e/categories.spec.ts`; latest GH-7 browser result: 10 desktop/mobile scenarios fixture-gated because active-member/category transaction credentials were not supplied, 0 failed. Full browser suite: 14 runnable passed, 44 fixture-dependent skipped, 0 failed.
+
 ## GH-5 Idempotent Plaid Transaction Synchronization
 
 - [x] Database-backed freshness renders without a Plaid call on page load — component coverage passes; desktop/mobile Playwright authored
@@ -42,7 +50,7 @@
 ## Database Regression Coverage
 
 - `supabase/tests/database/auth-lifecycle.test.sql` covers setup closure/serialization, service-role boundaries, hashed/revocable/single-use invitations, direct-DML denial, ownership transfer, departure cleanup, sole-owner workspace deletion, and recent-password authorization.
-- Latest database run: 246 pgTAP assertions passed across schema, RLS, auth lifecycle, Plaid activation, and atomic transaction-sync suites.
+- Latest database run: 292 pgTAP assertions passed across schema, RLS, auth lifecycle, Plaid activation, atomic transaction sync, accounting, scoped categories, and merchant rules.
 
 ## Artifacts
 
