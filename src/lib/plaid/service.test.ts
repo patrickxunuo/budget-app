@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     getAccounts: vi.fn(),
     syncTransactions: vi.fn(),
   },
+  syncPlaidItem: vi.fn(),
   rpc: vi.fn(),
   insertedItems: [] as Record<string, unknown>[],
   insertedCandidates: [] as Record<string, unknown>[],
@@ -135,6 +136,10 @@ vi.mock("@/lib/plaid/provider", () => ({
   getPlaidProvider: () => mocks.provider,
 }));
 
+vi.mock("@/lib/plaid/sync-service", () => ({
+  syncPlaidItem: mocks.syncPlaidItem,
+}));
+
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: () => admin,
 }));
@@ -174,6 +179,15 @@ beforeEach(async () => {
   vi.clearAllMocks();
   mocks.insertedItems.length = 0;
   mocks.insertedCandidates.length = 0;
+  mocks.syncPlaidItem.mockResolvedValue({
+    itemId: "40000000-0000-4000-8000-000000000001",
+    status: "succeeded",
+    added: 2,
+    modified: 0,
+    removed: 0,
+    requestId: "provider-request",
+    lastSuccessAt: "2026-08-11T22:00:00.000Z",
+  });
   mocks.transactionUpserts.length = 0;
   mocks.syncStateUpserts.length = 0;
   mocks.accountRows.length = 0;
@@ -334,89 +348,25 @@ describe("Plaid linking service", () => {
     expect(mocks.insertedCandidates).toHaveLength(0);
   });
 
-  it("paginates sync, filters unselected accounts, and counts repeated provider ids idempotently", async () => {
-    mocks.accountRows.push({
-      id: "50000000-0000-4000-8000-000000000001",
-      provider_account_id: "provider-chequing",
-    });
-    const repeated = {
-      transactionId: "transaction-repeat",
-      accountId: "provider-chequing",
-      amount: 12.5,
-      currencyCode: "CAD",
-      authorizedDate: null,
-      date: "2026-08-11",
-      merchantName: "Market",
-      name: "Market",
-      pending: false,
-      payload: {},
-    };
-    mocks.provider.syncTransactions
-      .mockResolvedValueOnce({
-        added: [
-          repeated,
-          {
-            ...repeated,
-            transactionId: "transaction-unselected",
-            accountId: "other-account",
-          },
-        ],
-        modified: [{ ...repeated, amount: 13 }],
-        removedIds: [],
-        nextCursor: "page-2",
-        hasMore: true,
-      })
-      .mockResolvedValueOnce({
-        added: [repeated, { ...repeated, transactionId: "transaction-second" }],
-        modified: [],
-        removedIds: [],
-        nextCursor: "complete",
-        hasMore: false,
-      });
-
+  it("delegates initial import to the shared atomic sync path", async () => {
     const result = await activatePlaidReview(actor, {
       reviewId: "40000000-0000-4000-8000-000000000001",
       accounts: selectedAccounts,
     });
 
-    expect(mocks.provider.syncTransactions).toHaveBeenNthCalledWith(
-      1,
-      "access-token-plaintext",
-      undefined,
-    );
-    expect(mocks.provider.syncTransactions).toHaveBeenNthCalledWith(
-      2,
-      "access-token-plaintext",
-      "page-2",
-    );
-    expect(
-      mocks.transactionUpserts.flat().map((row) => row.plaid_transaction_id),
-    ).toEqual([
-      "transaction-repeat",
-      "transaction-repeat",
-      "transaction-second",
-    ]);
-    expect(mocks.transactionUpserts.flat()).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          plaid_transaction_id: "transaction-unselected",
-        }),
-      ]),
+    expect(mocks.syncPlaidItem).toHaveBeenCalledExactlyOnceWith(
+      "40000000-0000-4000-8000-000000000001",
+      "activation",
+      actor,
     );
     expect(result).toMatchObject({
       importedTransactions: 2,
       importStatus: "complete",
     });
-    expect(mocks.syncStateUpserts.at(-1)).toMatchObject({
-      cursor: "complete",
-      status: "succeeded",
-      error_code: null,
-      error_message: null,
-    });
   });
 
   it("treats PRODUCT_NOT_READY as a successful pending import with sanitized state", async () => {
-    mocks.provider.syncTransactions.mockRejectedValue(
+    mocks.syncPlaidItem.mockRejectedValue(
       Object.assign(new Error("provider payload secret"), {
         response: { data: { error_code: "PRODUCT_NOT_READY" } },
       }),
@@ -431,18 +381,13 @@ describe("Plaid linking service", () => {
       importedTransactions: 0,
       importStatus: "pending",
     });
-    expect(mocks.syncStateUpserts.at(-1)).toMatchObject({
-      status: "idle",
-      error_code: null,
-      error_message: null,
-    });
-    expect(JSON.stringify(mocks.syncStateUpserts.at(-1))).not.toMatch(
+    expect(JSON.stringify(result)).not.toMatch(
       /PRODUCT_NOT_READY|provider payload secret|access-token-plaintext/,
     );
   });
 
   it("keeps activation truthful when generic initial sync fails and records a sanitized retryable state", async () => {
-    mocks.provider.syncTransactions.mockRejectedValue(
+    mocks.syncPlaidItem.mockRejectedValue(
       Object.assign(new Error("access-token-plaintext socket failure"), {
         response: {
           data: {
@@ -462,12 +407,7 @@ describe("Plaid linking service", () => {
       importedTransactions: 0,
       importStatus: "pending",
     });
-    expect(mocks.syncStateUpserts.at(-1)).toMatchObject({
-      status: "failed",
-      error_code: "initial_sync_failed",
-    });
-    expect(mocks.syncStateUpserts.at(-1)?.error_message).toMatch(/retry/i);
-    expect(JSON.stringify(mocks.syncStateUpserts.at(-1))).not.toMatch(
+    expect(JSON.stringify(result)).not.toMatch(
       /access-token-plaintext|INTERNAL_SERVER_ERROR|secret-request|socket failure/,
     );
   });

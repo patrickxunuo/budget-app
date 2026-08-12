@@ -1,7 +1,9 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 
 import { PlaidLinkFlow } from "@/components/plaid/plaid-link-flow";
+import { PlaidSyncStatus } from "@/components/plaid/plaid-sync-status";
 import { requireActiveMembership } from "@/lib/auth/dal";
+import { getPlaidSyncStatuses } from "@/lib/plaid/sync-service";
 
 export const metadata: Metadata = {
   title: "Accounts",
@@ -9,7 +11,11 @@ export const metadata: Metadata = {
 };
 
 export default async function AccountsPage() {
-  await requireActiveMembership();
+  const { user, membership } = await requireActiveMembership();
+  const syncStatuses = await getPlaidSyncStatuses({
+    userId: user.id,
+    workspaceId: membership.workspace_id,
+  });
 
   return (
     <main className="px-5 py-9 sm:px-8 sm:py-11 lg:px-12 lg:py-14">
@@ -28,6 +34,11 @@ export default async function AccountsPage() {
             decide which records stay Personal and which join the Family ledger.
           </p>
         </header>
+        <PlaidSyncStatus
+          items={syncStatuses}
+          referenceTime={new Date().toISOString()}
+          timeZone="UTC"
+        />
         <PlaidLinkFlow />
       </div>
     </main>

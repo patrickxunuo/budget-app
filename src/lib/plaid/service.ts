@@ -5,23 +5,15 @@ import { z } from "zod";
 import type { PlaidApiActor } from "@/lib/auth/api";
 import { getServerEnv } from "@/lib/env/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import {
-  byteaHex,
-  decryptAccessToken,
-  encryptAccessToken,
-  parseBytea,
-} from "./crypto";
+import { byteaHex, encryptAccessToken } from "./crypto";
 import {
   normalizeAccountIdentity,
   reviewEligibility,
   toAccountKind,
 } from "./account-review";
-import {
-  isPlaidProductNotReady,
-  PlaidFlowError,
-  sanitizedPlaidFailure,
-} from "./errors";
+import { PlaidFlowError, sanitizedPlaidFailure } from "./errors";
 import { getPlaidProvider } from "./provider";
+import { syncPlaidItem } from "./sync-service";
 import type {
   AccountScope,
   PlaidInstitution,
@@ -304,124 +296,16 @@ export async function activatePlaidReview(
     itemId: activationResult?.itemId ?? parsed.data.reviewId,
     activatedAccountIds: activationResult?.activatedAccountIds ?? [],
   };
-  const selectedProviderIds = new Set(ids);
-  let cursor: string | undefined;
   let importedTransactions = 0;
-  const importedProviderIds = new Set<string>();
   let importStatus: "complete" | "pending" = "complete";
 
-  // The activation RPC is the commit boundary. From this point onward the
-  // accounts are active, so initial-import failures are retryable state rather
-  // than an activation error response.
+  // Activation is already committed. Initial import now uses the same atomic
+  // claim/page/commit path as every later update; failures become retry state.
   try {
-    const { data: item, error: itemError } = await admin
-      .from("plaid_items")
-      .select("access_token_ciphertext")
-      .eq("id", result.itemId)
-      .single();
-    if (itemError || !item) throw new Error("activated item lookup failed");
-
-    const accessToken = decryptAccessToken(
-      parseBytea(item.access_token_ciphertext as string),
-      getServerEnv().PLAID_TOKEN_ENCRYPTION_KEY,
-    );
-
-    do {
-      const page = await getPlaidProvider().syncTransactions(
-        accessToken,
-        cursor,
-      );
-      const changed = [
-        ...new Map(
-          [...page.added, ...page.modified]
-            .filter((transaction) =>
-              selectedProviderIds.has(transaction.accountId),
-            )
-            .map((transaction) => [transaction.transactionId, transaction]),
-        ).values(),
-      ];
-      if (changed.length) {
-        const { data: accounts, error: accountsError } = await admin
-          .from("accounts")
-          .select("id,provider_account_id")
-          .eq("plaid_item_id", result.itemId)
-          .in("provider_account_id", [...selectedProviderIds]);
-        if (accountsError) throw accountsError;
-
-        const accountIds = new Map(
-          (accounts ?? []).map((account) => [
-            account.provider_account_id as string,
-            account.id as string,
-          ]),
-        );
-        const rows = changed.flatMap((transaction) => {
-          const accountId = accountIds.get(transaction.accountId);
-          return accountId
-            ? [
-                {
-                  workspace_id: actor.workspaceId,
-                  account_id: accountId,
-                  plaid_transaction_id: transaction.transactionId,
-                  amount: transaction.amount,
-                  currency_code: transaction.currencyCode ?? "CAD",
-                  authorized_date: transaction.authorizedDate,
-                  transaction_date: transaction.date,
-                  merchant_name: transaction.merchantName,
-                  name: transaction.name,
-                  pending: transaction.pending,
-                  provider_payload: transaction.payload,
-                },
-              ]
-            : [];
-        });
-        if (rows.length) {
-          const { error: transactionError } = await admin
-            .from("transactions")
-            .upsert(rows, {
-              onConflict: "plaid_transaction_id",
-              ignoreDuplicates: false,
-            });
-          if (transactionError) throw transactionError;
-          for (const row of rows)
-            importedProviderIds.add(row.plaid_transaction_id);
-          importedTransactions = importedProviderIds.size;
-        }
-      }
-      cursor = page.nextCursor;
-      if (!page.hasMore) break;
-    } while (true);
-
-    const now = new Date().toISOString();
-    const { error: syncStateError } = await admin.from("sync_state").upsert({
-      plaid_item_id: result.itemId,
-      cursor,
-      status: "succeeded",
-      last_attempt_at: now,
-      last_success_at: now,
-      error_code: null,
-      error_message: null,
-    });
-    if (syncStateError) throw syncStateError;
-  } catch (syncError) {
+    const sync = await syncPlaidItem(result.itemId, "activation", actor);
+    importedTransactions = sync.added + sync.modified;
+  } catch {
     importStatus = "pending";
-    const productNotReady = isPlaidProductNotReady(syncError);
-    // Best effort is intentional: even if the database is temporarily unable
-    // to persist retry state, the already-committed activation remains a 200.
-    try {
-      await admin.from("sync_state").upsert({
-        plaid_item_id: result.itemId,
-        cursor,
-        status: productNotReady ? "idle" : "failed",
-        last_attempt_at: new Date().toISOString(),
-        error_code: productNotReady ? null : "initial_sync_failed",
-        error_message: productNotReady
-          ? null
-          : "Retry scheduled for initial transaction import.",
-      });
-    } catch {
-      // A transport-level database outage can also prevent recording retry
-      // state. It must not turn an already-committed activation into a 502.
-    }
   }
 
   return { ...result, importedTransactions, importStatus };

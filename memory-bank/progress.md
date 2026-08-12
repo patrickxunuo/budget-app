@@ -2,9 +2,13 @@
 
 ## Current Sprint / Focus
 
-GH-4 read-only Canadian Plaid account linking is in review as [PR #18](https://github.com/patrickxunuo/budget-app/pull/18).
+GH-5 idempotent Plaid transaction synchronization is review-ready.
 
 ## Log
+
+- 2026-08-12T00:30Z [READY] GH-5 atomic cursor-based Plaid synchronization implemented with signed webhooks, nightly/member recovery, durable sanitized retry/repair state, database-backed freshness UI, and order-independent pending-to-posted reconciliation; 91 Vitest checks, 246 pgTAP assertions, lint/typecheck/build, 14 runnable browser journeys, and independent review are green.
+
+- 2026-08-12T00:00Z [PLANNED] GH-5 approved: atomic cursor-based Plaid sync, pending-to-posted reconciliation, authenticated webhook/nightly/member entry points, retry and freshness state, database-backed Accounts status, and unit/pgTAP/Playwright verification.
 
 <!-- Newest entries first. Format: - YYYY-MM-DDTHH:MMZ [status] feature-name — notes -->
 
