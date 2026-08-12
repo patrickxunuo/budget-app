@@ -55,6 +55,72 @@ export function inclusionMatches(
   if (inclusion === "included") return !row.excluded && row.kind !== "transfer";
   return !row.excluded && row.kind !== "transfer";
 }
+export type DashboardBudgetVersion = {
+  categoryId: string;
+  amountCents: number;
+  effectiveMonth?: string;
+  endMonth?: string | null;
+};
+
+function firstOfMonth(date: string) {
+  return `${date.slice(0, 8)}01`;
+}
+
+function monthsTouched(range: { startDate: string; endDate: string }) {
+  const months: string[] = [];
+  const cursor = new Date(`${firstOfMonth(range.startDate)}T00:00:00Z`);
+  const end = firstOfMonth(range.endDate);
+  while (cursor.toISOString().slice(0, 10) <= end) {
+    months.push(cursor.toISOString().slice(0, 8) + "01");
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return months;
+}
+
+export function aggregateMonthlyBudgetTargets(
+  budgets: readonly DashboardBudgetVersion[],
+  range: { startDate: string; endDate: string },
+) {
+  const totals = new Map<string, number>();
+  const legacy = budgets.filter(
+    (budget) => budget.effectiveMonth === undefined,
+  );
+  for (const budget of legacy) {
+    totals.set(
+      budget.categoryId,
+      (totals.get(budget.categoryId) ?? 0) + budget.amountCents,
+    );
+  }
+
+  const versioned = budgets.filter(
+    (budget): budget is DashboardBudgetVersion & { effectiveMonth: string } =>
+      budget.effectiveMonth !== undefined,
+  );
+  const categoryIds = new Set(versioned.map((budget) => budget.categoryId));
+  for (const month of monthsTouched(range)) {
+    for (const categoryId of categoryIds) {
+      const applicable = versioned
+        .filter(
+          (budget) =>
+            budget.categoryId === categoryId &&
+            budget.effectiveMonth <= month &&
+            (budget.endMonth === null ||
+              budget.endMonth === undefined ||
+              budget.endMonth >= month),
+        )
+        .sort((left, right) =>
+          right.effectiveMonth.localeCompare(left.effectiveMonth),
+        )[0];
+      if (applicable) {
+        totals.set(
+          categoryId,
+          (totals.get(categoryId) ?? 0) + applicable.amountCents,
+        );
+      }
+    }
+  }
+  return totals;
+}
 export function aggregateDashboard(input: {
   scope: DashboardFilters["scope"];
   period: DashboardFilters["period"];
@@ -62,7 +128,7 @@ export function aggregateDashboard(input: {
   timeZone: string;
   rows: DashboardTransaction[];
   categories: Array<{ id: string; name: string; color: string | null }>;
-  budgets: Array<{ categoryId: string; amountCents: number }>;
+  budgets: DashboardBudgetVersion[];
   accounts: DashboardReadModel["accounts"];
   filterAccounts?: DashboardReadModel["accounts"];
   filterCategories?: Array<{
@@ -111,13 +177,7 @@ export function aggregateDashboard(input: {
     }
     byDay.set(l.date, day);
   }
-  const budgetMap = new Map<string, number>();
-  for (const budget of input.budgets) {
-    budgetMap.set(
-      budget.categoryId,
-      (budgetMap.get(budget.categoryId) ?? 0) + budget.amountCents,
-    );
-  }
+  const budgetMap = aggregateMonthlyBudgetTargets(input.budgets, input.range);
   return {
     scope: input.scope,
     period: input.period,

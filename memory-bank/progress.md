@@ -2,9 +2,13 @@
 
 ## Current Sprint / Focus
 
-GH-9 Family and Personal financial dashboards are review-ready.
+GH-10 monthly category budgets are review-ready.
 
 ## Log
+
+- 2026-08-12T23:00Z [READY] GH-10 adds secure effective-dated Family/Personal monthly category targets, shared-accounting progress, accessible 75/90/100/over states, and deterministic real-backend browser coverage; 211 Vitest checks, 340 pgTAP assertions, lint/typecheck/build, and independent review are green.
+
+- 2026-08-12T22:42Z [PLANNED] GH-10 approved: add secure effective-dated Family/Personal monthly category targets, accounting-aware progress, accessible threshold states, and database/unit/API/component/Playwright coverage.
 
 - 2026-08-12T22:19Z [READY] GH-9 adds strict Family/Personal dashboard and ledger reads, Canadian period cash flow, budgets, cached Plaid balance freshness, complete searchable transactions, and no Combined privacy view; 175 Vitest checks, 316 pgTAP assertions, lint/typecheck/build, the runnable browser baseline, and independent review are green.
 
