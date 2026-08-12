@@ -6,7 +6,15 @@
 - Command: `npm run test:e2e`
 - Test directory: `e2e/`
 - GH-3 suite: `e2e/auth.spec.ts`
-- Latest run: 14 passed, 34 fixture-dependent scenarios skipped, 0 failed (48 desktop/mobile cases; local Supabase environment)
+- Latest run: 14 passed, 52 fixture-dependent scenarios skipped, 0 failed (66 desktop/mobile cases; local Supabase environment)
+
+## GH-8 Manual/Cash Ledger
+
+- [x] Personal income and Family spending/refund creation with explicit scope, kind, source, category, notes, and signed CAD validation — component/API/database coverage passes; desktop/mobile Playwright authored
+- [x] Personal-owner privacy and Family collaboration with durable author/last-editor/deletion audit — component/API/database coverage passes; real-backend Playwright authored
+- [x] Edit/error preservation, Personal direct soft deletion, and confirmed/cancellable Family deletion — component/API/database coverage passes; real-backend Playwright authored
+- [x] Filtered RFC 4180 CSV, keyboard operation, reduced motion, responsive stacking, and screenshots — component/API coverage passes; real-backend Playwright authored
+- Test file: `e2e/manual-entries.spec.ts`; latest GH-8 browser result: 8 desktop/mobile scenarios fixture-gated because `E2E_MANUAL_ENTRY_MEMBER_*` (or fallback active-member credentials) were not supplied, 0 failed. Full browser suite: 14 runnable passed, 52 fixture-dependent skipped, 0 failed.
 
 ## GH-7 Scoped Categories and Merchant Rules
 
@@ -50,7 +58,7 @@
 ## Database Regression Coverage
 
 - `supabase/tests/database/auth-lifecycle.test.sql` covers setup closure/serialization, service-role boundaries, hashed/revocable/single-use invitations, direct-DML denial, ownership transfer, departure cleanup, sole-owner workspace deletion, and recent-password authorization.
-- Latest database run: 292 pgTAP assertions passed across schema, RLS, auth lifecycle, Plaid activation, atomic transaction sync, accounting, scoped categories, and merchant rules.
+- Latest database run: 312 pgTAP assertions passed across schema, RLS, auth lifecycle, Plaid activation, atomic transaction sync, accounting, scoped categories, merchant rules, and Manual/Cash entries.
 
 ## Artifacts
 

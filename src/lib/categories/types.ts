@@ -30,6 +30,8 @@ export type TransactionCategoryView = {
   amount: number;
   transactionDate: string;
   pending: boolean;
+  kindOverride?: "income" | "spending" | "transfer" | "refund" | null;
+  excluded?: boolean;
   originalPlaidCategory: OriginalPlaidCategory;
   effectiveCategory: EffectiveCategory;
   stableMerchantId: string | null;
@@ -48,3 +50,8 @@ export type MerchantRule = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type ManualEntryCategory = Pick<
+  Category,
+  "id" | "name" | "color" | "scope" | "ownerProfileId" | "archivedAt"
+>;

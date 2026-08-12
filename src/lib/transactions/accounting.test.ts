@@ -1,11 +1,13 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
 import {
   calculateSummary,
   classifyTransaction,
   formatLocalDate,
   getDateRange,
+  manualEntryToAccountingTransaction,
   normalizeCashFlowCents,
+  plaidViewToAccountingTransaction,
   reconcilePendingTransactions,
   resolveAccountingLine,
   type AccountingTransaction,
@@ -483,6 +485,154 @@ describe("transaction accounting", () => {
       netFlowCents: -1_800,
       includedCount: 3,
       categorySpendingCents: { food: 1_500, transport: 300 },
+    });
+  });
+});
+
+describe("GH-8 manual/cash accounting acceptance", () => {
+  it("DOM-011 maps persisted Manual rows into the shared accounting boundary", () => {
+    expect(
+      manualEntryToAccountingTransaction({
+        id: "persisted-refund",
+        amount: "12.50",
+        currencyCode: "CAD",
+        entryDate: "2026-08-12",
+        description: "Market refund",
+        kind: "refund",
+        categoryId: "groceries",
+        deletedAt: null,
+      }),
+    ).toEqual({
+      id: "persisted-refund",
+      source: "manual",
+      amountCents: 1_250,
+      currencyCode: "CAD",
+      date: "2026-08-12",
+      name: "Market refund",
+      kindOverride: "refund",
+      categoryId: "groceries",
+      removed: false,
+      pending: false,
+    });
+  });
+
+  it("DOM-012 applies explicit Manual income, spending, and refund kinds to shared totals", () => {
+    const manual = [
+      transaction({
+        id: "manual-income",
+        source: "manual",
+        amountCents: 100_000,
+        kindOverride: "income",
+        categoryId: "cash-income",
+      }),
+      transaction({
+        id: "manual-spending",
+        source: "manual",
+        amountCents: -4_275,
+        kindOverride: "spending",
+        categoryId: "groceries",
+      }),
+      transaction({
+        id: "manual-refund",
+        source: "manual",
+        amountCents: 1_250,
+        kindOverride: "refund",
+        categoryId: "groceries",
+      }),
+    ];
+
+    expect(manual.map(normalizeCashFlowCents)).toEqual([
+      100_000, -4_275, 1_250,
+    ]);
+    expect(manual.map(classifyTransaction)).toEqual([
+      "income",
+      "spending",
+      "refund",
+    ]);
+    expect(calculateSummary(manual)).toMatchObject({
+      incomeCents: 100_000,
+      spendingCents: 3_025,
+      refundsCents: 1_250,
+      netFlowCents: 96_975,
+      includedCount: 3,
+      pendingCount: 0,
+      transferCents: 0,
+      categorySpendingCents: { groceries: 3_025 },
+    });
+  });
+
+  it("DOM-013 excludes soft-deleted Manual entries from date/category summaries", () => {
+    const manual = [
+      transaction({
+        id: "active-manual",
+        source: "manual",
+        amountCents: -2_000,
+        kindOverride: "spending",
+        categoryId: "groceries",
+        date: "2026-08-12",
+      }),
+      transaction({
+        id: "deleted-manual",
+        source: "manual",
+        amountCents: -99_999,
+        kindOverride: "spending",
+        categoryId: "groceries",
+        date: "2026-08-12",
+        removed: true,
+      }),
+      transaction({
+        id: "outside-manual",
+        source: "manual",
+        amountCents: -5_000,
+        kindOverride: "spending",
+        categoryId: "groceries",
+        date: "2026-09-01",
+      }),
+    ];
+
+    expect(
+      calculateSummary(manual, {
+        startDate: "2026-08-01",
+        endDate: "2026-08-31",
+      }),
+    ).toMatchObject({
+      spendingCents: 2_000,
+      netFlowCents: -2_000,
+      includedCount: 1,
+      excludedCount: 0,
+      categorySpendingCents: { groceries: 2_000 },
+    });
+  });
+
+  it("DOM-014 combines persisted Plaid and Manual rows in the production summary boundary", () => {
+    const plaid = plaidViewToAccountingTransaction({
+      id: "plaid-grocery",
+      amount: 50,
+      transactionDate: "2026-08-12",
+      pending: false,
+      name: "Grocer",
+      originalPlaidCategory: {
+        primary: "FOOD_AND_DRINK",
+        detailed: "FOOD_AND_DRINK_GROCERIES",
+      },
+      effectiveCategory: { id: "groceries" },
+    });
+    const manual = manualEntryToAccountingTransaction({
+      id: "manual-refund",
+      amount: "12.50",
+      currencyCode: "CAD",
+      entryDate: "2026-08-13",
+      description: "Cash refund",
+      kind: "refund",
+      categoryId: "groceries",
+      deletedAt: null,
+    });
+
+    expect(calculateSummary([plaid, manual])).toMatchObject({
+      spendingCents: 3_750,
+      refundsCents: 1_250,
+      netFlowCents: -3_750,
+      categorySpendingCents: { groceries: 3_750 },
     });
   });
 });

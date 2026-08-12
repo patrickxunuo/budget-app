@@ -2,9 +2,13 @@
 
 ## Current Sprint / Focus
 
-GH-6 transaction accounting and analytics semantics are review-ready.
+GH-8 Manual/Cash ledger is review-ready.
 
 ## Log
+
+- 2026-08-12T20:58Z [READY] GH-8 adds private Personal and collaborative audited Family Manual/Cash entries, validated RPC-only CRUD, refund/category accounting, complete paged summaries and filtered CSV, and a responsive ledger workflow; 153 Vitest checks, 312 pgTAP assertions, lint/typecheck/build, 14 runnable browser journeys, and independent review are green.
+
+- 2026-08-12T20:00Z [PLANNED] GH-8 approved: add an audited Manual/Cash data boundary, validated Personal/Family CRUD APIs, unified accounting/filter/summary/CSV semantics, and a responsive create/edit/delete ledger workflow with database, unit, API, component, and Playwright coverage.
 
 - 2026-08-12T19:08Z [READY] GH-7 scoped categories and merchant rules are review-ready with immutable Plaid source facts, privacy-domain category selection, audited manual/rule attribution, exact opaque merchant identity, RPC-only rule mutations, responsive Categories/Transactions workflows, 121 Vitest checks, 292 pgTAP assertions, lint/typecheck/build, and independent review green.
 
