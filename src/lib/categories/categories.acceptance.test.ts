@@ -134,6 +134,27 @@ describe("GH-7 category domain acceptance", () => {
       );
     }
     expect(
+      transactionListQuerySchema.safeParse({ from: "2026-02-30" }).success,
+    ).toBe(false);
+    expect(
+      transactionListQuerySchema.safeParse({
+        from: "2026-08-31",
+        to: "2026-08-01",
+      }).success,
+    ).toBe(false);
+    expect(
+      transactionListQuerySchema.parse({
+        scope: "family",
+        from: "2026-08-01",
+        to: "2026-08-31",
+      }),
+    ).toEqual({
+      limit: 50,
+      scope: "family",
+      from: "2026-08-01",
+      to: "2026-08-31",
+    });
+    expect(
       manualCategorySchema.safeParse({ categoryId: "not-a-uuid" }).success,
     ).toBe(false);
     expect(updateCategorySchema.safeParse({}).success).toBe(false);

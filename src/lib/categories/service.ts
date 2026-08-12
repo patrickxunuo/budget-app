@@ -1,6 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { collectAllPages } from "@/lib/supabase/pagination";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { normalizeMerchantMatcher, normalizeMerchantName } from "./domain";
 import type { Category, MerchantRule, TransactionCategoryView } from "./types";
@@ -8,6 +9,12 @@ export type CategoryContext = {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   userId: string;
   workspaceId: string;
+};
+export type TransactionFilters = {
+  scope?: "family" | "personal";
+  from?: string;
+  to?: string;
+  categoryId?: string;
 };
 export class CategoryServiceError extends Error {
   constructor(
@@ -58,6 +65,8 @@ type TransactionRow = {
 };
 type TransactionMetadataRow = {
   merchant_rule_id: string | null;
+  kind_override: "income" | "spending" | "transfer" | "refund" | null;
+  excluded: boolean;
   updated_by: string;
   updated_at: string;
   categories:
@@ -218,23 +227,31 @@ function pfc(payload: unknown) {
 }
 export async function listTransactions(
   ctx: CategoryContext,
-  limit: number,
+  limit?: number,
   transactionId?: string,
+  filters: TransactionFilters = {},
 ) {
-  let query = ctx.supabase
-    .from("transactions")
-    .select(
-      "id,merchant_name,name,amount,transaction_date,pending,provider_payload,accounts!inner(scope,owner_profile_id),transaction_metadata(category_id,merchant_rule_id,updated_by,updated_at,categories(id,name,color))",
-    )
-    .eq("workspace_id", ctx.workspaceId)
-    .is("removed_at", null)
-    .order("transaction_date", { ascending: false });
-  if (transactionId) query = query.eq("id", transactionId);
-  const { data, error } = await query.limit(limit);
-  if (error) dbError(error);
+  const rows = await collectAllPages<TransactionRow>(async (from, to) => {
+    let query = ctx.supabase
+      .from("transactions")
+      .select(
+        "id,merchant_name,name,amount,transaction_date,pending,provider_payload,accounts!inner(scope,owner_profile_id),transaction_metadata(category_id,merchant_rule_id,kind_override,excluded,updated_by,updated_at,categories(id,name,color))",
+      )
+      .eq("workspace_id", ctx.workspaceId)
+      .is("removed_at", null)
+      .order("transaction_date", { ascending: false })
+      .order("id", { ascending: true });
+    if (transactionId) query = query.eq("id", transactionId);
+    if (filters.scope) query = query.eq("accounts.scope", filters.scope);
+    if (filters.from) query = query.gte("transaction_date", filters.from);
+    if (filters.to) query = query.lte("transaction_date", filters.to);
+    const { data, error } = await query.range(from, to);
+    if (error) dbError(error);
+    return (data ?? []) as unknown as TransactionRow[];
+  });
   const { categories } = await listCategoriesAndRules(ctx);
   const bySystem = new Map(categories.map((c) => [c.systemKey, c]));
-  return ((data ?? []) as unknown as TransactionRow[]).map((r) => {
+  const transactions = rows.map((r) => {
     const account = Array.isArray(r.accounts) ? r.accounts[0] : r.accounts;
     if (!account)
       throw new CategoryServiceError(
@@ -261,6 +278,8 @@ export async function listTransactions(
       amount: Number(r.amount),
       transactionDate: r.transaction_date,
       pending: r.pending,
+      kindOverride: md?.kind_override ?? null,
+      excluded: md?.excluded ?? false,
       originalPlaidCategory: original,
       effectiveCategory: chosen
         ? {
@@ -281,6 +300,13 @@ export async function listTransactions(
         normalizeMerchantName(r.merchant_name) || normalizeMerchantName(r.name),
     } satisfies TransactionCategoryView;
   });
+  const filtered = filters.categoryId
+    ? transactions.filter(
+        (transaction) =>
+          transaction.effectiveCategory?.id === filters.categoryId,
+      )
+    : transactions;
+  return limit === undefined ? filtered : filtered.slice(0, limit);
 }
 export async function setManualCategory(
   ctx: CategoryContext,

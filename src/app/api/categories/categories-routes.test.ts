@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+vi.mock("@/lib/manual-entries/service", () => ({
+  listManualEntries: vi.fn(),
+}));
+
 vi.mock("@/lib/categories/service", () => {
   class CategoryServiceError extends Error {
     constructor(
@@ -56,6 +60,7 @@ import {
   setManualCategory,
   updateCategory,
 } from "@/lib/categories/service";
+import { listManualEntries } from "@/lib/manual-entries/service";
 import { GET as getCategories, POST as postCategory } from "./route";
 import { PATCH as patchCategory } from "./[id]/route";
 import { GET as getTransactions } from "../transactions/route";
@@ -234,7 +239,7 @@ describe("GH-7 category route acceptance", () => {
     );
   });
 
-  it("API-005 transaction list exposes immutable original Plaid category separately from effective category", async () => {
+  it("API-005 keeps complete Plaid and Manual accounting totals independent of the display limit", async () => {
     const transaction = {
       id: transactionId,
       scope: "family" as const,
@@ -244,6 +249,8 @@ describe("GH-7 category route acceptance", () => {
       amount: 42.75,
       transactionDate: "2026-08-11",
       pending: false,
+      kindOverride: null,
+      excluded: false,
       originalPlaidCategory: {
         primary: "FOOD_AND_DRINK",
         detailed: "FOOD_AND_DRINK_GROCERIES",
@@ -259,15 +266,59 @@ describe("GH-7 category route acceptance", () => {
       stableMerchantId: "entity-grocer",
       normalizedMerchant: "green market",
     };
-    vi.mocked(listTransactions).mockResolvedValue([transaction]);
+    const olderTransaction = {
+      ...transaction,
+      id: "40000000-0000-4000-8000-000000000099",
+      amount: 10,
+      transactionDate: "2026-07-01",
+    };
+    const manualRefund = {
+      id: "50000000-0000-4000-8000-000000000001",
+      source: "manual" as const,
+      scope: "family" as const,
+      ownerProfileId: null,
+      kind: "refund" as const,
+      amount: "2.50",
+      currencyCode: "CAD" as const,
+      entryDate: "2026-08-12",
+      description: "Cash refund",
+      categoryId: familyCategory.id,
+      notes: null,
+      createdBy: actor.userId,
+      lastEditedBy: actor.userId,
+      createdAt: "2026-08-12T12:00:00.000Z",
+      updatedAt: "2026-08-12T12:00:00.000Z",
+      deletedAt: null,
+      deletedBy: null,
+    };
+    vi.mocked(listTransactions).mockResolvedValue([
+      transaction,
+      olderTransaction,
+    ]);
+    vi.mocked(listManualEntries).mockResolvedValue([manualRefund]);
 
     const response = await getTransactions(
-      new Request("http://localhost/api/transactions?limit=50"),
+      new Request("http://localhost/api/transactions?limit=1"),
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ transactions: [transaction] });
-    expect(listTransactions).toHaveBeenCalledExactlyOnceWith(actor, 50);
+    expect(await response.json()).toMatchObject({
+      transactions: [transaction],
+      manualEntries: [manualRefund],
+      summary: {
+        spendingCents: 5025,
+        refundsCents: 250,
+        netFlowCents: -5025,
+        categorySpendingCents: { [familyCategory.id]: 5025 },
+      },
+    });
+    expect(listTransactions).toHaveBeenCalledExactlyOnceWith(
+      actor,
+      undefined,
+      undefined,
+      {},
+    );
+    expect(listManualEntries).toHaveBeenCalledExactlyOnceWith(actor, {});
   });
 
   it("API-006 manual recategorization changes metadata only and returns actor/time attribution", async () => {
@@ -280,6 +331,8 @@ describe("GH-7 category route acceptance", () => {
       amount: 42.75,
       transactionDate: "2026-08-11",
       pending: false,
+      kindOverride: null,
+      excluded: false,
       originalPlaidCategory: {
         primary: "FOOD_AND_DRINK",
         detailed: "FOOD_AND_DRINK_GROCERIES",

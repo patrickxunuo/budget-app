@@ -479,3 +479,71 @@ export function calculateSummary(
   );
   return summary;
 }
+
+/** Maps a persisted Manual/Cash row into the shared accounting boundary. */
+export function manualEntryToAccountingTransaction(entry: {
+  id: string;
+  amount: string;
+  currencyCode: "CAD";
+  entryDate: string;
+  description: string;
+  kind: "income" | "spending" | "refund";
+  categoryId: string;
+  deletedAt: string | null;
+}): AccountingTransaction {
+  const amountCents = decimalCadToCents(entry.amount, "manual entry amount");
+  return {
+    id: entry.id,
+    source: "manual",
+    amountCents,
+    currencyCode: entry.currencyCode,
+    date: entry.entryDate,
+    name: entry.description,
+    kindOverride: entry.kind,
+    categoryId: entry.categoryId,
+    removed: entry.deletedAt !== null,
+    pending: false,
+  };
+}
+
+function decimalCadToCents(value: string, field: string): number {
+  const match = /^(-?)(\d{1,12})(?:\.(\d{1,2}))?$/.exec(value);
+  if (!match) throw new RangeError(`${field} must be a canonical CAD decimal`);
+  const magnitude =
+    Number(match[2]) * 100 + Number((match[3] ?? "").padEnd(2, "0"));
+  const amountCents = match[1] ? -magnitude : magnitude;
+  assertSafeCents(amountCents);
+  return amountCents;
+}
+
+/** Maps a visible Plaid ledger row into the same production accounting boundary. */
+export function plaidViewToAccountingTransaction(transaction: {
+  id: string;
+  amount: number;
+  transactionDate: string;
+  pending: boolean;
+  name: string;
+  originalPlaidCategory: { primary: string; detailed: string } | null;
+  effectiveCategory: { id: string } | null;
+  kindOverride?: TransactionKind | null;
+  excluded?: boolean;
+}): AccountingTransaction {
+  const amountCents = decimalCadToCents(
+    transaction.amount.toFixed(2),
+    "Plaid transaction amount",
+  );
+  return {
+    id: transaction.id,
+    source: "plaid",
+    amountCents,
+    currencyCode: "CAD",
+    date: transaction.transactionDate,
+    name: transaction.name,
+    pending: transaction.pending,
+    providerCategoryPrimary: transaction.originalPlaidCategory?.primary,
+    providerCategoryDetailed: transaction.originalPlaidCategory?.detailed,
+    kindOverride: transaction.kindOverride,
+    excluded: transaction.excluded,
+    categoryId: transaction.effectiveCategory?.id,
+  };
+}
