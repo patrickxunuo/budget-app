@@ -2,9 +2,16 @@
 
 ## Current Sprint / Focus
 
-GH-12 is merged. Every issue through GH-12 is closed; GH-13, GH-14, and GH-15 remain in the v1.0 milestone, plus GH-26 (themed select and searchable dropdown refinement). GH-13 is next in dependency order but is gated on a live HTTPS deployment.
+Every issue through GH-12 is closed and the application is deployed to production at `piggy-budget-app.vercel.app` against a hosted Supabase project and Plaid Sandbox. A real Canadian institution links, activates, and syncs end to end. GH-13, GH-14, and GH-15 remain in the v1.0 milestone, plus GH-26. GH-13 is no longer blocked: a live HTTPS origin now exists for install and service-worker verification.
 
 ## Log
+
+- 2026-08-13T22:40Z [SHIPPED] First real end-to-end production link against Tartan-Dominion Bank of Canada: exchange, account review, activation, and an initial sync of 175 transactions. Four defects had to be fixed to get there, none of which any automated test could see, because every Plaid path is covered only by mocks and the deterministic adapter.
+  - `53138e4` GH-4 sent an unregistered `redirect_uri` on every link-token call.
+  - `d6f948b` GH-5 rejected Plaid's explicit `"error": null` on TRANSACTIONS webhooks with a 400.
+  - `91bca92` GH-4 threw on a balance not representable in cents, aborting the exchange for an entire Item because one ineligible RRSP reports four decimals. The same guard used an absolute tolerance that also rejected ordinary two-decimal balances such as 4523.19.
+  - `21d6a03` GH-5 raised `unknown item account` for activity on accounts the member never linked, so any institution holding an unsupported or unselected account could never complete a sync.
+  - Operational note: hosted database migrations are a separate deployment step. A Vercel deploy ships application code only; `supabase db push --linked` is required, and a SQL-only fix appears to do nothing until it runs.
 
 - 2026-08-13T20:25Z [SHIPPED] GH-11 (`82e142a`, PR #25) and GH-12 (`9b056cf`, PR #27) are merged to `main`. Full local verification on Windows/PowerShell: 294 Vitest checks across 38 files, lint, Next route generation/typecheck, production build, and 10/10 live Plaid Sandbox smoke checks all green. Twelve migrations and ten pgTAP suites are in place.
 
@@ -55,6 +62,7 @@ GH-12 is merged. Every issue through GH-12 is closed; GH-13, GH-14, and GH-15 re
 ## Planned
 
 - Provision live owner/member/invitation fixtures for the environment-gated browser journeys. This is the largest standing coverage gap: the full browser suite runs 14 cases and skips 96.
-- Before GH-13: create the hosted Supabase project, deploy to Vercel, wire production secrets and the nightly cron, register the OAuth redirect URI (`<origin>/accounts`) in the Plaid dashboard, and submit the Plaid Trial/Production application. GH-13 install and service-worker verification needs a real HTTPS origin, and GH-15 documents this environment.
+- Submit the Plaid Trial/Production application. The review is the long-lead item for real bank data and nothing else depends on it, so it should start now rather than at GH-15.
+- Verify the destructive GH-11 and GH-12 flows against the deployment while the data is disposable: per-Item disconnect in both modes, account-data deletion, and workspace deletion back to first-owner setup. None has ever run against a real backend.
 - Under GH-14: export `PLAID_E2E_PROVIDER` in CI and stop fixture-absent browser journeys from skipping silently; add Sandbox credentials as repository secrets.
 - Under GH-15: add `.gitattributes` (`* text=auto eol=lf`) so `pnpm format:check` passes on Windows checkouts.

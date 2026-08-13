@@ -71,6 +71,15 @@ Playwright starts the Next application on port 3100 through its `webServer` conf
 
 2026-08-11 — Windows/PowerShell, Docker 29.6, local Supabase migration replay, Next production build, and Playwright desktop/mobile app startup verified.
 
+## Deploying a Change
+
+A Vercel deployment ships application code only. Any change under `supabase/migrations/` must be applied separately with `pnpm exec supabase db push --linked`, or a SQL-only fix appears to have no effect in production. Confirm what the hosted database actually holds before diagnosing further, for example:
+
+```sql
+select prosrc like '%some removed text%' as still_old
+from pg_proc where proname = 'commit_plaid_sync';
+```
+
 ## Troubleshooting
 
 ### `supabase` is not recognized
