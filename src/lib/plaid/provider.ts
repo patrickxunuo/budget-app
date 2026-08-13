@@ -21,7 +21,7 @@ import type {
 export type LinkTokenInput = {
   userId: string;
   webhookUrl: string;
-  redirectUri: string;
+  redirectUri: string | null;
 };
 
 export type SyncPage = {
@@ -108,8 +108,8 @@ class PlaidSdkProvider implements PlaidProvider {
       products: [Products.Transactions],
       transactions: { days_requested: 365 },
       webhook: input.webhookUrl,
-      redirect_uri: input.redirectUri,
       user: { client_user_id: stableClientUserId(input.userId) },
+      ...(input.redirectUri ? { redirect_uri: input.redirectUri } : {}),
     };
     const { data } = await getPlaidClient().linkTokenCreate(request);
     return { linkToken: data.link_token, expiration: data.expiration };

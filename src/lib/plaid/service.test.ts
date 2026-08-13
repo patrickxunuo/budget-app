@@ -150,6 +150,7 @@ import {
   activatePlaidReview,
   createLinkTokenForMember,
   exchangePublicTokenForReview,
+  oauthRedirectUri,
 } from "./service";
 
 const actor: PlaidApiActor = {
@@ -230,6 +231,19 @@ beforeEach(async () => {
   vi.clearAllMocks();
   mocks.insertedItems.length = 0;
   mocks.insertedCandidates.length = 0;
+});
+
+describe("OAuth redirect URI", () => {
+  it("returns the /accounts return URL for a registrable HTTPS origin", () => {
+    expect(oauthRedirectUri("https://budget.example.test")).toBe(
+      "https://budget.example.test/accounts",
+    );
+  });
+
+  it("omits the redirect URI for local HTTP origins Plaid cannot register", () => {
+    expect(oauthRedirectUri("http://127.0.0.1:3100")).toBeNull();
+    expect(oauthRedirectUri("http://localhost:3000")).toBeNull();
+  });
 });
 
 describe("Plaid linking service", () => {

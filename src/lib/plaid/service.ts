@@ -94,13 +94,21 @@ async function findDuplicate(
   };
 }
 
+// Plaid rejects any redirect URI that is not registered in the developer
+// dashboard, and only HTTPS origins can be registered. Local HTTP origins must
+// omit the field entirely; OAuth institutions are unavailable there.
+export function oauthRedirectUri(appUrl: string): string | null {
+  const redirectUri = new URL("/accounts", appUrl);
+  return redirectUri.protocol === "https:" ? redirectUri.toString() : null;
+}
+
 export async function createLinkTokenForMember(actor: PlaidApiActor) {
   const env = getServerEnv();
   try {
     return await getPlaidProvider().createLinkToken({
       userId: actor.userId,
       webhookUrl: env.PLAID_WEBHOOK_URL,
-      redirectUri: new URL("/accounts", env.APP_URL).toString(),
+      redirectUri: oauthRedirectUri(env.APP_URL),
     });
   } catch {
     throw sanitizedPlaidFailure("link");

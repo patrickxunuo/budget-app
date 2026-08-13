@@ -79,6 +79,19 @@ describe("Plaid SDK provider", () => {
     );
   });
 
+  it("omits redirect_uri entirely when no registrable origin is configured", async () => {
+    const provider = getPlaidProvider();
+
+    await provider.createLinkToken({
+      userId: "10000000-0000-4000-8000-000000000001",
+      webhookUrl: "https://budget.example.test/api/plaid/webhook",
+      redirectUri: null,
+    });
+
+    const request = mocks.linkTokenCreate.mock.calls[0]?.[0];
+    expect(request).not.toHaveProperty("redirect_uri");
+  });
+
   it("derives canonical institution id and name from the exchanged access token", async () => {
     const provider = getPlaidProvider();
 
