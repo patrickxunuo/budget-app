@@ -1,4 +1,4 @@
-import "server-only";
+﻿import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -24,6 +24,11 @@ export type LinkTokenInput = {
   redirectUri: string | null;
 };
 
+export type UpdateLinkTokenInput = LinkTokenInput & {
+  accessToken: string;
+  reason: import("@/lib/plaid/types").PlaidUpdateReason;
+};
+
 export type SyncPage = {
   added: ProviderTransaction[];
   modified: ProviderTransaction[];
@@ -37,6 +42,10 @@ export interface PlaidProvider {
   createLinkToken(
     input: LinkTokenInput,
   ): Promise<{ linkToken: string; expiration: string }>;
+  createUpdateLinkToken(
+    input: UpdateLinkTokenInput,
+  ): Promise<{ linkToken: string; expiration: string }>;
+  removeItem(accessToken: string): Promise<void>;
   exchangePublicToken(
     publicToken: string,
   ): Promise<{ accessToken: string; itemId: string }>;
@@ -113,6 +122,27 @@ class PlaidSdkProvider implements PlaidProvider {
     };
     const { data } = await getPlaidClient().linkTokenCreate(request);
     return { linkToken: data.link_token, expiration: data.expiration };
+  }
+
+  async createUpdateLinkToken(input: UpdateLinkTokenInput) {
+    const request: LinkTokenCreateRequest = {
+      client_name: "Budget App",
+      country_codes: [CountryCode.Ca],
+      language: "en",
+      user: { client_user_id: stableClientUserId(input.userId) },
+      access_token: input.accessToken,
+      webhook: input.webhookUrl,
+      ...(input.redirectUri ? { redirect_uri: input.redirectUri } : {}),
+      ...(input.reason === "account_selection"
+        ? { update: { account_selection_enabled: true } }
+        : {}),
+    };
+    const { data } = await getPlaidClient().linkTokenCreate(request);
+    return { linkToken: data.link_token, expiration: data.expiration };
+  }
+
+  async removeItem(accessToken: string) {
+    await getPlaidClient().itemRemove({ access_token: accessToken });
   }
 
   async exchangePublicToken(publicToken: string) {
@@ -236,6 +266,15 @@ class DeterministicPlaidProvider implements PlaidProvider {
       expiration: new Date(Date.now() + 30 * 60_000).toISOString(),
     };
   }
+
+  async createUpdateLinkToken() {
+    return {
+      linkToken: "e2e-deterministic-update-token",
+      expiration: new Date(Date.now() + 30 * 60_000).toISOString(),
+    };
+  }
+
+  async removeItem() {}
 
   async exchangePublicToken(publicToken: string) {
     if (publicToken === "e2e-public-expired") {

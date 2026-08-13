@@ -2,9 +2,13 @@
 
 ## Current Sprint / Focus
 
-GH-10 monthly category budgets are review-ready.
+GH-11 Plaid connection management is review-ready.
 
 ## Log
+
+- 2026-08-13T01:58Z [READY] GH-11 adds linker-owned Plaid connection dossiers, audited retroactive visibility changes, update-mode repair and fresh reconciliation, fail-closed keep-history/delete-data disconnect recovery, and member-departure revocation; 253 Vitest checks, 390 pgTAP assertions, lint/typecheck/build, and independent review are green. The authored real-backend browser cases remain fixture-gated (14 runnable baseline cases passed, 84 skipped, 0 failed).
+
+- 2026-08-13T00:39Z [PLANNED] GH-11 approved: add linker-owned Plaid connection summaries, audited retroactive visibility controls, update-mode account reconciliation, recent-password disconnect lifecycles, member-departure revocation, and responsive database/unit/API/component/Playwright coverage.
 
 - 2026-08-12T23:00Z [READY] GH-10 adds secure effective-dated Family/Personal monthly category targets, shared-accounting progress, accessible 75/90/100/over states, and deterministic real-backend browser coverage; 211 Vitest checks, 340 pgTAP assertions, lint/typecheck/build, and independent review are green.
 
