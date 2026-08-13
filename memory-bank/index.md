@@ -16,4 +16,4 @@ Project memory. Read this file first to find what you need.
 
 ## Last Updated
 
-2026-08-11
+2026-08-13 — through GH-12; GH-13, GH-14, GH-15, and GH-26 remain open.

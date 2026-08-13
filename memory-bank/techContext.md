@@ -19,6 +19,7 @@
 
 - Unit/component tests: Vitest 4, Testing Library, jsdom; `src/**/*.test.{ts,tsx}`.
 - E2E tests: Playwright 1.62; `e2e/*.spec.ts`, desktop and mobile Chromium.
+- Live provider contract test: `pnpm smoke:plaid` (`scripts/plaid-sandbox-smoke.mjs`), Sandbox-only and manual.
 - Quality commands: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:e2e`.
 
 ## Database
@@ -42,4 +43,5 @@
 
 - `@supabase/supabase-js` and `@supabase/ssr`: browser, SSR, and privileged server clients.
 - `plaid`: server-only Transactions API client.
+- `nodemailer`: optional SMTP member notification for destructive workspace lifecycle actions; inert unless `SMTP_URL` and `SMTP_FROM` are both set.
 - `zod`: public and server environment validation.

@@ -18,7 +18,11 @@ pnpm install --frozen-lockfile
 
 ### 2. Environment Files
 
-Copy `.env.example` to the ignored `.env.local` and fill every value. Local Supabase URLs/keys come from `pnpm db:start`; Plaid Sandbox credentials come from the Plaid dashboard. `PLAID_E2E_PROVIDER=deterministic` is optional and is rejected unless Plaid is in Sandbox, `APP_URL` is loopback, and Vercel is not production.
+Copy `.env.example` to the ignored `.env.local` and fill every value. Local Supabase URLs/keys come from `pnpm db:start`; Plaid Sandbox credentials come from the Plaid dashboard. `SMTP_URL` and `SMTP_FROM` are optional but must be set together.
+
+`PLAID_E2E_PROVIDER=deterministic` is optional and is rejected unless Plaid is in Sandbox, `APP_URL` is loopback, and Vercel is not production. It is a toggle, not an addition: when it is set the deterministic adapter wins and real Plaid credentials are never used. Comment it out to reach live Sandbox; set it to run the deterministic Playwright journeys.
+
+Real Sandbox credentials are provisioned as of 2026-08-12. OAuth institutions cannot be linked from a local HTTP origin because Plaid only accepts redirect URIs registered in the dashboard, and localhost cannot be registered; `oauthRedirectUri()` omits the field for non-HTTPS origins.
 
 ### 3. Database Setup
 
@@ -36,7 +40,10 @@ pnpm typecheck
 pnpm test
 pnpm test:db
 pnpm build
+pnpm smoke:plaid
 ```
+
+`pnpm smoke:plaid` exercises every live Plaid call against Sandbox and refuses to run unless `PLAID_ENV=sandbox`. Run it after changing Plaid request construction or rotating credentials; the deterministic provider cannot detect live contract drift.
 
 ## Quick Start
 
@@ -74,6 +81,14 @@ Use the project-pinned command (`pnpm exec supabase`) or the package scripts ins
 
 Ensure all values from `.env.example` are present. Only the two `NEXT_PUBLIC_*` values may enter the browser; Plaid, service-role, encryption, and cron values are server-only.
 
+### `pnpm format:check` reports every file on Windows
+
+`core.autocrlf=true` writes CRLF to the working tree while Prettier defaults to LF, so all files are flagged even on a clean checkout. CI is unaffected because Linux checks out LF. Verify individual files with `pnpm exec prettier --check --end-of-line auto <paths>` until the `.gitattributes` fix lands under GH-15. Do not run `prettier --write` across the repository to silence it; that rewrites every file.
+
+### `vitest` is not recognized
+
+`node_modules/.bin` can end up empty after an interrupted install. `pnpm install --frozen-lockfile` may report success without repairing it; remove `node_modules` and reinstall.
+
 ## Last Verified
 
-2026-08-11 — Windows/PowerShell.
+2026-08-13 — Windows/PowerShell; 294 Vitest checks, lint, typecheck, production build, and 10/10 live Plaid Sandbox smoke checks green.

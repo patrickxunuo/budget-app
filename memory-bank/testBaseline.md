@@ -101,4 +101,10 @@ Playwright screenshots and reports are written beneath `test-results/` and `play
 
 ## Bugs Discovered
 
-(none)
+- 2026-08-12 — `createLinkTokenForMember` always sent `redirect_uri` derived from `APP_URL`. Plaid rejects unregistered redirect URIs and only HTTPS origins can be registered, so every `/link/token/create` call from a local HTTP origin failed with `INVALID_FIELD`. The deterministic E2E provider ignores the field, so the whole suite stayed green against a completely broken link path. Fixed in `53138e4`; `oauthRedirectUri()` now omits the field unless the origin is HTTPS.
+
+## Known Coverage Gaps
+
+- `.github/workflows/ci.yml` never exports `PLAID_E2E_PROVIDER`, so the guards in `e2e/plaid-link.spec.ts` and `e2e/plaid-sync.spec.ts` skip on every CI run. Tracked in GH-14.
+- Fixture-absent browser journeys skip silently rather than failing, so a green CI result overstates real coverage: 14 runnable versus 96 skipped. Tracked in GH-14.
+- Live Plaid contract coverage is the `pnpm smoke:plaid` script (`scripts/plaid-sandbox-smoke.mjs`), which is manual and Sandbox-only. It covers link token creation, Canadian Transactions entitlement, Item exchange, institution lookup, CAD accounts, transaction sync, update mode with and without account selection, `ITEM_LOGIN_REQUIRED` recovery, and item removal. Webhook signature verification is not covered because it needs a publicly reachable URL.

@@ -2,9 +2,13 @@
 
 ## Current Sprint / Focus
 
-GH-12 data portability and lifecycle controls are review-ready.
+GH-12 is merged. Every issue through GH-12 is closed; GH-13, GH-14, and GH-15 remain in the v1.0 milestone, plus GH-26 (themed select and searchable dropdown refinement). GH-13 is next in dependency order but is gated on a live HTTPS deployment.
 
 ## Log
+
+- 2026-08-13T20:25Z [SHIPPED] GH-11 (`82e142a`, PR #25) and GH-12 (`9b056cf`, PR #27) are merged to `main`. Full local verification on Windows/PowerShell: 294 Vitest checks across 38 files, lint, Next route generation/typecheck, production build, and 10/10 live Plaid Sandbox smoke checks all green. Twelve migrations and ten pgTAP suites are in place.
+
+- 2026-08-12T18:00Z [SHIPPED] Real Plaid Sandbox credentials provisioned and verified end to end. The first live run exposed GH-4 sending an unregistered `redirect_uri` on every `/link/token/create` call, which the deterministic E2E provider had masked; fixed in `53138e4` and covered by the committed contract smoke test `scripts/plaid-sandbox-smoke.mjs` (`pnpm smoke:plaid`, `c3201fa`).
 
 - 2026-08-13T11:20Z [READY] GH-12 adds complete filter-faithful privacy-scoped CSV export, durable provider-first account/workspace deletion, idempotent member warning claims, service-only atomic finalization, and administrator backup guidance; 294 Vitest checks, 419 pgTAP assertions, lint/typecheck/build, runnable browser baseline, and independent review are green.
 
@@ -50,5 +54,7 @@ GH-12 data portability and lifecycle controls are review-ready.
 
 ## Planned
 
-- Review and merge the GH-3 pull request.
-- Provision live owner/member/invitation fixtures for the environment-gated browser journeys.
+- Provision live owner/member/invitation fixtures for the environment-gated browser journeys. This is the largest standing coverage gap: the full browser suite runs 14 cases and skips 96.
+- Before GH-13: create the hosted Supabase project, deploy to Vercel, wire production secrets and the nightly cron, register the OAuth redirect URI (`<origin>/accounts`) in the Plaid dashboard, and submit the Plaid Trial/Production application. GH-13 install and service-worker verification needs a real HTTPS origin, and GH-15 documents this environment.
+- Under GH-14: export `PLAID_E2E_PROVIDER` in CI and stop fixture-absent browser journeys from skipping silently; add Sandbox credentials as repository secrets.
+- Under GH-15: add `.gitattributes` (`* text=auto eol=lf`) so `pnpm format:check` passes on Windows checkouts.
