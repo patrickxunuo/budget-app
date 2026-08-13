@@ -109,4 +109,69 @@ describe("Plaid SDK provider", () => {
       name: "Provider Canonical Bank",
     });
   });
+
+  it("converts ordinary two-decimal balances whose binary residue exceeds an absolute epsilon", async () => {
+    mocks.accountsGet.mockResolvedValue({
+      data: {
+        accounts: [
+          {
+            account_id: "provider-chequing",
+            name: "Everyday Chequing",
+            official_name: null,
+            mask: "1204",
+            type: "depository",
+            subtype: "checking",
+            balances: {
+              available: 4523.19,
+              current: 76543.21,
+              limit: null,
+              iso_currency_code: "CAD",
+            },
+          },
+        ],
+      },
+    });
+
+    const [account] = await getPlaidProvider().getAccounts("access-token");
+
+    expect(account?.availableBalanceCents).toBe(452319);
+    expect(account?.currentBalanceCents).toBe(7654321);
+  });
+
+  it("keeps an Item linkable when one account reports sub-cent precision", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mocks.accountsGet.mockResolvedValue({
+      data: {
+        accounts: [
+          {
+            account_id: "provider-rrsp",
+            name: "Plaid RRSP",
+            official_name: null,
+            mask: "8888",
+            type: "investment",
+            subtype: "rrsp",
+            // Plaid reports four decimals on investment accounts. Throwing here
+            // aborted the entire exchange, even though this account is not
+            // eligible to link.
+            balances: {
+              available: null,
+              current: 23631.9805,
+              limit: null,
+              iso_currency_code: "CAD",
+            },
+          },
+        ],
+      },
+    });
+
+    const [account] = await getPlaidProvider().getAccounts("access-token");
+
+    expect(account?.currentBalanceCents).toBeNull();
+    expect(account?.accountId).toBe("provider-rrsp");
+    expect(warn).toHaveBeenCalledWith(
+      "Plaid balance is not representable in CAD cents",
+      { decimalPlaces: 4 },
+    );
+    warn.mockRestore();
+  });
 });

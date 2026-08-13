@@ -47,8 +47,10 @@ function describeCause(cause: unknown): Record<string, unknown> {
       requestId: plaidError.request_id,
     };
   }
+  // A PostgREST rejection always carries a code; anything else is our own
+  // failure and must not be reported as a database problem.
   return {
-    source: "database",
+    source: candidate.code ? "database" : "application",
     code: candidate.code,
     hint: candidate.hint,
     message: candidate.message,

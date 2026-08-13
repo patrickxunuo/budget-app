@@ -61,14 +61,24 @@ function stableClientUserId(userId: string): string {
   return createHash("sha256").update(`budget-app:${userId}`).digest("hex");
 }
 
+// Cached display balances are optional: the columns are nullable and the UI
+// renders an unknown balance. A value that is not exactly representable in
+// cents must degrade that one field rather than abort the whole connection,
+// which is what throwing did for any Item holding an account with sub-cent
+// precision — Plaid investment accounts routinely report four decimals.
+//
+// Exactness is checked through the decimal representation. An absolute
+// tolerance does not scale with magnitude, so it rejected ordinary two-decimal
+// balances such as 4523.19 and 76543.21 whose binary residue exceeds it.
 function balanceCents(value: number | null | undefined): number | null {
   if (value == null) return null;
   const cents = Math.round(value * 100);
-  if (
-    !Number.isSafeInteger(cents) ||
-    Math.abs(value * 100 - cents) > Number.EPSILON * 100
-  )
-    throw new RangeError("Plaid balance is outside safe CAD cents");
+  if (!Number.isSafeInteger(cents) || Number(value.toFixed(2)) !== value) {
+    console.warn("Plaid balance is not representable in CAD cents", {
+      decimalPlaces: String(value).split(".")[1]?.length ?? 0,
+    });
+    return null;
+  }
   return cents;
 }
 
