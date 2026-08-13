@@ -1,4 +1,4 @@
-export type AccountScope = "personal" | "family";
+﻿export type AccountScope = "personal" | "family";
 
 export type ReviewDuplicate = {
   accountId: string;
@@ -93,4 +93,47 @@ export type PlaidVerificationKey = {
   use: "sig";
   x: string;
   y: string;
+};
+
+export type PlaidConnectionHealth = "healthy" | "attention" | "disconnected";
+export type PlaidConnectionStatus = "pending" | "active" | "error" | "revoked";
+export type PlaidAccountLifecycle = "live" | "deselected" | "disconnected";
+export type PlaidUpdateReason =
+  "login_repair" | "consent" | "permissions" | "account_selection";
+export type PlaidDisconnectMode = "keep_history" | "delete_data";
+
+export type ManagedPlaidAccount = {
+  accountId: string;
+  providerAccountId: string;
+  displayName: string;
+  mask: string | null;
+  kind: "chequing" | "savings" | "credit_card";
+  scope: AccountScope;
+  ownerProfileId: string | null;
+  ownerDisplayName: string | null;
+  availableBalanceCents: number | null;
+  currentBalanceCents: number | null;
+  balanceUpdatedAt: string | null;
+  lastSyncAt: string | null;
+  lifecycle: PlaidAccountLifecycle;
+  readOnly: boolean;
+  archivedAt: string | null;
+};
+
+export type PlaidConnection = {
+  itemId: string;
+  institutionName: string;
+  linkedBy: string;
+  isLinker: boolean;
+  status: PlaidConnectionStatus;
+  health: PlaidConnectionHealth;
+  lastSyncAt: string | null;
+  consentExpiresAt: string | null;
+  disconnectedAt: string | null;
+  itemImpact: {
+    accountCount: number;
+    liveAccountCount: number;
+    message: string;
+  };
+  accounts: ManagedPlaidAccount[];
 };

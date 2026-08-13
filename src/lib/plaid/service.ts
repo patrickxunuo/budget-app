@@ -1,11 +1,16 @@
-import "server-only";
+﻿import "server-only";
 
 import { z } from "zod";
 
 import type { PlaidApiActor } from "@/lib/auth/api";
 import { getServerEnv } from "@/lib/env/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { byteaHex, encryptAccessToken } from "./crypto";
+import {
+  byteaHex,
+  decryptAccessToken,
+  encryptAccessToken,
+  parseBytea,
+} from "./crypto";
 import {
   normalizeAccountIdentity,
   reviewEligibility,
@@ -371,3 +376,60 @@ export type ActivationSelection = {
   scope: AccountScope;
   acceptDuplicate?: boolean;
 };
+
+/**
+ * Revokes every provider Item linked by a departing member before the guarded
+ * membership RPC mutates local membership state. Provider failures fail closed
+ * locally so no Item remains eligible for sync; cleanup_member then preserves
+ * Family history and removes Personal history in the same membership mutation.
+ */
+export async function revokeDepartingMemberPlaidItems(
+  workspaceId: string,
+  profileId: string,
+) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("plaid_items")
+    .select("id,access_token_ciphertext,status")
+    .eq("workspace_id", workspaceId)
+    .eq("linked_by", profileId)
+    .neq("status", "revoked");
+  if (error)
+    throw new PlaidFlowError(
+      502,
+      "departure_revoke_failed",
+      "The member’s bank connections could not be secured.",
+    );
+  const env = getServerEnv();
+  for (const item of data ?? []) {
+    try {
+      const token = decryptAccessToken(
+        parseBytea(item.access_token_ciphertext),
+        env.PLAID_TOKEN_ENCRYPTION_KEY,
+      );
+      await getPlaidProvider().removeItem(token);
+    } catch {
+      // Continue to fail closed in the database. The caller may proceed with
+      // membership cleanup, but this Item can never synchronize again.
+      console.warn(
+        "Plaid Item revocation did not receive provider confirmation",
+        { itemId: item.id },
+      );
+    }
+    const { error: revokeError } = await admin
+      .from("plaid_items")
+      .update({
+        status: "revoked",
+        archived_at: new Date().toISOString(),
+        disconnected_at: new Date().toISOString(),
+        access_token_ciphertext: "\\x00",
+      })
+      .eq("id", item.id);
+    if (revokeError)
+      throw new PlaidFlowError(
+        502,
+        "departure_revoke_failed",
+        "The member’s bank connections could not be secured.",
+      );
+  }
+}

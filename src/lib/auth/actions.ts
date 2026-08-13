@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getServerEnv } from "@/lib/env/server";
+import { revokeDepartingMemberPlaidItems } from "@/lib/plaid/service";
 import { deleteQueuedAuthUser, enqueueAuthDeletion } from "./deletion-queue";
 import {
   clearApplicationAuthCookies,
@@ -367,24 +368,85 @@ async function membershipMutation(
   return { status: "success", message: "Household membership updated." };
 }
 
+async function preparePlaidDeparture(
+  targetMembershipId?: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: genericAuthError };
+
+  const admin = createSupabaseAdminClient();
+  const { data: confirmation, error: confirmationError } = await admin
+    .from("recent_auth_confirmations")
+    .select("confirmed_at")
+    .eq("profile_id", user.id)
+    .gt("confirmed_at", new Date(Date.now() - 15 * 60_000).toISOString())
+    .maybeSingle();
+  if (confirmationError) return { error: genericAuthError };
+  if (!confirmation)
+    return { error: "Confirm your password before continuing." };
+
+  const { data: actor, error: actorError } = await admin
+    .from("workspace_memberships")
+    .select("workspace_id,profile_id,role")
+    .eq("profile_id", user.id)
+    .eq("status", "active")
+    .maybeSingle();
+  if (actorError || !actor) return { error: genericAuthError };
+
+  let departingProfileId = actor.profile_id as string;
+  if (targetMembershipId) {
+    if (actor.role !== "owner") return { error: genericAuthError };
+    const { data: target, error: targetError } = await admin
+      .from("workspace_memberships")
+      .select("profile_id")
+      .eq("id", targetMembershipId)
+      .eq("workspace_id", actor.workspace_id)
+      .eq("role", "member")
+      .eq("status", "active")
+      .maybeSingle();
+    if (targetError || !target) return { error: genericAuthError };
+    departingProfileId = target.profile_id as string;
+  }
+
+  try {
+    await revokeDepartingMemberPlaidItems(
+      actor.workspace_id as string,
+      departingProfileId,
+    );
+  } catch (error) {
+    console.error("Plaid departure revocation failed", error);
+    return {
+      error:
+        "The member's bank connections could not be secured. Try again before changing membership.",
+    };
+  }
+  return { error: null };
+}
+
 export async function leaveWorkspace(
   state: AuthActionState,
   formData: FormData,
-) {
+): Promise<AuthActionState> {
   void state;
   void formData;
+  const prepared = await preparePlaidDeparture();
+  if (prepared.error) return { status: "error", message: prepared.error };
   return membershipMutation("leave_workspace");
 }
 export async function removeMember(
   _state: AuthActionState,
   formData: FormData,
-) {
+): Promise<AuthActionState> {
   const parsed = membershipSchema.safeParse(formValues(formData));
-  return parsed.success
-    ? membershipMutation("remove_member", {
-        p_membership_id: parsed.data.membershipId,
-      })
-    : invalid(parsed.error);
+  if (!parsed.success) return invalid(parsed.error);
+  const prepared = await preparePlaidDeparture(parsed.data.membershipId);
+  if (prepared.error) return { status: "error", message: prepared.error };
+  return membershipMutation("remove_member", {
+    p_membership_id: parsed.data.membershipId,
+  });
 }
 export async function transferOwnership(
   _state: AuthActionState,
