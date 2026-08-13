@@ -1,4 +1,4 @@
-﻿begin;
+begin;
 set local search_path = public, extensions;
 select no_plan();
 
@@ -153,24 +153,29 @@ select throws_ok(
 update public.sync_state set current_request_id = null, current_trigger = null, claim_started_at = null, status = 'succeeded'
 where plaid_item_id = '83000000-0000-4000-8000-000000000001';
 select public.claim_plaid_sync('83000000-0000-4000-8000-000000000001','85000000-0000-4000-8000-000000000006','nightly');
-select throws_ok(
+-- An account this Item never linked is not an attack: Plaid returns activity
+-- for every account on the Item. Its rows are skipped so the rest of the page
+-- still applies, and no transaction can attach to an account outside the Item
+-- because every lookup is scoped by plaid_item_id.
+select lives_ok(
   $$select public.commit_plaid_sync(
-    '83000000-0000-4000-8000-000000000001','85000000-0000-4000-8000-000000000006','pending-late-cursor','must-not-persist','provider-request-foreign',
+    '83000000-0000-4000-8000-000000000001','85000000-0000-4000-8000-000000000006','pending-late-cursor','unlinked-account-page','provider-request-foreign',
     '[{"transactionId":"evil-foreign","accountId":"provider-account-unknown","amount":999,"currencyCode":"CAD","authorizedDate":null,"date":"2026-08-11","merchantName":null,"name":"Foreign","pending":false,"pendingTransactionId":null,"payload":{}}]'::jsonb,
     '[]'::jsonb,'[]'::jsonb
   )$$,
-  '42501', 'unknown item account', 'API-005 an unknown/foreign account aborts the full commit'
+  'API-005 a page naming an unlinked account commits instead of aborting'
 );
 select is(
   (select count(*) from public.transactions where plaid_transaction_id = 'evil-foreign'),
   0::bigint,
-  'API-005 rejected account data produces no transaction changes'
+  'API-005 unlinked account data produces no transaction changes'
 );
-select is(
-  (select cursor from public.sync_state where plaid_item_id = '83000000-0000-4000-8000-000000000001'),
-  'pending-late-cursor',
-  'API-005 rejected account data does not advance the cursor'
-);
+
+-- Restore the in-flight claim and cursor the archived-Item case below depends on.
+update public.sync_state set cursor = 'pending-late-cursor', status = 'succeeded',
+  current_request_id = null, current_trigger = null, claim_started_at = null
+where plaid_item_id = '83000000-0000-4000-8000-000000000001';
+select public.claim_plaid_sync('83000000-0000-4000-8000-000000000001','85000000-0000-4000-8000-000000000006','nightly');
 
 -- API-005: the Item can be archived while Plaid pages are in flight. Commit
 -- must revalidate under its own lock and preserve both data and cursor.
@@ -249,6 +254,50 @@ select ok(
   not has_table_privilege('authenticated', 'public.sync_state', 'UPDATE')
     and not has_column_privilege('authenticated', 'public.plaid_items', 'access_token_ciphertext', 'SELECT'),
   'API-012 token and state mutation boundaries stay service-only'
+);
+
+
+-- GH-5 regression: Plaid returns activity for every account on an Item,
+-- including accounts the member never linked. Those rows must be skipped, not
+-- fatal, or the institution can never complete a sync.
+update public.sync_state set cursor = 'pre-unlinked-page', status = 'succeeded',
+  error_code = null, error_message = null, next_retry_at = null, consecutive_failures = 0,
+  current_request_id = null, current_trigger = null, claim_started_at = null
+where plaid_item_id = '83000000-0000-4000-8000-000000000001';
+select lives_ok(
+  $$select public.claim_plaid_sync('83000000-0000-4000-8000-000000000001','85000000-0000-4000-8000-000000000009','nightly')$$,
+  'API-013 the Item is claimed for an unlinked-account page'
+);
+select lives_ok(
+  $$select public.commit_plaid_sync(
+    '83000000-0000-4000-8000-000000000001',
+    '85000000-0000-4000-8000-000000000009',
+    'pre-unlinked-page',
+    'post-unlinked-page',
+    'provider-request-unlinked',
+    '[
+      {"transactionId":"linked-tx","accountId":"provider-chequing","amount":19.99,"currencyCode":"CAD","authorizedDate":null,"date":"2026-08-12","merchantName":"Linked Store","name":"Linked Store","pending":false,"pendingTransactionId":null,"payload":{}},
+      {"transactionId":"unlinked-tx","accountId":"provider-never-linked","amount":31.50,"currencyCode":"CAD","authorizedDate":null,"date":"2026-08-12","merchantName":"Investment Fee","name":"Investment Fee","pending":false,"pendingTransactionId":null,"payload":{}}
+    ]'::jsonb,
+    '[{"transactionId":"unlinked-modified","accountId":"provider-never-linked","amount":5.00,"currencyCode":"CAD","authorizedDate":null,"date":"2026-08-12","merchantName":"Investment Fee","name":"Investment Fee","pending":false,"pendingTransactionId":null,"payload":{}}]'::jsonb,
+    '[]'::jsonb
+  )$$,
+  'API-013 a page containing unlinked accounts commits instead of raising'
+);
+select is(
+  (select count(*)::integer from public.transactions where plaid_transaction_id = 'linked-tx'),
+  1,
+  'API-013 the linked account transaction is applied'
+);
+select is(
+  (select count(*)::integer from public.transactions where plaid_transaction_id in ('unlinked-tx','unlinked-modified')),
+  0,
+  'API-013 unlinked account rows are skipped, not stored'
+);
+select is(
+  (select status::text from public.sync_state where plaid_item_id = '83000000-0000-4000-8000-000000000001'),
+  'succeeded',
+  'API-013 the sync succeeds despite unlinked account activity'
 );
 
 select * from finish();
