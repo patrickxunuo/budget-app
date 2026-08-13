@@ -273,5 +273,334 @@ select ok(
   'API-010 destructive membership primitives are security-definer functions with fixed search paths'
 );
 
+-- GH-12 DB-001: authenticated callers cannot bypass recent confirmation or ownership guards.
+reset role;
+set local role service_role;
+delete from public.recent_auth_confirmations where profile_id = 'b3000000-0000-0000-0000-000000000003';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'b3000000-0000-0000-0000-000000000003', true);
+select set_config('request.jwt.claims', '{"sub":"b3000000-0000-0000-0000-000000000003","email":"other-gh3@example.test","role":"authenticated"}', true);
+select throws_ok(
+  $$select public.finalize_account_deletion()$$,
+  '42501', null,
+  'GH-12 DB-001 account finalization rejects a caller without recent confirmation'
+);
+select throws_ok(
+  $$select public.finalize_workspace_deletion(
+    'b3000000-0000-0000-0000-000000000003',
+    'GH-3 Household',
+    true
+  )$$,
+  '42501', null,
+  'GH-12 DB-001 authenticated callers cannot execute workspace finalization'
+);
+select throws_ok(
+  $$select public.finalize_workspace_deletion(
+    'b3000000-0000-0000-0000-000000000002',
+    'GH-3 Household',
+    false
+  )$$,
+  '42501', null,
+  'GH-12 DB-001 an authenticated owner cannot bypass notification policy by passing false'
+);
+set local role service_role;
+select throws_ok(
+  $$select public.finalize_workspace_deletion(
+    'b3000000-0000-0000-0000-000000000003',
+    'GH-3 Household',
+    false
+  )$$,
+  '42501', null,
+  'GH-12 DB-001 the trusted finalizer rechecks that the explicit actor is the current active owner'
+);
+delete from public.recent_auth_confirmations
+where profile_id = 'b3000000-0000-0000-0000-000000000002';
+select throws_ok(
+  $$select public.finalize_workspace_deletion(
+    'b3000000-0000-0000-0000-000000000002',
+    'GH-3 Household',
+    false
+  )$$,
+  '42501', null,
+  'GH-12 DB-001 the trusted finalizer rejects an owner with stale password confirmation'
+);
+select ok(
+  exists(select 1 from public.workspaces)
+  and exists(select 1 from public.workspace_memberships where profile_id = 'b3000000-0000-0000-0000-000000000003' and status = 'active'),
+  'GH-12 DB-001 rejected finalization preserves the workspace graph'
+);
+
+-- Seed every major workspace graph for complete owner-requested finalization.
+reset role;
+set local role service_role;
+select public.mark_recent_password_confirmation('b3000000-0000-0000-0000-000000000002');
+insert into public.categories(id,workspace_id,created_by,name,color,scope)
+select 'b3500000-0000-0000-0000-000000000001',id,'b3000000-0000-0000-0000-000000000002','GH-12 Groceries','#18745b','family' from public.workspaces;
+insert into public.manual_entries(id,workspace_id,created_by,last_edited_by,scope,owner_profile_id,kind,amount,currency_code,entry_date,description,category_id,notes)
+select 'b3600000-0000-0000-0000-000000000001',id,'b3000000-0000-0000-0000-000000000003','b3000000-0000-0000-0000-000000000003','family',null,'spending',-12.34,'CAD',current_date,'GH-12 manual row','b3500000-0000-0000-0000-000000000001','delete me' from public.workspaces;
+insert into public.budgets(id,workspace_id,created_by,category_id,currency_code,scope,amount_cents,effective_month,end_month)
+select 'b3700000-0000-0000-0000-000000000001',id,'b3000000-0000-0000-0000-000000000002','b3500000-0000-0000-0000-000000000001','CAD','family',10000,date '2026-08-01',date '2026-08-01' from public.workspaces;
+insert into public.merchant_rules(id,workspace_id,created_by,merchant_match,category_id,scope)
+select 'b3800000-0000-0000-0000-000000000001',id,'b3000000-0000-0000-0000-000000000002','gh12 market','b3500000-0000-0000-0000-000000000001','family' from public.workspaces;
+update public.plaid_items set status = 'revoked', disconnected_at = coalesce(disconnected_at, now());
+
+-- GH-12 notification claims serialize delivery, adopt stale work, and preserve sent rows.
+select is(
+  public.claim_workspace_deletion_notification(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000002',
+    'c1200000-0000-4000-8000-000000000001'
+  ),
+  'claimed',
+  'GH-12 first notification worker claims an unsent current member'
+);
+select is(
+  public.claim_workspace_deletion_notification(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000002',
+    'c1200000-0000-4000-8000-000000000002'
+  ),
+  'busy',
+  'GH-12 a concurrent fresh notification claim fails closed as busy'
+);
+select lives_ok(
+  $$select public.release_workspace_deletion_notification(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000002',
+    'c1200000-0000-4000-8000-000000000001'
+  )$$,
+  'GH-12 definite unsent failure releases its matching claim'
+);
+select is(
+  public.claim_workspace_deletion_notification(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000002',
+    'c1200000-0000-4000-8000-000000000002'
+  ),
+  'claimed',
+  'GH-12 released unsent notification is claimable for retry'
+);
+select lives_ok(
+  $$select public.mark_workspace_deletion_notification_sent(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000002',
+    'c1200000-0000-4000-8000-000000000002'
+  )$$,
+  'GH-12 successful SMTP marks the matching claim sent'
+);
+select lives_ok(
+  $$select public.release_workspace_deletion_notification(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000002',
+    'c1200000-0000-4000-8000-000000000002'
+  )$$,
+  'GH-12 release is harmless after the row is sent'
+);
+select is(
+  public.claim_workspace_deletion_notification(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000002',
+    'c1200000-0000-4000-8000-000000000003'
+  ),
+  'sent',
+  'GH-12 sent notification is adopted without a duplicate send'
+);
+select is(
+  public.claim_workspace_deletion_notification(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000003',
+    'c1200000-0000-4000-8000-000000000004'
+  ),
+  'claimed',
+  'GH-12 another active member obtains an independent claim'
+);
+update public.workspace_deletion_notifications
+set claimed_at=now()-interval '6 minutes'
+where profile_id='b3000000-0000-0000-0000-000000000003';
+select is(
+  public.claim_workspace_deletion_notification(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000003',
+    'c1200000-0000-4000-8000-000000000005'
+  ),
+  'claimed',
+  'GH-12 a claim older than five minutes is safely adopted by a retry'
+);
+select lives_ok(
+  $$select public.mark_workspace_deletion_notification_sent(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000003',
+    'c1200000-0000-4000-8000-000000000005'
+  )$$,
+  'GH-12 adopted stale claim can be marked sent'
+);
+select ok(
+  not has_table_privilege('anon', 'public.workspace_deletion_notifications', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.workspace_deletion_notifications', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.workspace_deletion_notifications', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.workspace_deletion_notifications', 'UPDATE')
+  and not has_table_privilege('authenticated', 'public.workspace_deletion_notifications', 'DELETE')
+  and has_table_privilege('service_role', 'public.workspace_deletion_notifications', 'SELECT')
+  and has_table_privilege('service_role', 'public.workspace_deletion_notifications', 'INSERT')
+  and has_table_privilege('service_role', 'public.workspace_deletion_notifications', 'UPDATE')
+  and not has_function_privilege('authenticated', 'public.claim_workspace_deletion_notification(uuid,uuid,uuid)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.mark_workspace_deletion_notification_sent(uuid,uuid,uuid)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.release_workspace_deletion_notification(uuid,uuid,uuid)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.claim_workspace_deletion_notification(uuid,uuid,uuid)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.mark_workspace_deletion_notification_sent(uuid,uuid,uuid)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.release_workspace_deletion_notification(uuid,uuid,uuid)', 'EXECUTE')
+  and exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='workspace_deletion_notifications'
+      and column_name='claim_id'
+  )
+  and exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='workspace_deletion_notifications'
+      and column_name='claimed_at'
+  )
+  and exists(
+    select 1 from pg_constraint
+    where conrelid='public.workspace_deletion_notifications'::regclass
+      and contype='p'
+      and pg_get_constraintdef(oid) ~* '\(workspace_id, profile_id\)'
+  ),
+  'GH-12 DB notification sent-state ledger is service-only'
+);
+select is(
+  (select count(*) from public.workspace_deletion_notifications),
+  2::bigint,
+  'GH-12 DB notification ledger records one durable sent state per workspace member'
+);
+-- A newly active member after the first notification pass must block finalization.
+reset role;
+insert into auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at) values
+('b3000000-0000-0000-0000-000000000004','00000000-0000-0000-0000-000000000000','authenticated','authenticated','late-gh12@example.test','',now(),'{}','{}',now(),now());
+set local role service_role;
+insert into public.profiles(id,display_name) values
+('b3000000-0000-0000-0000-000000000004','Late GH-12 Member');
+insert into public.workspace_memberships(workspace_id,profile_id,role,status)
+select id,'b3000000-0000-0000-0000-000000000004','member','active' from public.workspaces;
+set local role service_role;
+select throws_ok(
+  $$select public.finalize_workspace_deletion(
+    'b3000000-0000-0000-0000-000000000002',
+    'GH-3 Household',
+    true
+  )$$,
+  'P0001', null,
+  'GH-12 DB finalizer rejects when a newly active member has no sent notification row'
+);
+select ok(
+  exists(select 1 from public.workspaces)
+  and exists(
+    select 1 from public.workspace_memberships
+    where profile_id='b3000000-0000-0000-0000-000000000004' and status='active'
+  ),
+  'GH-12 rejected late-member finalization leaves the complete workspace intact'
+);
+
+-- Notify the late member through the same service-only claimed protocol, then retry.
+set local role service_role;
+select is(
+  public.claim_workspace_deletion_notification(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000004',
+    'c1200000-0000-4000-8000-000000000006'
+  ),
+  'claimed',
+  'GH-12 late active member can be claimed for notification on retry'
+);
+select lives_ok(
+  $$select public.mark_workspace_deletion_notification_sent(
+    (select id from public.workspaces),
+    'b3000000-0000-0000-0000-000000000004',
+    'c1200000-0000-4000-8000-000000000006'
+  )$$,
+  'GH-12 late active member notification becomes durable'
+);
+set local role service_role;
+select lives_ok(
+  $$select public.finalize_workspace_deletion(
+    'b3000000-0000-0000-0000-000000000002',
+    'GH-3 Household',
+    true
+  )$$,
+  'GH-12 DB-002 service-role finalization succeeds for a recently confirmed current owner after every active member is notified'
+);
+select ok(
+  not exists(select 1 from public.workspaces)
+  and not exists(select 1 from public.workspace_memberships)
+  and not exists(select 1 from public.invitations)
+  and not exists(select 1 from public.accounts)
+  and not exists(select 1 from public.plaid_items)
+  and not exists(select 1 from public.transactions)
+  and not exists(select 1 from public.transaction_metadata)
+  and not exists(select 1 from public.manual_entries)
+  and not exists(select 1 from public.budgets)
+  and not exists(select 1 from public.categories)
+  and not exists(select 1 from public.merchant_rules)
+  and not exists(select 1 from public.sync_state)
+  and not exists(select 1 from public.recent_auth_confirmations)
+  and not exists(select 1 from public.audit_events)
+  and not exists(select 1 from public.workspace_deletion_notifications),
+  'GH-12 DB-002 finalization removes the complete graph including the retry-only notification ledger'
+);
+select ok(
+  (select count(*) from public.auth_deletion_queue where auth_user_id in (
+    'b3000000-0000-0000-0000-000000000001',
+    'b3000000-0000-0000-0000-000000000002',
+    'b3000000-0000-0000-0000-000000000003',
+    'b3000000-0000-0000-0000-000000000004'
+  )) = 4,
+  'GH-12 DB-002 durable Auth deletion requests survive for every current or inactive member identity'
+);
+select ok(
+  not exists(select 1 from public.profiles where id in (
+    'b3000000-0000-0000-0000-000000000001',
+    'b3000000-0000-0000-0000-000000000002',
+    'b3000000-0000-0000-0000-000000000003',
+    'b3000000-0000-0000-0000-000000000004'
+  )),
+  'GH-12 DB-003 active members and their Personal records are removed instead of blocking whole-workspace deletion'
+);
+
+-- GH-12 DB-004: retry is idempotent and does not duplicate durable side effects.
+set local role service_role;
+select lives_ok(
+  $$select public.finalize_workspace_deletion(
+    'b3000000-0000-0000-0000-000000000002',
+    'GH-3 Household',
+    true
+  )$$,
+  'GH-12 DB-004 trusted retry after committed finalization is an idempotent success'
+);
+select is(
+  (select count(*) from public.auth_deletion_queue where auth_user_id in (
+    'b3000000-0000-0000-0000-000000000001',
+    'b3000000-0000-0000-0000-000000000002',
+    'b3000000-0000-0000-0000-000000000003',
+    'b3000000-0000-0000-0000-000000000004'
+  )),
+  4::bigint,
+  'GH-12 DB-004 retry creates no duplicate Auth deletion requests'
+);
+select ok(
+  not has_function_privilege('anon', 'public.finalize_account_deletion()', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.finalize_workspace_deletion(uuid,text,boolean)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.finalize_workspace_deletion(uuid,text,boolean)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.finalize_workspace_deletion(uuid,text,boolean)', 'EXECUTE')
+  and not exists(
+    select 1
+    from pg_proc p
+    cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+    where p.oid = 'public.finalize_workspace_deletion(uuid,text,boolean)'::regprocedure
+      and acl.grantee = 0
+      and acl.privilege_type = 'EXECUTE'
+  )
+  and (select prosecdef and coalesce(array_to_string(proconfig, ','), '') ~ 'search_path=' from pg_proc where oid = 'public.finalize_account_deletion()'::regprocedure)
+  and (select prosecdef and coalesce(array_to_string(proconfig, ','), '') ~ 'search_path=' from pg_proc where oid = 'public.finalize_workspace_deletion(uuid,text,boolean)'::regprocedure),
+  'GH-12 workspace finalization is service-role-only, PUBLIC-denied, and hardened with a fixed search path'
+);
 select * from finish();
 rollback;

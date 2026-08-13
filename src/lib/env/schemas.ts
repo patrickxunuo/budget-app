@@ -5,17 +5,35 @@ export const clientEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
 });
 
-export const serverEnvSchema = clientEnvSchema.extend({
-  APP_URL: z.string().url(),
-  CRON_SECRET: z.string().min(32),
-  PLAID_CLIENT_ID: z.string().min(1),
-  PLAID_ENV: z.enum(["sandbox", "production", "trial"]),
-  PLAID_SECRET: z.string().min(1),
-  PLAID_TOKEN_ENCRYPTION_KEY: z.string().min(32),
-  PLAID_WEBHOOK_URL: z.string().url(),
-  PLAID_E2E_PROVIDER: z.enum(["deterministic"]).optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-});
+export const serverEnvSchema = clientEnvSchema
+  .extend({
+    APP_URL: z.string().url(),
+    CRON_SECRET: z.string().min(32),
+    PLAID_CLIENT_ID: z.string().min(1),
+    PLAID_ENV: z.enum(["sandbox", "production", "trial"]),
+    PLAID_SECRET: z.string().min(1),
+    PLAID_TOKEN_ENCRYPTION_KEY: z.string().min(32),
+    PLAID_WEBHOOK_URL: z.string().url(),
+    PLAID_E2E_PROVIDER: z.enum(["deterministic"]).optional(),
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+    SMTP_URL: z.string().url().optional(),
+    SMTP_FROM: z
+      .string()
+      .refine(
+        (value) =>
+          /^(?:[^<>\r\n]+ <)?[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+>?$/.test(value),
+        "Enter a valid SMTP sender address.",
+      )
+      .optional(),
+  })
+  .superRefine((value, context) => {
+    if (Boolean(value.SMTP_URL) !== Boolean(value.SMTP_FROM))
+      context.addIssue({
+        code: "custom",
+        path: ["SMTP_URL"],
+        message: "SMTP_URL and SMTP_FROM must be configured together.",
+      });
+  });
 
 export type ClientEnv = z.infer<typeof clientEnvSchema>;
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -26,6 +44,5 @@ export function formatEnvError(error: z.ZodError): string {
       (issue) => `${issue.path.join(".") || "environment"}: ${issue.message}`,
     )
     .join("; ");
-
   return `Invalid environment configuration: ${details}`;
 }

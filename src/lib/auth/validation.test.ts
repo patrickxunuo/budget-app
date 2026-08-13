@@ -135,13 +135,22 @@ describe("authentication validation", () => {
     );
   });
 
-  it("deleteWorkspace requires an exact non-empty workspace-name confirmation", () => {
+  it("deleteWorkspace requires a name and irreversible acknowledgement", () => {
+    expect(
+      deleteWorkspaceSchema.safeParse({
+        workspaceName: "Morgan household",
+        irreversibleAcknowledgement: "on",
+      }).success,
+    ).toBe(true);
+    expect(
+      deleteWorkspaceSchema.safeParse({
+        workspaceName: "",
+        irreversibleAcknowledgement: "on",
+      }).success,
+    ).toBe(false);
     expect(
       deleteWorkspaceSchema.safeParse({ workspaceName: "Morgan household" })
         .success,
-    ).toBe(true);
-    expect(deleteWorkspaceSchema.safeParse({ workspaceName: "" }).success).toBe(
-      false,
-    );
+    ).toBe(false);
   });
 });

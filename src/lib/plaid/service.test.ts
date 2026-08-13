@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     getInstitution: vi.fn(),
     getAccounts: vi.fn(),
     syncTransactions: vi.fn(),
+    removeItem: vi.fn(),
   },
   syncPlaidItem: vi.fn(),
   rpc: vi.fn(),
@@ -22,11 +23,16 @@ const mocks = vi.hoisted(() => ({
   },
   itemCiphertext: "" as string,
   accountRows: [] as Record<string, unknown>[],
+  lifecycleRows: [] as Record<string, unknown>[],
+  lifecycleRanges: [] as Array<[number, number]>,
+  lifecycleOrders: [] as Array<{ column: string; ascending?: boolean }>,
 }));
 
 class QueryBuilder implements PromiseLike<{ data: unknown; error: unknown }> {
   private action: "select" | "insert" | "delete" | "upsert" = "select";
   private payload: unknown;
+  private rangeStart: number | null = null;
+  private rangeEnd: number | null = null;
 
   constructor(private readonly table: string) {}
 
@@ -52,6 +58,18 @@ class QueryBuilder implements PromiseLike<{ data: unknown; error: unknown }> {
   }
 
   eq() {
+    return this;
+  }
+
+  order(column: string, options?: { ascending?: boolean }) {
+    mocks.lifecycleOrders.push({ column, ascending: options?.ascending });
+    return this;
+  }
+
+  range(from: number, to: number) {
+    this.rangeStart = from;
+    this.rangeEnd = to;
+    mocks.lifecycleRanges.push([from, to]);
     return this;
   }
 
@@ -90,6 +108,12 @@ class QueryBuilder implements PromiseLike<{ data: unknown; error: unknown }> {
       };
     }
     if (this.table === "plaid_items" && this.action === "select") {
+      if (this.rangeStart !== null && this.rangeEnd !== null) {
+        return {
+          data: mocks.lifecycleRows.slice(this.rangeStart, this.rangeEnd + 1),
+          error: null,
+        };
+      }
       return {
         data: { access_token_ciphertext: mocks.itemCiphertext },
         error: null,
@@ -151,6 +175,7 @@ import {
   createLinkTokenForMember,
   exchangePublicTokenForReview,
   oauthRedirectUri,
+  revokePlaidItemsForDeletion,
 } from "./service";
 
 const actor: PlaidApiActor = {
@@ -192,6 +217,9 @@ beforeEach(async () => {
   mocks.transactionUpserts.length = 0;
   mocks.syncStateUpserts.length = 0;
   mocks.accountRows.length = 0;
+  mocks.lifecycleRows.length = 0;
+  mocks.lifecycleRanges.length = 0;
+  mocks.lifecycleOrders.length = 0;
   mocks.duplicateResult = { data: [], error: null };
 
   mocks.provider.createLinkToken.mockResolvedValue({
@@ -229,6 +257,7 @@ beforeEach(async () => {
     institution: { id: "ins-ca", name: "Canadian Test Bank" },
   });
   vi.clearAllMocks();
+  mocks.provider.removeItem.mockResolvedValue(undefined);
   mocks.insertedItems.length = 0;
   mocks.insertedCandidates.length = 0;
 });
@@ -434,5 +463,138 @@ describe("Plaid linking service", () => {
       }),
     ).rejects.toMatchObject({ status: 400, code: "duplicate_selection" });
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+});
+
+
+
+describe("GH-12 durable lifecycle Plaid revocation", () => {
+  const lifecycleItem = (index: number, status = "revoked") => ({
+    id: `40000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    access_token_ciphertext: mocks.itemCiphertext,
+    linked_by: actor.userId,
+    status,
+  });
+
+  it("API-010 reads every stable page and runs claim -> begin -> provider_removed -> finalize before confirming an active Item", async () => {
+    mocks.lifecycleRows.push(
+      ...Array.from({ length: 1000 }, (_, index) =>
+        lifecycleItem(index + 1),
+      ),
+      lifecycleItem(1001, "active"),
+    );
+    mocks.rpc
+      .mockResolvedValueOnce({ data: "claimed", error: null })
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: null, error: null });
+
+    const result = await revokePlaidItemsForDeletion(actor.workspaceId);
+
+    expect(mocks.lifecycleOrders).toContainEqual({
+      column: "id",
+      ascending: true,
+    });
+    expect(mocks.lifecycleRanges).toEqual([
+      [0, 999],
+      [1000, 1999],
+    ]);
+    expect(result.confirmedItemIds).toHaveLength(1001);
+    expect(result.unresolvedItemIds).toEqual([]);
+    const names = mocks.rpc.mock.calls.map(([name]) => name);
+    expect(names).toEqual([
+      "claim_plaid_disconnect",
+      "begin_plaid_disconnect_removal",
+      "mark_plaid_disconnect_provider_removed",
+      "finalize_claimed_plaid_disconnect",
+    ]);
+    const claimId = mocks.rpc.mock.calls[0]?.[1]?.p_claim_id;
+    expect(mocks.rpc.mock.calls[0]).toEqual([
+      "claim_plaid_disconnect",
+      expect.objectContaining({
+        p_item_id: lifecycleItem(1001, "active").id,
+        p_workspace_id: actor.workspaceId,
+        p_profile_id: actor.userId,
+        p_claim_id: expect.any(String),
+        p_mode: "keep_history",
+      }),
+    ]);
+    expect(mocks.rpc.mock.calls[1]).toEqual([
+      "begin_plaid_disconnect_removal",
+      { p_item_id: lifecycleItem(1001, "active").id, p_claim_id: claimId },
+    ]);
+    expect(mocks.rpc.mock.invocationCallOrder[1]).toBeLessThan(
+      mocks.provider.removeItem.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.provider.removeItem.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.rpc.mock.invocationCallOrder[2]!,
+    );
+    expect(mocks.rpc.mock.calls[2]).toEqual([
+      "mark_plaid_disconnect_provider_removed",
+      { p_item_id: lifecycleItem(1001, "active").id, p_claim_id: claimId },
+    ]);
+    expect(mocks.rpc.mock.calls[3]).toEqual([
+      "finalize_claimed_plaid_disconnect",
+      expect.objectContaining({
+        p_item_id: lifecycleItem(1001, "active").id,
+        p_claim_id: claimId,
+        p_mode: "keep_history",
+      }),
+    ]);
+  });
+
+  it("API-011 fails a concurrent claim closed without provider removal or destructive finalization", async () => {
+    const item = lifecycleItem(2001, "active");
+    mocks.lifecycleRows.push(item);
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: "55P03", message: "disconnect in progress" },
+    });
+
+    await expect(
+      revokePlaidItemsForDeletion(actor.workspaceId),
+    ).resolves.toEqual({
+      confirmedItemIds: [],
+      unresolvedItemIds: [item.id],
+    });
+
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith(
+      "claim_plaid_disconnect",
+      expect.objectContaining({ p_item_id: item.id }),
+    );
+    expect(mocks.provider.removeItem).not.toHaveBeenCalled();
+    expect(
+      mocks.rpc.mock.calls.some(
+        ([name]) => name === "finalize_claimed_plaid_disconnect",
+      ),
+    ).toBe(false);
+  });
+
+  it("API-008 adopts durable provider_removed proof and finalizes without an unnecessary second provider call", async () => {
+    const item = lifecycleItem(3001, "active");
+    mocks.lifecycleRows.push(item);
+    mocks.rpc
+      .mockResolvedValueOnce({ data: "provider_removed", error: null })
+      .mockResolvedValueOnce({ data: null, error: null });
+
+    await expect(
+      revokePlaidItemsForDeletion(actor.workspaceId),
+    ).resolves.toEqual({
+      confirmedItemIds: [item.id],
+      unresolvedItemIds: [],
+    });
+
+    expect(mocks.provider.removeItem).not.toHaveBeenCalled();
+    expect(mocks.rpc.mock.calls.map(([name]) => name)).toEqual([
+      "claim_plaid_disconnect",
+      "finalize_claimed_plaid_disconnect",
+    ]);
+    expect(mocks.rpc.mock.calls[1]).toEqual([
+      "finalize_claimed_plaid_disconnect",
+      expect.objectContaining({
+        p_item_id: item.id,
+        p_mode: "keep_history",
+      }),
+    ]);
   });
 });

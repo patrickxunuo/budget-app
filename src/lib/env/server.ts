@@ -1,4 +1,4 @@
-import "server-only";
+﻿import "server-only";
 
 import { formatEnvError, serverEnvSchema, type ServerEnv } from "./schemas";
 
@@ -22,6 +22,8 @@ export function getServerEnv(): ServerEnv {
     PLAID_WEBHOOK_URL: process.env.PLAID_WEBHOOK_URL,
     PLAID_E2E_PROVIDER: process.env.PLAID_E2E_PROVIDER,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    SMTP_URL: process.env.SMTP_URL,
+    SMTP_FROM: process.env.SMTP_FROM,
   });
 
   if (!parsed.success) {

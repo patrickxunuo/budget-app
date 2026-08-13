@@ -61,7 +61,17 @@ export const confirmationPasswordSchema = z.object({
   password: z.string().min(1),
 });
 export const confirmPasswordSchema = confirmationPasswordSchema;
-export const deleteWorkspaceSchema = z.object({ workspaceName });
+export const deleteAccountSchema = z.object({
+  accountConfirmation: z.literal("DELETE MY ACCOUNT", {
+    error: "Type DELETE MY ACCOUNT exactly.",
+  }),
+});
+export const deleteWorkspaceSchema = z.object({
+  workspaceName,
+  irreversibleAcknowledgement: z.literal("on", {
+    error: "Acknowledge that deletion is irreversible.",
+  }),
+});
 export const membershipSchema = z.object({ membershipId: uuid });
 
 export function formValues(formData: FormData) {

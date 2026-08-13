@@ -1,4 +1,4 @@
-import "server-only";
+﻿import "server-only";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import {
@@ -90,6 +90,7 @@ type TxRow = {
 type CategoryValue = { id: string; name: string; color: string | null };
 type TransactionMetadataRow = {
   kind_override: "income" | "spending" | "transfer" | "refund" | null;
+  note: string | null;
   excluded: boolean;
   categories: CategoryValue | CategoryValue[] | null;
 };
@@ -101,6 +102,7 @@ type ManualRow = {
   amount: string;
   entry_date: string;
   description: string;
+  notes: string | null;
   category_id: string;
   deleted_at: string | null;
   categories: CategoryValue | CategoryValue[] | null;
@@ -141,6 +143,7 @@ function personalFinanceCategory(
 export async function readDashboard(
   ctx: DashboardApiContext,
   raw: URLSearchParams | Record<string, unknown>,
+  options: { unlimited?: boolean } = {},
 ): Promise<DashboardReadModel> {
   let filters: DashboardFilters;
   try {
@@ -250,7 +253,7 @@ export async function readDashboard(
       let q = ctx.supabase
         .from("transactions")
         .select(
-          "id,account_id,plaid_transaction_id,amount,transaction_date,merchant_name,name,pending,pending_transaction_id,provider_payload,accounts!inner(id,name,display_name,mask,subtype,scope,owner_profile_id),transaction_metadata(category_id,kind_override,excluded,categories(id,name,color))",
+          "id,account_id,plaid_transaction_id,amount,transaction_date,merchant_name,name,pending,pending_transaction_id,provider_payload,accounts!inner(id,name,display_name,mask,subtype,scope,owner_profile_id),transaction_metadata(category_id,kind_override,note,excluded,categories(id,name,color))",
         )
         .eq("workspace_id", ctx.workspaceId)
         .eq("accounts.scope", filters.scope)
@@ -269,7 +272,7 @@ export async function readDashboard(
       let q = ctx.supabase
         .from("manual_entries")
         .select(
-          "id,scope,owner_profile_id,kind,amount,entry_date,description,category_id,deleted_at,categories(id,name,color)",
+          "id,scope,owner_profile_id,kind,amount,entry_date,description,notes,category_id,deleted_at,categories(id,name,color)",
         )
         .eq("workspace_id", ctx.workspaceId)
         .eq("scope", filters.scope);
@@ -372,6 +375,9 @@ export async function readDashboard(
         accountId: a.id,
         accountName: a.display_name ?? a.name,
         merchantOrDescription: r.merchant_name ?? r.name,
+        merchant: r.merchant_name ?? "",
+        notes: md?.note ?? "",
+        inclusion: l.inclusion,
         category: c ? { id: c.id, name: c.name, color: c.color } : null,
         amountCents: l.cashFlowCents,
         date: r.transaction_date,
@@ -390,6 +396,9 @@ export async function readDashboard(
         accountId: null,
         accountName: null,
         merchantOrDescription: r.description,
+        merchant: "",
+        notes: r.notes ?? "",
+        inclusion: l.inclusion,
         category: c ? { id: c.id, name: c.name, color: c.color } : null,
         amountCents: l.cashFlowCents,
         date: r.entry_date,
@@ -440,7 +449,7 @@ export async function readDashboard(
       : accounts,
     filterAccounts: accounts,
     filterCategories: categories,
-    limit: filters.limit,
+    limit: options.unlimited ? Number.MAX_SAFE_INTEGER : filters.limit,
     aggregateRows,
   });
 }

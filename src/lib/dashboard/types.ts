@@ -1,4 +1,4 @@
-export type DashboardScope = "family" | "personal";
+﻿export type DashboardScope = "family" | "personal";
 export type DashboardPeriod = "day" | "week" | "month" | "custom";
 export type DashboardInclusion =
   "default" | "included" | "excluded" | "transfers" | "all";
@@ -9,6 +9,9 @@ export type DashboardTransaction = {
   accountId: string | null;
   accountName: string | null;
   merchantOrDescription: string;
+  merchant?: string;
+  notes?: string;
+  inclusion?: "included" | "transfer" | "excluded" | "superseded";
   category: { id: string; name: string; color: string | null } | null;
   amountCents: number;
   date: string;

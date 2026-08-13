@@ -1,10 +1,12 @@
 ﻿import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import type { PlaidApiActor } from "@/lib/auth/api";
 import { getServerEnv } from "@/lib/env/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { collectAllPages } from "@/lib/supabase/pagination";
 import {
   byteaHex,
   decryptAccessToken,
@@ -432,4 +434,125 @@ export async function revokeDepartingMemberPlaidItems(
         "The member’s bank connections could not be secured.",
       );
   }
+}
+
+export type PlaidRevocationResult = {
+  confirmedItemIds: string[];
+  unresolvedItemIds: string[];
+};
+
+type LifecyclePlaidItem = {
+  id: string;
+  linked_by: string;
+  access_token_ciphertext: string;
+  status: "pending" | "active" | "error" | "revoked";
+};
+
+/** Revoke lifecycle Items through the same durable provider-boundary protocol
+ * as an ordinary disconnect. keep_history prevents per-Item local deletion;
+ * the guarded all-items finalizer remains the sole destructive boundary. */
+export async function revokePlaidItemsForDeletion(
+  workspaceId: string,
+  profileId?: string,
+): Promise<PlaidRevocationResult> {
+  const admin = createSupabaseAdminClient();
+  const items = await collectAllPages<LifecyclePlaidItem>(async (from, to) => {
+    let query = admin
+      .from("plaid_items")
+      .select("id,linked_by,access_token_ciphertext,status")
+      .eq("workspace_id", workspaceId)
+      .order("id", { ascending: true });
+    if (profileId) query = query.eq("linked_by", profileId);
+    const { data, error } = await query.range(from, to);
+    if (error)
+      throw new PlaidFlowError(
+        502,
+        "revocation_lookup_failed",
+        "Bank revocation state could not be verified.",
+      );
+    return (data ?? []) as LifecyclePlaidItem[];
+  });
+  const confirmedItemIds: string[] = [];
+  const unresolvedItemIds: string[] = [];
+  const env = getServerEnv();
+  for (const item of items) {
+    if (item.status === "revoked") {
+      confirmedItemIds.push(item.id);
+      continue;
+    }
+    const claimId = randomUUID();
+    const { data: claim, error: claimError } = await admin.rpc(
+      "claim_plaid_disconnect",
+      {
+        p_item_id: item.id,
+        p_workspace_id: workspaceId,
+        p_profile_id: item.linked_by,
+        p_mode: "keep_history",
+        p_claim_id: claimId,
+      },
+    );
+    if (claimError) {
+      unresolvedItemIds.push(item.id);
+      continue;
+    }
+    if (claim === "disconnected") {
+      confirmedItemIds.push(item.id);
+      continue;
+    }
+    if (claim !== "provider_removed") {
+      const { error: beginError } = await admin.rpc(
+        "begin_plaid_disconnect_removal",
+        {
+          p_item_id: item.id,
+          p_claim_id: claimId,
+        },
+      );
+      if (beginError) {
+        await admin.rpc("release_plaid_disconnect", {
+          p_item_id: item.id,
+          p_claim_id: claimId,
+        });
+        unresolvedItemIds.push(item.id);
+        continue;
+      }
+      try {
+        const token = decryptAccessToken(
+          parseBytea(item.access_token_ciphertext),
+          env.PLAID_TOKEN_ENCRYPTION_KEY,
+        );
+        await getPlaidProvider().removeItem(token);
+      } catch {
+        await admin.rpc("release_plaid_disconnect", {
+          p_item_id: item.id,
+          p_claim_id: claimId,
+        });
+        unresolvedItemIds.push(item.id);
+        continue;
+      }
+      const { error: removedError } = await admin.rpc(
+        "mark_plaid_disconnect_provider_removed",
+        {
+          p_item_id: item.id,
+          p_claim_id: claimId,
+        },
+      );
+      if (removedError) {
+        unresolvedItemIds.push(item.id);
+        continue;
+      }
+    }
+    const { error: finalizeError } = await admin.rpc(
+      "finalize_claimed_plaid_disconnect",
+      {
+        p_item_id: item.id,
+        p_workspace_id: workspaceId,
+        p_profile_id: item.linked_by,
+        p_mode: "keep_history",
+        p_claim_id: claimId,
+      },
+    );
+    if (finalizeError) unresolvedItemIds.push(item.id);
+    else confirmedItemIds.push(item.id);
+  }
+  return { confirmedItemIds, unresolvedItemIds };
 }

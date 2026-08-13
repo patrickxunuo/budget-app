@@ -138,6 +138,9 @@ export function MembershipConsole({
     revokeInvitation,
     idleAuthState,
   );
+  const [accountConfirmation, setAccountConfirmation] = useState("");
+  const [workspaceConfirmation, setWorkspaceConfirmation] = useState("");
+  const [workspaceAcknowledged, setWorkspaceAcknowledged] = useState(false);
   const createdInviteUrl =
     typeof inviteState.data?.inviteUrl === "string"
       ? inviteState.data.inviteUrl
@@ -302,7 +305,10 @@ export function MembershipConsole({
         <Feedback state={confirmState} />
       </section>
 
-      <section className="border-alert/30 rounded-2xl border p-5 sm:p-6">
+      <section
+        data-testid="data-lifecycle-danger-zone"
+        className="border-alert/30 rounded-2xl border p-5 sm:p-6"
+      >
         <p className="font-utility text-alert text-[.65rem] font-semibold tracking-[.14em] uppercase">
           Consequences are permanent
         </p>
@@ -330,33 +336,88 @@ export function MembershipConsole({
               Delete your account after safely leaving. Owners must transfer
               first.
             </p>
-            <form action={accountAction}>
+            <form action={accountAction} className="space-y-3">
+              <p className="text-muted text-xs leading-5">
+                Plaid connections are revoked first. If confirmation fails,
+                encrypted credentials and records stay intact for a safe retry.
+              </p>
+              <label className="text-ink block text-sm font-semibold">
+                Type DELETE MY ACCOUNT
+                <input
+                  data-testid="account-deletion-confirmation"
+                  name="accountConfirmation"
+                  autoComplete="off"
+                  value={accountConfirmation}
+                  onChange={(event) =>
+                    setAccountConfirmation(event.target.value)
+                  }
+                  className="border-line bg-surface mt-2 min-h-11 w-full rounded-xl border px-3"
+                />
+              </label>
               <button
-                disabled={accountPending}
-                className="bg-alert min-h-11 rounded-xl px-4 text-sm font-semibold text-white"
+                data-testid="delete-account"
+                disabled={
+                  accountPending || accountConfirmation !== "DELETE MY ACCOUNT"
+                }
+                className="bg-alert min-h-11 rounded-xl px-4 text-sm font-semibold text-white disabled:opacity-60"
               >
-                {accountPending ? "Deleting…" : "Delete my account"}
+                {accountPending ? "Revoking banks…" : "Delete my account"}
               </button>
-            </form>
+            </form>{" "}
             <Feedback state={accountState} />
           </div>
           {isOwner && (
             <div className="lg:col-span-2">
               <form
                 action={workspaceAction}
-                className="border-alert/20 mt-2 border-t pt-5"
+                className="border-alert/20 mt-2 space-y-4 border-t pt-5"
               >
-                <Field
-                  label={`Type “${workspaceName}” to delete the entire workspace`}
-                  name="workspaceName"
-                />
+                <p className="text-muted text-sm leading-6">
+                  Active members receive an email notification when SMTP is
+                  configured, then every Plaid Item is revoked before local data
+                  is purged. Failures leave everything retryable. Deletion is
+                  irreversible; full backup and restore remains the Supabase
+                  administrator’s responsibility.
+                </p>
+                <label className="text-ink block text-sm font-semibold">
+                  {`Type “${workspaceName}” to delete the entire workspace`}
+                  <input
+                    name="workspaceName"
+                    value={workspaceConfirmation}
+                    onChange={(event) =>
+                      setWorkspaceConfirmation(event.target.value)
+                    }
+                    className="border-line bg-surface mt-2 min-h-11 w-full rounded-xl border px-3"
+                  />
+                </label>
+                <label className="text-ink flex items-start gap-3 text-sm font-semibold">
+                  <input
+                    data-testid="workspace-deletion-acknowledgement"
+                    type="checkbox"
+                    name="irreversibleAcknowledgement"
+                    checked={workspaceAcknowledged}
+                    onChange={(event) =>
+                      setWorkspaceAcknowledged(event.target.checked)
+                    }
+                    className="accent-alert mt-1 size-4"
+                  />
+                  I understand this permanently deletes the complete workspace
+                  and every member’s Personal records.
+                </label>
                 <button
-                  disabled={workspacePending}
-                  className="bg-alert mt-3 min-h-11 rounded-xl px-4 text-sm font-semibold text-white"
+                  data-testid="delete-workspace"
+                  disabled={
+                    workspacePending ||
+                    workspaceConfirmation.trim() !== workspaceName.trim() ||
+                    !workspaceAcknowledged
+                  }
+                  className="bg-alert min-h-11 rounded-xl px-4 text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  {workspacePending ? "Deleting…" : "Delete family workspace"}
+                  {workspacePending
+                    ? "Warning members and revoking banks…"
+                    : "Delete family workspace"}
                 </button>
-              </form>
+              </form>{" "}
               <Feedback state={workspaceState} />
             </div>
           )}
