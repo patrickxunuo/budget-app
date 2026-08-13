@@ -174,7 +174,7 @@ export function ManualEntryWorkbench({
       data-testid="manual-entry-workbench"
       className="grid gap-8 xl:grid-cols-[minmax(19rem,24rem)_minmax(0,1fr)] xl:items-start"
     >
-      <div className="border-line bg-panel relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[0_18px_55px_rgba(30,46,39,.07)] sm:p-6 xl:sticky xl:top-8">
+      <div className="border-line bg-panel relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[0_18px_55px_rgba(30,46,39,.07)] sm:p-6 xl:sticky xl:top-21">
         <div
           aria-hidden="true"
           className="bg-mineral/10 absolute -top-16 -right-10 size-40 rotate-12 rounded-[2.5rem]"

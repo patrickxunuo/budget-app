@@ -83,7 +83,10 @@ export default async function ApplicationLayout({
         </div>
       </aside>
       <div className="min-w-0">
-        <header className="border-line flex min-h-17 items-center justify-between border-b px-5 sm:px-8">
+        {/* Needs an opaque background of its own: the header had none, so a
+            sticky bar would let the page scroll through it. z-20 keeps it
+            above in-page sticky elements, which use z-10. */}
+        <header className="border-line bg-surface sticky top-0 z-20 flex min-h-17 items-center justify-between border-b px-5 sm:px-8">
           <div>
             <p className="font-utility text-muted text-[.62rem] tracking-[.12em] uppercase">
               Private workspace
