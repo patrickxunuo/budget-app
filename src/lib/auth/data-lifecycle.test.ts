@@ -271,7 +271,9 @@ describe("GH-12 account and workspace data lifecycle", () => {
     });
     expect(plaid.revokePlaidItemsForDeletion).toHaveBeenCalledTimes(2);
     expect(
-      db.rpc.mock.calls.some(([name]) => name === "finalize_workspace_deletion"),
+      db.rpc.mock.calls.some(
+        ([name]) => name === "finalize_workspace_deletion",
+      ),
     ).toBe(false);
   });
 
@@ -335,8 +337,7 @@ describe("GH-12 claimed notification delivery", () => {
       data: {
         users: profileIds.map((id) => ({
           id,
-          email:
-            id === userId ? "owner@example.test" : "member@example.test",
+          email: id === userId ? "owner@example.test" : "member@example.test",
         })),
       },
       error: null,
@@ -374,20 +375,24 @@ describe("GH-12 claimed notification delivery", () => {
       ),
     ).toBe(false);
     expect(
-      db.rpc.mock.calls.some(([name]) => name === "finalize_workspace_deletion"),
+      db.rpc.mock.calls.some(
+        ([name]) => name === "finalize_workspace_deletion",
+      ),
     ).toBe(false);
   });
 
   it("API-012 skips an already-sent claim, sends only the newly claimed member, marks success, and requires notifications at finalization", async () => {
     queueOwnerWithMembers([userId, memberId]);
-    db.rpc.mockImplementation(async (name: string, args: Record<string, string>) => {
-      if (name === "claim_workspace_deletion_notification")
-        return {
-          data: args.p_profile_id === userId ? "sent" : "claimed",
-          error: null,
-        };
-      return { data: null, error: null };
-    });
+    db.rpc.mockImplementation(
+      async (name: string, args: Record<string, string>) => {
+        if (name === "claim_workspace_deletion_notification")
+          return {
+            data: args.p_profile_id === userId ? "sent" : "claimed",
+            error: null,
+          };
+        return { data: null, error: null };
+      },
+    );
 
     await expect(
       deleteWorkspaceData({ workspaceName: "Morgan Household" }),
@@ -488,9 +493,9 @@ describe("GH-12 claimed notification delivery", () => {
       ),
     ).toBe(false);
     expect(
-      db.rpc.mock.calls.some(([name]) => name === "finalize_workspace_deletion"),
+      db.rpc.mock.calls.some(
+        ([name]) => name === "finalize_workspace_deletion",
+      ),
     ).toBe(false);
   });
 });
-
-

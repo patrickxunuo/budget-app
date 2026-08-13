@@ -466,8 +466,6 @@ describe("Plaid linking service", () => {
   });
 });
 
-
-
 describe("GH-12 durable lifecycle Plaid revocation", () => {
   const lifecycleItem = (index: number, status = "revoked") => ({
     id: `40000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
@@ -478,9 +476,7 @@ describe("GH-12 durable lifecycle Plaid revocation", () => {
 
   it("API-010 reads every stable page and runs claim -> begin -> provider_removed -> finalize before confirming an active Item", async () => {
     mocks.lifecycleRows.push(
-      ...Array.from({ length: 1000 }, (_, index) =>
-        lifecycleItem(index + 1),
-      ),
+      ...Array.from({ length: 1000 }, (_, index) => lifecycleItem(index + 1)),
       lifecycleItem(1001, "active"),
     );
     mocks.rpc

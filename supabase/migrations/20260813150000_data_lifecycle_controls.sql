@@ -148,6 +148,3 @@ grant execute on function public.finalize_account_deletion() to authenticated;
 revoke all on function public.finalize_workspace_deletion(uuid,text,boolean) from public,anon,authenticated;
 grant execute on function public.finalize_workspace_deletion(uuid,text,boolean) to service_role;
 
-
-
-
