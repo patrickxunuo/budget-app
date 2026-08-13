@@ -47,6 +47,7 @@
 ## Known Pitfalls
 
 - Run `next typegen` before `tsc --noEmit`; fresh checkouts do not contain generated route types.
+- Treat formatting as a required pre-commit gate, not a post-review cleanup: run `pnpm format:check` with the committed lockfile before pushing, and run `git diff --check` to catch whitespace that Prettier may not report. For every new or edited SQL migration, leave exactly one newline at EOF with no trailing blank lines. On Windows, repository-wide Prettier can be distorted by CRLF materialization, so also run Prettier against every changed supported file and rely on the Linux CI-equivalent check before declaring the branch ready.
 - A family owner must never bypass another member's Personal-data RLS.
 - Supabase service-role clients bypass RLS and must remain inaccessible to browsers.
 - Rollback-only pgTAP files do not naturally fire deferred constraints; force them with `set constraints all immediate` in regression tests.
