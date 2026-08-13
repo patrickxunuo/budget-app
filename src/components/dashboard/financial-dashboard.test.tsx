@@ -1,4 +1,4 @@
-﻿import {
+import {
   fireEvent,
   render,
   screen,
@@ -365,6 +365,128 @@ describe("GH-9 financial dashboard acceptance", () => {
     );
     expect(screen.getByTestId("dashboard-transaction-list").className).toMatch(
       /overflow-x-(?:auto|hidden)|max-w-full|w-full/,
+    );
+  });
+});
+
+describe("GH-12 dashboard CSV export", () => {
+  it("FE-001 keeps the export href synchronized with the exact applied filter state and disables it during refresh", async () => {
+    const refreshed = {
+      ...initialModel,
+      period: "custom" as const,
+      range: { startDate: "2026-08-03", endDate: "2026-08-09" },
+      scope: "personal" as const,
+    };
+    let resolveRefresh!: (value: Response) => void;
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+
+    render(<FinancialDashboard initialModel={initialModel} />);
+    fireEvent.click(screen.getByTestId("dashboard-scope-personal"));
+    fireEvent.change(screen.getByTestId("dashboard-search"), {
+      target: { value: " green market " },
+    });
+    fireEvent.change(screen.getByTestId("dashboard-account-filter"), {
+      target: { value: "account-chequing" },
+    });
+    fireEvent.change(screen.getByTestId("dashboard-category-filter"), {
+      target: { value: "cat-grocery" },
+    });
+    fireEvent.change(screen.getByTestId("dashboard-status-filter"), {
+      target: { value: "posted" },
+    });
+    fireEvent.change(screen.getByTestId("dashboard-inclusion-filter"), {
+      target: { value: "excluded" },
+    });
+
+    const pendingExport = screen.getByTestId("dashboard-export-csv");
+    await waitFor(() =>
+      expect(pendingExport).toHaveAttribute("aria-busy", "true"),
+    );
+    expect(pendingExport).toHaveAttribute("aria-disabled", "true");
+    await waitFor(() => expect(resolveRefresh).toBeTypeOf("function"));
+
+    resolveRefresh(
+      new Response(JSON.stringify(refreshed), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("dashboard-export-csv")).toHaveAttribute(
+        "aria-busy",
+        "false",
+      ),
+    );
+
+    const exportLink = screen.getByTestId("dashboard-export-csv");
+    const href = new URL(exportLink.getAttribute("href")!, "http://localhost");
+    expect(href.pathname).toBe("/api/transactions/export");
+    expect(Object.fromEntries(href.searchParams)).toMatchObject({
+      scope: "personal",
+      period: "month",
+      reference: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      accountId: "account-chequing",
+      categoryId: "cat-grocery",
+      status: "posted",
+      inclusion: "excluded",
+      search: "green market",
+    });
+    expect(exportLink).toHaveAccessibleName(/export.*csv|download.*csv/i);
+  });
+});
+
+describe("GH-12 applied export snapshot regression", () => {
+  it("FE-001 disables export throughout debounce/loading and restores the last successful filter snapshot after a rejected refresh", async () => {
+    let finishRefresh!: (response: Response) => void;
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          finishRefresh = resolve;
+        }),
+    );
+    render(<FinancialDashboard initialModel={initialModel} />);
+
+    const exportControl = screen.getByTestId("dashboard-export-csv");
+    const displayedHref = exportControl.getAttribute("href");
+    expect(displayedHref).toMatch(/scope=family/);
+    expect(displayedHref).not.toContain("search=");
+
+    fireEvent.change(screen.getByTestId("dashboard-search"), {
+      target: { value: "rejected private filter" },
+    });
+
+    expect(exportControl).toHaveAttribute("aria-disabled", "true");
+    expect(exportControl).toHaveAttribute("aria-busy", "true");
+    expect(exportControl).not.toHaveAttribute("href");
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
+    expect(exportControl).toHaveAttribute("aria-disabled", "true");
+    expect(exportControl).not.toHaveAttribute("href");
+
+    finishRefresh(
+      new Response(JSON.stringify({ error: "Dashboard refresh failed." }), {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await screen.findByTestId("dashboard-error");
+    await waitFor(() =>
+      expect(exportControl).toHaveAttribute("aria-disabled", "false"),
+    );
+    expect(exportControl).toHaveAttribute("href", displayedHref);
+    expect(exportControl.getAttribute("href")).not.toContain(
+      "rejected+private+filter",
+    );
+    expect(exportControl.getAttribute("href")).not.toContain(
+      "rejected%20private%20filter",
+    );
+    expect(screen.getByTestId("dashboard-transaction-list")).toHaveTextContent(
+      /green market/i,
     );
   });
 });

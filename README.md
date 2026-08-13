@@ -110,3 +110,11 @@ pnpm db:stop
 `pnpm test:db` resets the local database from an empty state before running every pgTAP file under `supabase/tests/database/`, so repeated runs do not depend on data left by an earlier run. `pnpm db:reset` is available when only a migration replay is needed.
 
 The browser and SSR clients use the publishable key and remain constrained by explicit PostgreSQL grants and row-level security. The existing `src/lib/supabase/admin.ts` client imports `server-only` and uses `SUPABASE_SERVICE_ROLE_KEY`; that role intentionally bypasses RLS. Keep it confined to trusted server code for workspace bootstrap and invitation handling, Plaid item/token/account/transaction synchronization, sync-state writes, and append-only audit writes. Never import the admin client into a Client Component or expose its key, Plaid token ciphertext, encryption keys, or unsanitized provider errors to browser code.
+
+## Data export, deletion, and backups
+
+The dashboard exports the exact active Family or Personal ledger filters as a UTF-8 CSV. Exports never combine privacy scopes and never contain provider tokens, IDs, authorization state, or raw provider payloads.
+
+Account and workspace deletion are deliberate, provider-first operations: Budget App asks Plaid to revoke every affected Item before deleting local records. If revocation cannot be confirmed, encrypted credentials and data remain intact for a safe retry. Workspace owners may configure `SMTP_URL` and `SMTP_FROM` together to warn every active member before deletion; a delivery failure also leaves the workspace intact.
+
+Application deletion is not a database backup. The Supabase project administrator remains responsible for backup retention, point-in-time recovery, exports, and restore procedures. Take and verify an administrator-managed backup before deleting a workspace when historical recovery may be required.

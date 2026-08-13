@@ -52,3 +52,35 @@ describe("environment schemas", () => {
     }
   });
 });
+
+describe("GH-12 server SMTP environment", () => {
+  it("API-012 accepts SMTP only when URL and sender are both valid and present together", () => {
+    expect(
+      serverEnvSchema.safeParse({
+        ...validServerEnv,
+        SMTP_URL: "smtps://mailer.example.test:465",
+        SMTP_FROM: "Budget App <budget@example.test>",
+      }).success,
+    ).toBe(true);
+
+    expect(
+      serverEnvSchema.safeParse({
+        ...validServerEnv,
+        SMTP_URL: "smtps://mailer.example.test:465",
+      }).success,
+    ).toBe(false);
+    expect(
+      serverEnvSchema.safeParse({
+        ...validServerEnv,
+        SMTP_FROM: "budget@example.test",
+      }).success,
+    ).toBe(false);
+    expect(
+      serverEnvSchema.safeParse({
+        ...validServerEnv,
+        SMTP_URL: "not-a-url",
+        SMTP_FROM: "not-an-email",
+      }).success,
+    ).toBe(false);
+  });
+});

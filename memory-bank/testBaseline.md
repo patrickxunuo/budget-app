@@ -6,7 +6,16 @@
 - Command: `pnpm test:e2e`
 - Test directory: `e2e/`
 - GH-3 suite: `e2e/auth.spec.ts`
-- Latest run: 14 passed, 84 fixture-dependent scenarios skipped, 0 failed (98 desktop/mobile cases; local Supabase environment)
+- Latest run: 14 passed, 96 fixture-dependent scenarios skipped, 0 failed (110 desktop/mobile cases; local Supabase environment)
+
+## GH-12 Data Portability and Lifecycle Controls
+
+- [x] Filter-faithful Family/Personal CSV download with complete paged reads, safe columns, RFC 4180 quoting, UTF-8 BOM, and spreadsheet formula-injection protection — route/domain/component coverage passes; real-backend desktop/mobile Playwright authored
+- [x] Recent-password plus explicit account/workspace confirmation, exact owner name/impact acknowledgement, and accessible retry feedback — action/component/database coverage passes; real-backend Playwright authored
+- [x] Provider-first retryable Plaid revocation, atomic full-graph workspace teardown, durable all-member Auth deletion outbox, and first-owner setup return — service/pgTAP coverage passes; destructive Playwright authored
+- [x] Optional SMTP member warning plus clear Supabase-administrator backup/restore boundary — environment/service/component coverage passes
+- Test file: `e2e/data-lifecycle.spec.ts`; latest GH-12 browser result: 12 desktop/mobile scenarios fixture-gated because `E2E_DATA_LIFECYCLE_*` credentials and a disposable destructive workspace were not supplied, 0 failed. Full browser suite: 14 runnable passed, 96 fixture-dependent skipped, 0 failed.
+- Latest automated verification: 294 Vitest checks and 419 pgTAP assertions passed; lint, Next route generation/typecheck, production build, and independent review are green.
 
 ## GH-11 Plaid Connection Management
 

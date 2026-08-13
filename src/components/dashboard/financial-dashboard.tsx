@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useRef, useState } from "react";
 import type {
   DashboardReadModel,
@@ -29,6 +29,20 @@ export function FinancialDashboard({
     [status, setStatus] = useState("all"),
     [inclusion, setInclusion] = useState("default"),
     [loading, setLoading] = useState(false),
+    [exportQuerySnapshot, setExportQuerySnapshot] = useState(() => {
+      const initial = new URLSearchParams({
+        scope: initialModel.scope,
+        period: initialModel.period,
+        reference: initialModel.range.endDate,
+        status: "all",
+        inclusion: "default",
+      });
+      if (initialModel.period === "custom") {
+        initial.set("from", initialModel.range.startDate);
+        initial.set("to", initialModel.range.endDate);
+      }
+      return initial.toString();
+    }),
     [error, setError] = useState(""),
     [refreshNonce, setRefreshNonce] = useState(0),
     [appliedCustomRange, setAppliedCustomRange] = useState({
@@ -44,10 +58,10 @@ export function FinancialDashboard({
       return;
     }
     const id = ++request.current;
+    setLoading(true);
+    setError("");
     const timer = setTimeout(
       async () => {
-        setLoading(true);
-        setError("");
         const q = new URLSearchParams({
           scope,
           period,
@@ -75,6 +89,7 @@ export function FinancialDashboard({
             );
           if (id === request.current) {
             displayedModel.current = body;
+            setExportQuerySnapshot(q.toString());
             setModel(body);
             setFrom(body.range.startDate);
             setTo(body.range.endDate);
@@ -116,6 +131,7 @@ export function FinancialDashboard({
         model.range.endDate,
       ),
     );
+  const exportHref = `/api/transactions/export?${exportQuerySnapshot}`;
   return (
     <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-8 lg:px-12">
       <div className="mx-auto max-w-7xl">
@@ -273,7 +289,7 @@ export function FinancialDashboard({
               data-testid="dashboard-summary-pending"
               className="font-display mt-8 text-3xl font-semibold"
             >
-              {cad(model.summary.pendingAmountCents)} ·{" "}
+              {cad(model.summary.pendingAmountCents)} 路{" "}
               {model.summary.pendingCount} pending
             </p>
           </article>
@@ -387,15 +403,36 @@ export function FinancialDashboard({
               .filter((c) => c.budgetCents !== null)
               .map((c) => (
                 <p key={c.id} className="mt-3">
-                  <strong>{c.name}</strong> · {c.progressPercent}%{" "}
+                  <strong>{c.name}</strong> 路 {c.progressPercent}%{" "}
                   {c.progressPercent !== null && c.progressPercent > 100
-                    ? "— over budget"
+                    ? "鈥?over budget"
                     : "used"}
                 </p>
               ))}
           </section>
         </div>
         <section className="border-line bg-surface mt-6 rounded-2xl border p-4">
+          <div className="border-line mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+            <div>
+              <p className="font-utility text-muted text-[.65rem] tracking-[.14em] uppercase">
+                Portable ledger
+              </p>
+              <p className="text-muted text-sm">
+                Download this exact scoped and filtered view as a safe UTF-8
+                CSV.
+              </p>
+            </div>
+            <a
+              data-testid="dashboard-export-csv"
+              href={loading ? undefined : exportHref}
+              aria-disabled={loading}
+              aria-busy={loading}
+              onClick={(event) => loading && event.preventDefault()}
+              className={`focus-visible:outline-brand rounded-full border px-5 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 ${loading ? "border-line text-muted pointer-events-none opacity-60" : "border-brand text-brand hover:bg-brand hover:text-surface"}`}
+            >
+              {loading ? "Preparing view…" : "Export CSV"}
+            </a>
+          </div>
           <div className="grid gap-3 md:grid-cols-5">
             <input
               data-testid="dashboard-search"
@@ -462,12 +499,12 @@ export function FinancialDashboard({
               <div>
                 <h3 className="font-semibold">{r.merchantOrDescription}</h3>
                 <p className="text-muted text-xs">
-                  {r.date} · {r.source} · {r.scope} privacy ·{" "}
-                  {r.pending ? "Pending" : "Posted"} · {r.kind}
-                  {r.excluded ? " · Excluded" : ""}
+                  {r.date} 路 {r.source} 路 {r.scope} privacy 路{" "}
+                  {r.pending ? "Pending" : "Posted"} 路 {r.kind}
+                  {r.excluded ? " 路 Excluded" : ""}
                 </p>
                 <p className="text-muted text-xs">
-                  {r.accountName ?? "Off-bank manual entry"} ·{" "}
+                  {r.accountName ?? "Off-bank manual entry"} 路{" "}
                   {r.category?.name ?? "Uncategorized"}
                 </p>
               </div>

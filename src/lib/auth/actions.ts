@@ -7,6 +7,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getServerEnv } from "@/lib/env/server";
 import { revokeDepartingMemberPlaidItems } from "@/lib/plaid/service";
+import { deleteAccountData, deleteWorkspaceData } from "./data-lifecycle";
 import { deleteQueuedAuthUser, enqueueAuthDeletion } from "./deletion-queue";
 import {
   clearApplicationAuthCookies,
@@ -20,6 +21,7 @@ import {
   acceptInvitationSchema,
   confirmationPasswordSchema,
   createInvitationSchema,
+  deleteAccountSchema,
   deleteWorkspaceSchema,
   formValues,
   membershipSchema,
@@ -462,25 +464,19 @@ export async function transferOwnership(
 
 export async function deleteAccount(
   _state: AuthActionState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<AuthActionState> {
-  void _state;
-  void _formData;
+  const parsed = deleteAccountSchema.safeParse(formValues(formData));
+  if (!parsed.success) return invalid(parsed.error);
+  const result = await deleteAccountData();
+  if (!result.ok)
+    return {
+      status: "error",
+      message: result.message,
+      data: { unresolvedPlaidItemIds: result.unresolvedPlaidItemIds },
+    };
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { status: "error", message: genericAuthError };
-  const prepared = await supabase.rpc("prepare_account_deletion");
-  if (prepared.error)
-    return rpcError(
-      prepared.error,
-      prepared.error.message.includes("recent")
-        ? "Confirm your password before continuing."
-        : genericAuthError,
-    );
-  if (!(await deleteQueuedAuthUser(user.id)))
-    return { status: "error", message: cleanupFailure };
+  await supabase.auth.signOut({ scope: "global" });
   await clearApplicationAuthCookies();
   redirect("/sign-in");
 }
@@ -491,23 +487,17 @@ export async function deleteWorkspace(
 ): Promise<AuthActionState> {
   const parsed = deleteWorkspaceSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error);
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { status: "error", message: genericAuthError };
-  const { error } = await supabase.rpc("delete_workspace", {
-    p_workspace_name: parsed.data.workspaceName,
+  const result = await deleteWorkspaceData({
+    workspaceName: parsed.data.workspaceName,
   });
-  if (error)
-    return rpcError(
-      error,
-      error.message.includes("recent")
-        ? "Confirm your password before continuing."
-        : genericAuthError,
-    );
-  if (!(await deleteQueuedAuthUser(user.id)))
-    return { status: "error", message: cleanupFailure };
+  if (!result.ok)
+    return {
+      status: "error",
+      message: result.message,
+      data: { unresolvedPlaidItemIds: result.unresolvedPlaidItemIds },
+    };
+  const supabase = await createSupabaseServerClient();
+  await supabase.auth.signOut({ scope: "global" });
   await clearApplicationAuthCookies();
-  redirect("/sign-in");
+  redirect("/setup");
 }

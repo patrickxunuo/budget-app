@@ -22,6 +22,8 @@
 - Authorization: database RLS is the primary boundary; privileged server paths must be narrow and documented.
 - Auth lifecycle mutations: expose setup and invitation finalization only to the service role; expose membership changes only through fixed-search-path RPCs, and revoke direct table writes that could bypass recent-password checks.
 - Cross-system deletion: enqueue Auth identity deletion transactionally before deleting database state, process the service-only outbox idempotently, and retain failures for a bearer-protected retry worker.
+- Destructive workspace lifecycle: page every Plaid Item and cross the provider boundary through durable claim phases before local purge; serialize optional member emails with service-only recipient claims and deterministic message IDs; let only a service-role finalizer choose notification policy while it rechecks actor ownership, recent confirmation, current membership coverage, and exact workspace name.
+- CSV portability: export through the same complete scoped/filter-aware read model as the displayed ledger, serialize only an explicit safe-column allowlist, use UTF-8 RFC 4180 output, and neutralize user-controlled spreadsheet formula prefixes without treating trusted numeric amounts as text.
 - Plaid lifecycle mutations: keep pending candidates and encrypted access tokens service-only, revoke authenticated writes to protected Item/account state, and activate reviewed accounts through one fixed-search-path RPC.
 - Plaid duplicate identity: compare immutable provider-backed institution, type/subtype, normalized name, and mask fields; never use user-editable display names, and fail closed when duplicate lookup cannot complete.
 - External activation boundaries: once database activation commits, downstream import failures are retryable pending states rather than false activation failures; return only sanitized sync state and preserve idempotent partial progress.
@@ -45,6 +47,7 @@
 ## Known Pitfalls
 
 - Run `next typegen` before `tsc --noEmit`; fresh checkouts do not contain generated route types.
+- Treat formatting as a required pre-commit gate, not a post-review cleanup: run `pnpm format:check` with the committed lockfile before pushing, and run `git diff --check` to catch whitespace that Prettier may not report. For every new or edited SQL migration, leave exactly one newline at EOF with no trailing blank lines. On Windows, repository-wide Prettier can be distorted by CRLF materialization, so also run Prettier against every changed supported file and rely on the Linux CI-equivalent check before declaring the branch ready.
 - A family owner must never bypass another member's Personal-data RLS.
 - Supabase service-role clients bypass RLS and must remain inaccessible to browsers.
 - Rollback-only pgTAP files do not naturally fire deferred constraints; force them with `set constraints all immediate` in regression tests.

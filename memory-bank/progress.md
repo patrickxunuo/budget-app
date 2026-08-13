@@ -2,9 +2,13 @@
 
 ## Current Sprint / Focus
 
-GH-11 Plaid connection management is review-ready.
+GH-12 data portability and lifecycle controls are review-ready.
 
 ## Log
+
+- 2026-08-13T11:20Z [READY] GH-12 adds complete filter-faithful privacy-scoped CSV export, durable provider-first account/workspace deletion, idempotent member warning claims, service-only atomic finalization, and administrator backup guidance; 294 Vitest checks, 419 pgTAP assertions, lint/typecheck/build, runnable browser baseline, and independent review are green.
+
+- 2026-08-13T08:00Z [PLANNED] GH-12 approved: add privacy-safe filter-faithful CSV export, durable retryable account/workspace deletion with confirmed Plaid revocation, guarded owner/member UX, optional SMTP notification, and operator backup/restore documentation.
 
 - 2026-08-13T01:58Z [READY] GH-11 adds linker-owned Plaid connection dossiers, audited retroactive visibility changes, update-mode repair and fresh reconciliation, fail-closed keep-history/delete-data disconnect recovery, and member-departure revocation; 253 Vitest checks, 390 pgTAP assertions, lint/typecheck/build, and independent review are green. The authored real-backend browser cases remain fixture-gated (14 runnable baseline cases passed, 84 skipped, 0 failed).
 
