@@ -429,6 +429,29 @@ describe("GH-5 Plaid webhook verification", () => {
     });
   });
 
+  it("accepts the explicit null error Plaid sends on TRANSACTIONS updates", async () => {
+    // Plaid sends "error": null on INITIAL_UPDATE, HISTORICAL_UPDATE, and
+    // DEFAULT_UPDATE. An optional object schema rejects null, which rejected
+    // every real transaction webhook with a 400.
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        webhook_type: "TRANSACTIONS",
+        webhook_code: "SYNC_UPDATES_AVAILABLE",
+        item_id: "provider-item-owned",
+        error: null,
+        environment: "sandbox",
+      }),
+    );
+
+    await expect(
+      verifyPlaidWebhook(rawBody, token(rawBody)),
+    ).resolves.toMatchObject({
+      webhook_type: "TRANSACTIONS",
+      webhook_code: "SYNC_UPDATES_AVAILABLE",
+      item_id: "provider-item-owned",
+    });
+  });
+
   it("API-006 validates ES256, a fresh iat, and the SHA-256 of the exact raw body", async () => {
     const rawBody = Buffer.from(
       JSON.stringify({

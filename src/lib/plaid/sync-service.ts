@@ -37,6 +37,8 @@ const webhookPayloadSchema = z
     webhook_type: z.string().min(1).max(100),
     webhook_code: z.string().min(1).max(100),
     item_id: z.string().min(1).max(200).optional(),
+    // Plaid sends an explicit null error on TRANSACTIONS updates, so this must
+    // be nullish rather than optional.
     error: z
       .object({
         error_code: z.string().min(1).max(100).optional(),
@@ -46,7 +48,7 @@ const webhookPayloadSchema = z
           .optional(),
       })
       .passthrough()
-      .optional(),
+      .nullish(),
     consent_expiration_time: z
       .union([z.string().datetime({ offset: true }), z.null()])
       .optional(),

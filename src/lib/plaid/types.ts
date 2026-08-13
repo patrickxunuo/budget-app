@@ -80,7 +80,7 @@ export type PlaidWebhookPayload = {
   webhook_type: string;
   webhook_code: string;
   item_id?: string;
-  error?: { error_code?: string; request_id?: string };
+  error?: { error_code?: string; request_id?: string } | null;
   consent_expiration_time?: string | null;
 };
 

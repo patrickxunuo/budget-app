@@ -72,7 +72,7 @@ async function findDuplicate(
 
   // A failed lookup cannot safely mean "no duplicate". Fail the exchange so
   // activation never proceeds from an incomplete preview.
-  if (error) throw sanitizedPlaidFailure("exchange");
+  if (error) throw sanitizedPlaidFailure("exchange", error);
 
   const duplicate = (data ?? []).find((candidate) => {
     const item = Array.isArray(candidate.plaid_items)
@@ -117,8 +117,8 @@ export async function createLinkTokenForMember(actor: PlaidApiActor) {
       webhookUrl: env.PLAID_WEBHOOK_URL,
       redirectUri: oauthRedirectUri(env.APP_URL),
     });
-  } catch {
-    throw sanitizedPlaidFailure("link");
+  } catch (error) {
+    throw sanitizedPlaidFailure("link", error);
   }
 }
 
@@ -157,7 +157,7 @@ export async function exchangePublicTokenForReview(
         "That bank connection expired. Start a new connection.",
       );
     }
-    throw sanitizedPlaidFailure("exchange");
+    throw sanitizedPlaidFailure("exchange", error);
   }
 
   const admin = createSupabaseAdminClient();
@@ -188,7 +188,7 @@ export async function exchangePublicTokenForReview(
         "item_already_linked",
         "This bank connection is already linked.",
       );
-    throw sanitizedPlaidFailure("exchange");
+    throw sanitizedPlaidFailure("exchange", itemError);
   }
 
   const reviewAccounts: ReviewAccount[] = [];
@@ -211,9 +211,9 @@ export async function exchangePublicTokenForReview(
           : null,
       });
     }
-  } catch {
+  } catch (error) {
     await admin.from("plaid_items").delete().eq("id", item.id);
-    throw sanitizedPlaidFailure("exchange");
+    throw sanitizedPlaidFailure("exchange", error);
   }
 
   const { error: candidatesError } = await admin
@@ -255,7 +255,7 @@ export async function exchangePublicTokenForReview(
     );
   if (candidatesError) {
     await admin.from("plaid_items").delete().eq("id", item.id);
-    throw sanitizedPlaidFailure("exchange");
+    throw sanitizedPlaidFailure("exchange", candidatesError);
   }
 
   return { reviewId: item.id as string, institution, accounts: reviewAccounts };
