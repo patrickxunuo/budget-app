@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="120" height="120" role="img" aria-label="Budget App">
+  <rect x="0.5" y="0.5" width="35" height="35" rx="10.4" fill="none" stroke="#176044" />
+  <g stroke="#176044" opacity="0.45">
+    <line x1="10.4" y1="6" x2="10.4" y2="30" />
+    <line x1="6" y1="12" x2="30" y2="12" />
+    <line x1="6" y1="24" x2="30" y2="24" />
+  </g>
+  <circle cx="23.72" cy="18" r="3" fill="#176044" />
+</svg>
