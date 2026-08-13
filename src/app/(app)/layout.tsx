@@ -9,7 +9,10 @@ export default async function ApplicationLayout({
   const { membership } = await requireActiveMembership();
   return (
     <div className="bg-surface min-h-screen lg:grid lg:grid-cols-[17.5rem_1fr]">
-      <aside className="border-line bg-panel border-b lg:min-h-screen lg:border-r lg:border-b-0">
+      {/* Sticky within its grid area so the rail stays put while the page
+          scrolls, with its own overflow for when the nav outgrows the
+          viewport. Mobile keeps the scrolling top bar. */}
+      <aside className="border-line bg-panel border-b lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto lg:border-r lg:border-b-0">
         <div className="flex items-center justify-between px-5 py-4 lg:px-6 lg:py-6">
           <Link
             href="/dashboard"
