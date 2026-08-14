@@ -66,15 +66,19 @@ test("FE-002 sign-in, recovery, and reset pages are accessible and recovery does
   await expect(recovery).toBeVisible();
   await page.getByLabel("Email").fill(`absent-${Date.now()}@example.test`);
   await page.getByTestId("recovery-submit").click();
-  await expect(page.getByRole("status")).toContainText(
+  // Scoped to the form: the shell also mounts always-present live regions for
+  // connectivity and service-worker updates (GH-13), so an unscoped
+  // getByRole("status") is ambiguous under Playwright's strict mode.
+  const recoveryStatus = recovery.getByRole("status");
+  await expect(recoveryStatus).toContainText(
     "If that address belongs to this family",
   );
-  const absentConfirmation = await page.getByRole("status").textContent();
+  const absentConfirmation = await recoveryStatus.textContent();
 
   await page.getByLabel("Email").fill(ownerEmail ?? "known@example.test");
   await expect(page.getByTestId("recovery-submit")).toBeEnabled();
   await page.getByTestId("recovery-submit").click();
-  await expect(page.getByRole("status")).toHaveText(absentConfirmation ?? "");
+  await expect(recoveryStatus).toHaveText(absentConfirmation ?? "");
 
   await page.goto("/reset-password");
   await expect(page.getByTestId("auth-form")).toBeVisible();
@@ -145,7 +149,11 @@ test("FE-004 owner creates, copies, and revokes invitations and sees guarded mem
     .getByRole("button", { name: /revoke/i })
     .last()
     .click();
-  await expect(page.getByRole("status")).toContainText(/revoked/i);
+  // Scoped to <main>: the shell's connectivity and update live regions sit
+  // outside it, and an unscoped status role is ambiguous (GH-13).
+  await expect(page.getByRole("main").getByRole("status")).toContainText(
+    /revoked/i,
+  );
   await expect(page.getByTestId("password-confirmation")).toBeAttached();
 });
 

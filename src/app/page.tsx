@@ -11,7 +11,7 @@ const contract = [
 
 export default function Home() {
   return (
-    <main className="min-h-screen px-5 py-5 sm:px-8 sm:py-8 lg:px-12">
+    <main id="main-content" tabIndex={-1} className="min-h-screen px-5 py-5 sm:px-8 sm:py-8 lg:px-12">
       <div className="border-line bg-surface mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-[88rem] flex-col overflow-hidden rounded-[1.5rem] border shadow-[0_24px_80px_rgba(18,44,33,0.12)] sm:min-h-[calc(100vh-4rem)]">
         <header className="border-line flex items-center justify-between border-b px-5 py-4 sm:px-8">
           <Link
@@ -50,9 +50,15 @@ export default function Home() {
             <div className="mt-12 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
                 href="/dashboard"
-                className="bg-brand hover:bg-brand-strong focus-visible:outline-brand inline-flex min-h-12 items-center justify-center rounded-xl px-5 text-sm font-semibold text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-4"
+                className="bg-brand hover:bg-brand-strong focus-visible:outline-brand text-on-accent inline-flex min-h-12 items-center justify-center rounded-xl px-5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-4"
               >
                 View application shell
+              </Link>
+              <Link
+                href="/install"
+                className="border-line text-ink hover:border-brand hover:text-brand focus-visible:outline-brand inline-flex min-h-12 items-center justify-center rounded-xl border px-5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-4"
+              >
+                Install as an app
               </Link>
               <a
                 href="https://github.com/patrickxunuo/budget-app/issues/1"

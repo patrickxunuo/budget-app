@@ -311,13 +311,15 @@ export function PlaidLinkFlow() {
                   className="relative flex gap-3 pb-7 last:pb-0 lg:min-h-28"
                 >
                   <span
-                    className={`font-utility flex size-8 shrink-0 items-center justify-center rounded-full border text-[.6rem] ${active ? "border-brand bg-brand text-brand-strong" : "border-surface/30 text-surface/65"}`}
+                    className={`font-utility flex size-8 shrink-0 items-center justify-center rounded-full border text-[.6rem] ${active ? "border-brand bg-brand text-on-accent" : "border-surface/40 text-surface/80"}`}
                   >
                     {number as string}
                   </span>
                   <div>
                     <p
-                      className={`font-display text-sm font-semibold ${active ? "text-white" : "text-surface/55"}`}
+                      // 55% of --surface over --brand-strong lands at ~4.4:1,
+                      // just under AA for this size; 75% clears it.
+                      className={`font-display text-sm font-semibold ${active ? "text-surface" : "text-surface/75"}`}
                     >
                       {label as string}
                     </p>

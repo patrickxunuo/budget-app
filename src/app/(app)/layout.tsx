@@ -1,6 +1,11 @@
 import Link from "next/link";
+import {
+  BottomNavigation,
+  NavigationRail,
+} from "@/components/app-shell/primary-navigation";
 import { LedgerMark } from "@/components/ledger-mark";
 import { SignOutButton } from "@/components/auth/sign-out-button";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { requireActiveMembership } from "@/lib/auth/dal";
 
 export default async function ApplicationLayout({
@@ -11,67 +16,27 @@ export default async function ApplicationLayout({
     <div className="bg-surface min-h-screen lg:grid lg:grid-cols-[17.5rem_1fr]">
       {/* Sticky within its grid area so the rail stays put while the page
           scrolls, with its own overflow for when the nav outgrows the
-          viewport. Mobile keeps the scrolling top bar. */}
-      <aside className="border-line bg-panel border-b lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto lg:border-r lg:border-b-0">
-        <div className="flex items-center justify-between px-5 py-4 lg:px-6 lg:py-6">
+          viewport. Below `lg` this is the top bar and navigation moves to the
+          fixed bottom bar. The safe-area helpers sit on this element rather
+          than on the padded child because they are unlayered CSS and would
+          otherwise overwrite a Tailwind padding utility on the same box. */}
+      <aside className="safe-top safe-x border-line bg-panel border-b lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto lg:border-r lg:border-b-0">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 lg:px-6 lg:py-6">
           <Link
             href="/dashboard"
-            className="focus-visible:outline-brand flex items-center gap-3 rounded-lg focus-visible:outline-2"
+            className="focus-visible:outline-focus flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-2"
           >
             <LedgerMark className="text-brand" />
-            <span className="font-display text-ink text-lg font-semibold">
+            <span className="font-display text-ink truncate text-lg font-semibold">
               Budget App
             </span>
           </Link>
-          <span className="font-utility text-muted text-[.62rem] uppercase lg:hidden">
+          <span className="font-utility text-muted shrink-0 text-[.62rem] uppercase lg:hidden">
             Family ledger
           </span>
         </div>
-        <nav aria-label="Application" className="px-3 py-4 lg:pt-8">
-          <Link
-            href="/dashboard"
-            className="text-ink hover:bg-surface flex min-h-11 items-center justify-between rounded-xl px-3.5 text-sm font-semibold"
-          >
-            Overview
-            <span className="font-utility text-brand text-[.62rem]">01</span>
-          </Link>
-          <Link
-            href="/settings/members"
-            className="text-ink hover:bg-surface mt-1 flex min-h-11 items-center justify-between rounded-xl px-3.5 text-sm font-semibold"
-          >
-            Household
-            <span className="font-utility text-brand text-[.62rem]">02</span>
-          </Link>
-          <Link
-            href="/accounts"
-            className="text-ink hover:bg-surface focus-visible:outline-brand mt-1 flex min-h-11 items-center justify-between rounded-xl px-3.5 text-sm font-semibold focus-visible:outline-2"
-          >
-            Accounts
-            <span className="font-utility text-brand text-[.62rem]">03</span>
-          </Link>
-          <Link
-            href="/transactions"
-            className="text-ink hover:bg-surface mt-1 flex min-h-11 items-center justify-between rounded-xl px-3.5 text-sm font-semibold"
-          >
-            Transactions
-            <span className="font-utility text-brand text-[.62rem]">04</span>
-          </Link>
-          <Link
-            href="/categories"
-            className="text-ink hover:bg-surface mt-1 flex min-h-11 items-center justify-between rounded-xl px-3.5 text-sm font-semibold"
-          >
-            Categories
-            <span className="font-utility text-brand text-[.62rem]">05</span>
-          </Link>
-          <Link
-            href="/budgets"
-            className="text-ink hover:bg-surface focus-visible:outline-brand mt-1 flex min-h-11 items-center justify-between rounded-xl px-3.5 text-sm font-semibold focus-visible:outline-2"
-          >
-            Budgets
-            <span className="font-utility text-brand text-[.62rem]">06</span>
-          </Link>
-        </nav>
-        <div className="border-line relative mx-6 mt-8 hidden border-t pt-6 lg:block">
+        <NavigationRail />
+        <div className="border-line relative mx-6 mt-8 hidden border-t pt-6 pb-8 lg:block">
           <span className="bg-brand absolute top-0 left-0 h-20 w-px" />
           <p className="font-utility text-brand pl-4 text-[.62rem] tracking-[.12em] uppercase">
             {membership.role} access
@@ -82,31 +47,49 @@ export default async function ApplicationLayout({
           </p>
         </div>
       </aside>
-      <div className="min-w-0">
-        {/* Needs an opaque background of its own: the header had none, so a
-            sticky bar would let the page scroll through it. z-20 keeps it
-            above in-page sticky elements, which use z-10. */}
-        <header className="border-line bg-surface sticky top-0 z-20 flex min-h-17 items-center justify-between border-b px-5 sm:px-8">
-          <div>
-            <p className="font-utility text-muted text-[.62rem] tracking-[.12em] uppercase">
-              Private workspace
-            </p>
-            <p className="text-ink mt-.5 text-sm font-semibold">
-              Family ledger
-            </p>
-          </div>
-          <div className="flex items-center gap-1">
-            <SignOutButton />
-            <Link
-              href="/settings/members"
-              className="border-line hover:border-brand rounded-lg border px-3 py-2 text-xs font-semibold"
-            >
-              Manage household
-            </Link>
-          </div>
-        </header>
+      {/* Reserves the fixed bottom bar's height plus the home-indicator inset
+          below `lg`, so the last row of a page is never trapped under it. */}
+      <div className="min-w-0 pb-[calc(4.5rem_+_env(safe-area-inset-bottom,0px))] lg:pb-0">
+        {/* Pinned (1211e33): the header needs an opaque background of its own,
+            because without one the page scrolls visibly through it. z-20 keeps
+            it above the in-page sticky elements, which use z-10. The safe-area
+            padding sits here rather than on the <header> so it cannot collide
+            with that element's own px/py utilities. */}
+        <div className="safe-x border-line bg-surface sticky top-0 z-20 border-b">
+          <header className="flex min-h-17 flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-3 sm:px-8">
+            <div className="min-w-0">
+              <p className="font-utility text-muted text-[.62rem] tracking-[.12em] uppercase">
+                Private workspace
+              </p>
+              <p className="text-ink mt-.5 text-sm font-semibold">
+                Family ledger
+              </p>
+            </div>
+            {/* Appearance and installation are rendered exactly once and stay
+                visible at every breakpoint: a second copy would duplicate the
+                radio group's element ids and its accessible names. The row
+                wraps below `sm` so nothing overflows at 390px. */}
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+              <ThemeToggle />
+              <Link
+                href="/install"
+                className="border-line text-ink hover:border-brand hover:text-brand focus-visible:outline-focus flex min-h-11 shrink-0 items-center rounded-xl border px-3.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                Install app
+              </Link>
+              <Link
+                href="/settings/members"
+                className="border-line hover:border-brand focus-visible:outline-focus flex min-h-11 shrink-0 items-center rounded-lg border px-3 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                Manage household
+              </Link>
+              <SignOutButton />
+            </div>
+          </header>
+        </div>
         {children}
       </div>
+      <BottomNavigation />
     </div>
   );
 }

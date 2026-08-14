@@ -25,7 +25,7 @@ export default async function AccountsPage() {
     getPlaidConnections(actor),
   ]);
   return (
-    <main className="px-5 py-9 sm:px-8 sm:py-11 lg:px-12 lg:py-14">
+    <main id="main-content" tabIndex={-1} className="px-5 py-9 sm:px-8 sm:py-11 lg:px-12 lg:py-14">
       <div className="mx-auto max-w-6xl">
         <header className="mb-8 grid gap-5 lg:grid-cols-[1fr_22rem] lg:items-end">
           <div>

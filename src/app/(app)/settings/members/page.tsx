@@ -45,7 +45,7 @@ export default async function MembersPage() {
       : (row.profiles?.display_name ?? "Family member"),
   }));
   return (
-    <main className="px-5 py-10 sm:px-8 lg:px-12">
+    <main id="main-content" tabIndex={-1} className="px-5 py-10 sm:px-8 lg:px-12">
       <div className="mx-auto max-w-5xl">
         <header className="border-line mb-10 border-b pb-8">
           <p className="font-utility text-brand text-[.68rem] font-semibold tracking-[.15em] uppercase">

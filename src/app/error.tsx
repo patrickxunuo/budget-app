@@ -8,7 +8,7 @@ export default function ErrorPage({
   retry: () => void;
 }) {
   return (
-    <main className="grid min-h-screen place-items-center px-5">
+    <main id="main-content" tabIndex={-1} className="grid min-h-screen place-items-center px-5">
       <div className="border-line bg-surface w-full max-w-lg rounded-2xl border p-7 shadow-xl">
         <p className="font-utility text-alert text-[0.68rem] tracking-[0.14em] uppercase">
           Route unavailable
@@ -23,7 +23,7 @@ export default function ErrorPage({
         <button
           type="button"
           onClick={retry}
-          className="bg-brand focus-visible:outline-brand mt-6 min-h-11 rounded-xl px-5 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-4"
+          className="bg-brand focus-visible:outline-brand text-on-accent mt-6 min-h-11 rounded-xl px-5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4"
         >
           Try again
         </button>
