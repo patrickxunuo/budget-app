@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { THEME_STORAGE_KEY } from "@/lib/theme/theme";
@@ -41,61 +41,64 @@ afterEach(() => {
 });
 
 describe("GH-13 appearance control (AC4, AC5)", () => {
-  it("TT-001 is a labelled radio group offering System, Light, and Dark", () => {
+  it("TT-001 is one compact, accessible theme button", () => {
     render(<ThemeToggle />);
 
-    const group = screen.getByRole("group", { name: /appearance/i });
-    expect(group).toBeInTheDocument();
-    for (const label of ["System", "Light", "Dark"]) {
-      expect(
-        screen.getByRole("radio", { name: new RegExp(`^${label}$`, "i") }),
-      ).toBeInTheDocument();
-    }
-    expect(screen.getAllByRole("radio")).toHaveLength(3);
+    const toggle = screen.getByRole("button", {
+      name: /switch to dark theme/i,
+    });
+    expect(toggle).toHaveAttribute("data-theme-icon", "sun");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
-  it("TT-002 defaults to System when nothing is stored", () => {
+  it("TT-002 follows the device until the member makes a choice", () => {
     render(<ThemeToggle />);
 
-    expect(screen.getByRole("radio", { name: /^system$/i })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /^light$/i })).not.toBeChecked();
-    expect(screen.getByRole("radio", { name: /^dark$/i })).not.toBeChecked();
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
     expect(root().hasAttribute("data-theme")).toBe(false);
   });
 
-  it("TT-003 reflects a stored Dark preference as the selected option", () => {
+  it("TT-003 reflects a stored Dark preference with a moon icon", () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, "dark");
 
     render(<ThemeToggle />);
 
-    expect(screen.getByRole("radio", { name: /^dark$/i })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /^system$/i })).not.toBeChecked();
+    const toggle = screen.getByRole("button", {
+      name: /switch to light theme/i,
+    });
+    expect(toggle).toHaveAttribute("data-theme-icon", "moon");
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
     expect(root().getAttribute("data-theme")).toBe("dark");
     expect(root().style.colorScheme).toBe("dark");
   });
 
-  it("TT-004 persists and paints an explicit Light choice", () => {
+  it("TT-004 persists and paints an explicit Dark choice", () => {
     render(<ThemeToggle />);
 
-    fireEvent.click(screen.getByRole("radio", { name: /^light$/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /switch to dark theme/i }),
+    );
+
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+    expect(root().getAttribute("data-theme")).toBe("dark");
+    expect(root().style.colorScheme).toBe("dark");
+    expect(
+      screen.getByRole("button", { name: /switch to light theme/i }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("TT-005 switches a stored Dark preference to Light", () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, "dark");
+    render(<ThemeToggle />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /switch to light theme/i }),
+    );
 
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
     expect(root().getAttribute("data-theme")).toBe("light");
     expect(root().style.colorScheme).toBe("light");
-    expect(screen.getByRole("radio", { name: /^light$/i })).toBeChecked();
-  });
-
-  it("TT-005 hands control back to the device when System is chosen", () => {
-    window.localStorage.setItem(THEME_STORAGE_KEY, "dark");
-    render(<ThemeToggle />);
-    expect(root().getAttribute("data-theme")).toBe("dark");
-
-    fireEvent.click(screen.getByRole("radio", { name: /^system$/i }));
-
-    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("system");
-    expect(root().hasAttribute("data-theme")).toBe(false);
-    expect(root().style.colorScheme).toBe("light dark");
-    expect(screen.getByRole("radio", { name: /^system$/i })).toBeChecked();
   });
 
   it("TT-006 keeps working when localStorage throws", () => {
@@ -108,24 +111,26 @@ describe("GH-13 appearance control (AC4, AC5)", () => {
 
     expect(() => render(<ThemeToggle />)).not.toThrow();
 
-    expect(screen.getByRole("radio", { name: /^system$/i })).toBeChecked();
     expect(() =>
-      fireEvent.click(screen.getByRole("radio", { name: /^dark$/i })),
+      fireEvent.click(
+        screen.getByRole("button", { name: /switch to dark theme/i }),
+      ),
     ).not.toThrow();
-    expect(screen.getByRole("radio", { name: /^dark$/i })).toBeChecked();
+    expect(
+      screen.getByRole("button", { name: /switch to light theme/i }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(root().getAttribute("data-theme")).toBe("dark");
   });
 
-  it("TT-007 conveys the selected option with more than colour", () => {
+  it("TT-007 tracks a dark device theme without writing a preference", async () => {
+    setPrefersDark(true);
     render(<ThemeToggle />);
 
-    fireEvent.click(screen.getByRole("radio", { name: /^dark$/i }));
-
-    const selected = screen.getByRole("radio", { name: /^dark$/i });
-    expect(selected).toBeChecked();
-    expect(selected).toHaveAttribute("type", "radio");
-    // The checked state is exposed to assistive technology by the radio itself,
-    // not by the label's fill colour.
-    expect(screen.getByRole("radio", { name: /^light$/i })).not.toBeChecked();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /switch to light theme/i }),
+      ).toHaveAttribute("data-theme-icon", "moon"),
+    );
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
   });
 });

@@ -197,6 +197,14 @@ a {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
+/* Installation guidance is useful in a browser, but dead weight in the
+   persistent header after the app has already been installed. */
+@media (display-mode: standalone) {
+  .browser-only-install {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -6,7 +6,7 @@ export function SignOutButton() {
   };
   return (
     <form action={submit}>
-      <button className="text-muted hover:text-alert focus-visible:outline-brand rounded-lg px-3 py-2 text-xs font-semibold focus-visible:outline-2">
+      <button className="text-muted hover:text-alert focus-visible:outline-brand flex min-h-11 items-center rounded-lg px-3 py-2 text-xs font-semibold focus-visible:outline-2">
         Sign out
       </button>
     </form>

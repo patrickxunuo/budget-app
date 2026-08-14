@@ -19,7 +19,7 @@
 - [x] Overflow-free public shell at 390px, 768px, and 1280px — desktop/mobile Playwright runnable
 - [x] Service-worker cache policy: `public/sw.js` is executed in Vitest against synthetic fetch events, proving `/api/**`, every application document, cross-origin Supabase/Plaid, non-GET, and range requests are never read from or written to a cache — 38 unit assertions pass
 - [x] WCAG AA palette gate: `src/lib/theme/contrast.test.ts` parses `src/app/globals.css` and asserts every text pair at 4.5:1 and every UI pair at 3:1 in both themes, and that the `prefers-color-scheme` palette cannot drift from the explicit one — 71 unit assertions pass
-- [x] Theme preference (System default, Light, Dark), pre-hydration application, and storage-failure fallback — unit/component coverage passes
+- [x] Compact Light/Dark theme toggle (device preference by default), pre-hydration application, live device-theme tracking, and storage-failure fallback — unit/component coverage passes
 - [x] Mobile bottom navigation versus desktop rail, `aria-current="page"`, and a non-colour active indicator — component coverage passes
 - [x] Service-worker update prompt: no self-`skipWaiting`, prompt only when a controller already exists, single guarded reload — component coverage passes
 - Test file: `e2e/pwa.spec.ts` (11 scenarios × desktop/mobile = 22 cases, all runnable with no fixtures). Screenshots of `/install` are attached on both projects.

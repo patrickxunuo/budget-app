@@ -56,8 +56,8 @@ export default async function ApplicationLayout({
             padding sits here rather than on the <header> so it cannot collide
             with that element's own px/py utilities. */}
         <div className="safe-x border-line bg-surface sticky top-0 z-20 border-b">
-          <header className="flex min-h-17 flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-3 sm:px-8">
-            <div className="min-w-0">
+          <header className="flex min-h-15 items-center justify-end gap-3 px-5 py-2 sm:justify-between sm:px-8">
+            <div className="hidden min-w-0 sm:block">
               <p className="font-utility text-muted text-[.62rem] tracking-[.12em] uppercase">
                 Private workspace
               </p>
@@ -65,21 +65,20 @@ export default async function ApplicationLayout({
                 Family ledger
               </p>
             </div>
-            {/* Appearance and installation are rendered exactly once and stay
-                visible at every breakpoint: a second copy would duplicate the
-                radio group's element ids and its accessible names. The row
-                wraps below `sm` so nothing overflows at 390px. */}
-            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+            {/* Keep the persistent mobile chrome deliberately spare. Install
+                guidance stays reachable in a wider browser, but CSS removes
+                it once the app is running in standalone PWA mode. */}
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
               <ThemeToggle />
               <Link
                 href="/install"
-                className="border-line text-ink hover:border-brand hover:text-brand focus-visible:outline-focus flex min-h-11 shrink-0 items-center rounded-xl border px-3.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="browser-only-install border-line text-ink hover:border-brand hover:text-brand focus-visible:outline-focus hidden min-h-11 shrink-0 items-center rounded-xl border px-3.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 sm:flex"
               >
                 Install app
               </Link>
               <Link
                 href="/settings/members"
-                className="border-line hover:border-brand focus-visible:outline-focus flex min-h-11 shrink-0 items-center rounded-lg border px-3 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="border-line hover:border-brand focus-visible:outline-focus flex min-h-11 shrink-0 items-center rounded-lg border px-2.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 sm:px-3"
               >
                 Manage household
               </Link>
