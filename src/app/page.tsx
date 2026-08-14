@@ -11,7 +11,11 @@ const contract = [
 
 export default function Home() {
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen px-5 py-5 sm:px-8 sm:py-8 lg:px-12">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-h-screen px-5 py-5 sm:px-8 sm:py-8 lg:px-12"
+    >
       <div className="border-line bg-surface mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-[88rem] flex-col overflow-hidden rounded-[1.5rem] border shadow-[0_24px_80px_rgba(18,44,33,0.12)] sm:min-h-[calc(100vh-4rem)]">
         <header className="border-line flex items-center justify-between border-b px-5 py-4 sm:px-8">
           <Link

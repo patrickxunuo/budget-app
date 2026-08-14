@@ -17,7 +17,11 @@ export const metadata: Metadata = {
  */
 export default function OfflinePage() {
   return (
-    <main id="main-content" tabIndex={-1} className="grid min-h-screen place-items-center px-5">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="grid min-h-screen place-items-center px-5"
+    >
       <div className="border-line bg-surface w-full max-w-lg rounded-2xl border p-7">
         <p className="font-utility text-muted flex items-center gap-2 text-[0.68rem] tracking-[0.14em] uppercase">
           <svg

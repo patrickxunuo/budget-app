@@ -13,7 +13,11 @@ export const metadata: Metadata = {
 /** Public: a member may need these instructions before they can sign in. */
 export default function InstallPage() {
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen px-5 py-5 sm:px-8 sm:py-8 lg:px-12">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-h-screen px-5 py-5 sm:px-8 sm:py-8 lg:px-12"
+    >
       <div className="border-line bg-surface mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-[64rem] flex-col overflow-hidden rounded-[1.5rem] border shadow-[0_24px_80px_rgba(18,44,33,0.12)] sm:min-h-[calc(100vh-4rem)]">
         <header className="border-line flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4 sm:px-8">
           <Link

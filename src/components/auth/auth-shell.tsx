@@ -13,7 +13,11 @@ export function AuthShell({
   children: React.ReactNode;
 }>) {
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen px-4 py-4 sm:px-8 sm:py-8">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-h-screen px-4 py-4 sm:px-8 sm:py-8"
+    >
       <section className="border-line bg-surface mx-auto grid min-h-[calc(100vh-2rem)] max-w-6xl overflow-hidden rounded-[1.75rem] border shadow-[0_26px_90px_rgba(18,44,33,.14)] sm:min-h-[calc(100vh-4rem)] lg:grid-cols-[.78fr_1.22fr]">
         <aside className="bg-ink text-panel relative flex min-h-72 flex-col justify-between overflow-hidden p-7 sm:p-10 lg:p-12">
           <div className="bg-mineral/20 absolute -top-24 -right-24 size-80 rounded-full blur-3xl" />

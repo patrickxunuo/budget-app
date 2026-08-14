@@ -52,7 +52,11 @@ export default async function TransactionsPage({
       currency: "CAD",
     }).format(cents / 100);
   return (
-    <main id="main-content" tabIndex={-1} className="px-5 py-9 sm:px-8 lg:px-12 lg:py-14">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="px-5 py-9 sm:px-8 lg:px-12 lg:py-14"
+    >
       <div className="mx-auto max-w-7xl">
         <header className="mb-9 grid gap-5 lg:grid-cols-[1fr_22rem] lg:items-end">
           <div>
