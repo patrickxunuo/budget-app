@@ -636,3 +636,216 @@ describe("GH-8 manual/cash accounting acceptance", () => {
     });
   });
 });
+
+describe("GH-14 accounting coverage top-ups (F6)", () => {
+  it("DOM-015 does not let a removed replacement supersede its pending predecessor", () => {
+    // A provider tombstone is a retraction of the replacement, not a promise
+    // that the pending charge went away. Superseding on it would silently
+    // erase live spending from every summary.
+    const pending = transaction({
+      id: "pending",
+      providerTransactionId: "provider-pending",
+      amountCents: 2_000,
+      pending: true,
+    });
+    const removedReplacement = transaction({
+      id: "posted-removed",
+      providerTransactionId: "provider-posted",
+      pendingTransactionId: "provider-pending",
+      amountCents: 2_000,
+      pending: false,
+      removed: true,
+    });
+    const lines = reconcilePendingTransactions([pending, removedReplacement]);
+
+    expect(lines.find((line) => line.id === "pending")?.inclusion).toBe(
+      "included",
+    );
+    expect(lines.find((line) => line.id === "posted-removed")?.inclusion).toBe(
+      "excluded",
+    );
+    expect(calculateSummary([pending, removedReplacement])).toMatchObject({
+      spendingCents: 2_000,
+      pendingCount: 1,
+      includedCount: 1,
+      excludedCount: 0,
+    });
+  });
+
+  it("DOM-016 does not let a still-pending row supersede another pending row", () => {
+    const pending = transaction({
+      id: "pending",
+      providerTransactionId: "provider-pending",
+      amountCents: 2_000,
+      pending: true,
+    });
+    const pendingReplacement = transaction({
+      id: "pending-replacement",
+      providerTransactionId: "provider-replacement",
+      pendingTransactionId: "provider-pending",
+      amountCents: 2_000,
+      pending: true,
+    });
+
+    expect(
+      reconcilePendingTransactions([pending, pendingReplacement]).map(
+        (line) => line.inclusion,
+      ),
+    ).toEqual(["included", "included"]);
+    expect(calculateSummary([pending, pendingReplacement])).toMatchObject({
+      spendingCents: 4_000,
+      pendingCount: 2,
+      includedCount: 2,
+    });
+  });
+
+  it("DOM-017 converts canonical CAD decimals to safe integer cents at the boundary", () => {
+    const entry = (amount: string) =>
+      manualEntryToAccountingTransaction({
+        id: "boundary",
+        amount,
+        currencyCode: "CAD",
+        entryDate: "2026-08-12",
+        description: "Boundary",
+        kind: "spending",
+        categoryId: "groceries",
+        deletedAt: null,
+      }).amountCents;
+
+    expect(entry("0")).toBe(0);
+    expect(entry("12.5")).toBe(1_250);
+    expect(entry("12.50")).toBe(1_250);
+    expect(entry("-0.01")).toBe(-1);
+    expect(entry("999999999999.99")).toBe(99_999_999_999_999);
+    expect(Number.isSafeInteger(entry("999999999999.99"))).toBe(true);
+  });
+
+  it("DOM-018 rejects every non-canonical CAD decimal instead of rounding it", () => {
+    for (const amount of [
+      "1.005",
+      "12.",
+      "1,234.00",
+      " 12.50",
+      "1e3",
+      "0x10",
+      "1.2.3",
+      "+5.00",
+      "9999999999999.99",
+      "",
+      "NaN",
+      "Infinity",
+    ]) {
+      expect(
+        () =>
+          manualEntryToAccountingTransaction({
+            id: "boundary",
+            amount,
+            currencyCode: "CAD",
+            entryDate: "2026-08-12",
+            description: "Boundary",
+            kind: "spending",
+            categoryId: "groceries",
+            deletedAt: null,
+          }),
+        `${JSON.stringify(amount)} must not be accepted as CAD`,
+      ).toThrow();
+    }
+  });
+
+  it("DOM-019 refuses to overflow rather than silently losing cents", () => {
+    const huge = Number.MAX_SAFE_INTEGER - 10;
+
+    expect(() =>
+      calculateSummary([
+        transaction({ id: "huge-a", amountCents: huge }),
+        transaction({ id: "huge-b", amountCents: huge }),
+      ]),
+    ).toThrow(/safe integer/);
+  });
+
+  it("DOM-020 keeps Plaid's source convention at the ledger boundary", () => {
+    const debit = plaidViewToAccountingTransaction({
+      id: "debit",
+      amount: 42.5,
+      transactionDate: "2026-08-12",
+      pending: false,
+      name: "Northern Grocer",
+      originalPlaidCategory: {
+        primary: "FOOD_AND_DRINK",
+        detailed: "FOOD_AND_DRINK_GROCERIES",
+      },
+      effectiveCategory: { id: "groceries" },
+    });
+    const credit = plaidViewToAccountingTransaction({
+      id: "credit",
+      amount: -42.5,
+      transactionDate: "2026-08-12",
+      pending: false,
+      name: "Payroll",
+      originalPlaidCategory: {
+        primary: "INCOME",
+        detailed: "INCOME_PAYROLL",
+      },
+      effectiveCategory: { id: "salary" },
+    });
+
+    // Plaid reports outflow as a positive amount; the domain flips it once, at
+    // this boundary, and nowhere else.
+    expect(debit.amountCents).toBe(4_250);
+    expect(normalizeCashFlowCents(debit)).toBe(-4_250);
+    expect(classifyTransaction(debit)).toBe("spending");
+
+    expect(credit.amountCents).toBe(-4_250);
+    expect(normalizeCashFlowCents(credit)).toBe(4_250);
+    expect(classifyTransaction(credit)).toBe("income");
+
+    expect(calculateSummary([debit, credit])).toMatchObject({
+      incomeCents: 4_250,
+      spendingCents: 4_250,
+      netFlowCents: 0,
+      categorySpendingCents: { groceries: 4_250 },
+    });
+  });
+
+  it("DOM-021 nets a refund that exceeds the period's spending below zero", () => {
+    const refundOnly = transaction({
+      id: "standalone-refund",
+      amountCents: -2_500,
+      categoryId: "groceries",
+      providerCategoryPrimary: "GENERAL_MERCHANDISE",
+      providerCategoryDetailed: "GENERAL_MERCHANDISE_REFUND",
+    });
+
+    expect(calculateSummary([refundOnly])).toMatchObject({
+      incomeCents: 0,
+      spendingCents: -2_500,
+      refundsCents: 2_500,
+      netFlowCents: 2_500,
+      includedCount: 1,
+      categorySpendingCents: { groceries: -2_500 },
+    });
+  });
+
+  it("DOM-022 keeps a categorized transfer out of category spending and net flow", () => {
+    const transfer = transaction({
+      id: "categorized-transfer",
+      amountCents: 25_000,
+      categoryId: "savings",
+      providerCategoryPrimary: "TRANSFER_OUT",
+    });
+    const purchase = transaction({
+      id: "purchase",
+      amountCents: 1_000,
+      categoryId: "savings",
+    });
+
+    expect(calculateSummary([transfer, purchase])).toMatchObject({
+      incomeCents: 0,
+      spendingCents: 1_000,
+      transferCents: 25_000,
+      netFlowCents: -1_000,
+      includedCount: 1,
+      categorySpendingCents: { savings: 1_000 },
+    });
+  });
+});

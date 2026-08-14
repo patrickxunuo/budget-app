@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { logServerEvent } from "@/lib/security/log";
 
 export type AuthDeletionReason =
   "account_deletion" | "workspace_deletion" | "orphaned_auth_identity";
@@ -37,7 +38,10 @@ export async function enqueueAuthDeletion(
       },
       { onConflict: "auth_user_id" },
     );
-  if (error) console.error("Could not enqueue Auth identity deletion", error);
+  if (error)
+    logServerEvent("error", "Could not enqueue Auth identity deletion", {
+      error,
+    });
   return !error;
 }
 

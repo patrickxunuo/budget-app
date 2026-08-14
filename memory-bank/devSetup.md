@@ -43,7 +43,7 @@ pnpm build
 pnpm smoke:plaid
 ```
 
-`pnpm smoke:plaid` exercises every live Plaid call against Sandbox and refuses to run unless `PLAID_ENV=sandbox`. Run it after changing Plaid request construction or rotating credentials; the deterministic provider cannot detect live contract drift.
+`pnpm smoke:plaid` exercises every live Plaid call against Sandbox and refuses to run unless `PLAID_ENV=sandbox`. Run it after changing Plaid request construction or rotating credentials; the deterministic provider cannot detect live contract drift. It is the runnable counterpart of [`docs/production-smoke-checklist.md`](../docs/production-smoke-checklist.md), whose numbered steps it mirrors; the checklist is what you follow by hand before a Production or Trial cutover.
 
 ## Quick Start
 
@@ -66,6 +66,26 @@ Run `dev-stop.ps1` or `pnpm db:stop`. Stop the foreground Next process with Ctrl
 ### What the command sets up and tears down
 
 Playwright starts the Next application on port 3100 through its `webServer` configuration and tears it down after the suite. Supabase must already be running and `.env.local` (or the command environment) must point at it. Auth/Plaid journeys skip when their named fixture credentials are absent. GH-4 deterministic Plaid journeys require `PLAID_E2E_PROVIDER=deterministic`, Sandbox, loopback `APP_URL`, and active-member `E2E_PLAID_MEMBER_EMAIL` / `E2E_PLAID_MEMBER_PASSWORD` credentials.
+
+### Fixtures and `E2E_REQUIRED_FIXTURES`
+
+Every `E2E_*` gate resolves through `e2e/support/fixtures.ts`; no spec reads the environment directly. Each fixture family declares the variables it needs and any precondition. Most historical fallback chains are preserved there — `categories`, for example, still falls back to `E2E_PLAID_MEMBER_PASSWORD` — but `dashboard`, `manual-entries`, and `plaid-connection` deliberately no longer fall back. They need financial data or a linked Item that a seeded identity does not supply, and with the fallback in place a seeded run marked them "provisioned" and then failed. A family claiming to be provisioned when its specs cannot pass is the same false confidence as a silent skip.
+
+An unprovisioned family skips by default, which is why a green run is not by itself evidence of coverage. `E2E_REQUIRED_FIXTURES` is the opt-in that makes absence loud: list families comma-separated (or `all`), and any listed family that is not provisioned **fails** the run naming the exact missing variables, instead of skipping. The end-of-run `globalTeardown` prints the full inventory — family, provisioned, required — and re-asserts the requirement so a family swallowed by an outer gate still fails.
+
+### Seeding an owner
+
+```powershell
+pnpm seed:e2e
+```
+
+`pnpm db:reset` and `pnpm test:db` both end with a database holding no `auth.users` rows, and the application is invite-only, so no browser journey can sign in until an owner exists. `pnpm seed:e2e` creates one active owner and prints (or, under CI, exports to `$GITHUB_ENV`) the credentials that provision the `plaid`, `auth-owner`, and `categories` families. It reads the process environment first and falls back to `.env.local`, is idempotent, and refuses any non-loopback Supabase URL so it can never mint an owner in a hosted project. It seeds an identity, not financial data.
+
+### What CI runs
+
+CI seeds an owner after `pnpm test:db` and sets `E2E_REQUIRED_FIXTURES=plaid,auth-owner,categories,budgets-service-cleanup` — the four families it genuinely provisions. It also sets `E2E_SERVER_MODE=dev`, because the deterministic Plaid journeys are unreachable against a production build: the client guard in `src/components/plaid/plaid-link-flow.tsx` is a compile-time `NODE_ENV !== "production"` check, and `next start` is production. That is a harness choice and weakens no product control — `pnpm build` still proves the production build compiles, and `getPlaidProvider()` still requires Sandbox on a loopback origin off Vercel.
+
+Note that `PLAID_E2E_PROVIDER` and `PLAID_ENV` must reach the **Playwright process**, not just the Next server. Next loads `.env.local` for the server, but the test runner does not, so a local run needs them exported before the fixture gate will see them.
 
 ### Last verified
 

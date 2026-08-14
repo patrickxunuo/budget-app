@@ -1,24 +1,19 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import {
+  fixtureCredentials,
+  fixtureEnv,
+  requireFixture,
+} from "./support/fixtures";
 
-const memberEmail = process.env.E2E_DATA_LIFECYCLE_MEMBER_EMAIL;
-const memberPassword = process.env.E2E_DATA_LIFECYCLE_MEMBER_PASSWORD;
-const ownerEmail = process.env.E2E_DATA_LIFECYCLE_OWNER_EMAIL;
-const ownerPassword = process.env.E2E_DATA_LIFECYCLE_OWNER_PASSWORD;
-const disposableMemberEmail =
-  process.env.E2E_DATA_LIFECYCLE_DISPOSABLE_MEMBER_EMAIL;
-const disposableMemberPassword =
-  process.env.E2E_DATA_LIFECYCLE_DISPOSABLE_MEMBER_PASSWORD;
-const disposableWorkspaceName =
-  process.env.E2E_DATA_LIFECYCLE_DISPOSABLE_WORKSPACE_NAME;
-const allowDestructive =
-  process.env.E2E_DATA_LIFECYCLE_ALLOW_DESTRUCTIVE === "1";
-
-function requireCredentials(email?: string, password?: string) {
-  test.skip(
-    !email || !password,
-    "Requires GH-12 real-backend fixture credentials via E2E_DATA_LIFECYCLE_*.",
-  );
-}
+const member = fixtureCredentials("data-lifecycle");
+const owner = fixtureCredentials("data-lifecycle-owner");
+const disposableMember = fixtureCredentials("data-lifecycle-destructive");
+const disposableWorkspaceOwner = fixtureCredentials(
+  "data-lifecycle-workspace-destructive",
+);
+const disposableWorkspaceName = fixtureEnv(
+  "data-lifecycle-workspace-destructive",
+).workspaceName;
 
 async function signIn(page: Page, email?: string, password?: string) {
   if (!email || !password) return;
@@ -39,19 +34,18 @@ async function confirmPassword(page: Page, password?: string) {
   if (!password) return;
   await page.getByLabel("Current password").fill(password);
   await page.getByRole("button", { name: /confirm password/i }).click();
-  // Scoped to <main>: the shell's connectivity and update live regions sit
-  // outside it, and an unscoped status role is ambiguous (GH-13).
-  await expect(page.getByRole("main").getByRole("status")).toContainText(
-    /confirmed|15 minutes/i,
-  );
+  // Scoped to this action's own feedback region; see the note in auth.spec.ts.
+  await expect(
+    page.getByTestId("password-confirmation-feedback"),
+  ).toContainText(/confirmed|15 minutes/i);
 }
 
 test.describe("GH-12 data portability and lifecycle", () => {
   test("FE-001 applied Family filters produce a real scoped CSV download with a clear filename", async ({
     page,
   }, testInfo) => {
-    requireCredentials(memberEmail, memberPassword);
-    await signIn(page, memberEmail, memberPassword);
+    requireFixture("data-lifecycle");
+    await signIn(page, member?.email, member?.password);
     await page.goto("/dashboard");
 
     await page.getByTestId("dashboard-scope-family").click();
@@ -78,8 +72,8 @@ test.describe("GH-12 data portability and lifecycle", () => {
   test("FE-001 Personal export preserves exact custom range and never offers Combined", async ({
     page,
   }) => {
-    requireCredentials(memberEmail, memberPassword);
-    await signIn(page, memberEmail, memberPassword);
+    requireFixture("data-lifecycle");
+    await signIn(page, member?.email, member?.password);
     await page.goto("/dashboard");
     await page.getByTestId("dashboard-scope-personal").click();
     await page.getByTestId("dashboard-period-custom").click();
@@ -102,8 +96,8 @@ test.describe("GH-12 data portability and lifecycle", () => {
   test("FE-002 invalid destructive confirmations remain blocked without backend mutation", async ({
     page,
   }, testInfo) => {
-    requireCredentials(ownerEmail, ownerPassword);
-    await signIn(page, ownerEmail, ownerPassword);
+    requireFixture("data-lifecycle-owner");
+    await signIn(page, owner?.email, owner?.password);
     await page.goto("/settings/members");
 
     await page
@@ -121,9 +115,9 @@ test.describe("GH-12 data portability and lifecycle", () => {
   test("FE-003 owner danger zone explains provider-first retries, member notification, and admin backups on mobile", async ({
     page,
   }, testInfo) => {
-    requireCredentials(ownerEmail, ownerPassword);
+    requireFixture("data-lifecycle-owner");
     await page.setViewportSize({ width: 390, height: 844 });
-    await signIn(page, ownerEmail, ownerPassword);
+    await signIn(page, owner?.email, owner?.password);
     await page.goto("/settings/members");
 
     const danger = page.getByTestId("data-lifecycle-danger-zone");
@@ -147,19 +141,16 @@ test.describe("GH-12 data portability and lifecycle", () => {
   test("FE-004 unconfirmed provider revocation stays retryable without exposing credentials", async ({
     page,
   }, testInfo) => {
-    test.skip(
-      !allowDestructive || !disposableMemberEmail || !disposableMemberPassword,
-      "Requires an explicitly disposable member fixture with an Item configured to return an unconfirmed revocation.",
-    );
-    await signIn(page, disposableMemberEmail, disposableMemberPassword);
+    requireFixture("data-lifecycle-destructive");
+    await signIn(page, disposableMember?.email, disposableMember?.password);
     await page.goto("/settings/members");
-    await confirmPassword(page, disposableMemberPassword);
+    await confirmPassword(page, disposableMember?.password);
     await page
       .getByTestId("account-deletion-confirmation")
       .fill("DELETE MY ACCOUNT");
     await page.getByTestId("delete-account").click();
 
-    const feedback = page.getByRole("main").getByRole("status");
+    const feedback = page.getByTestId("account-deletion-feedback");
     await expect(feedback).toContainText(/could not.*confirm|retry/i);
     await expect(feedback).not.toContainText(/access[_ -]?token|smtp|secret/i);
     await expect(page.getByTestId("account-deletion-confirmation")).toHaveValue(
@@ -172,16 +163,14 @@ test.describe("GH-12 data portability and lifecycle", () => {
   test("FE-003 confirmed disposable owner workspace deletion returns the installation to setup", async ({
     page,
   }) => {
-    test.skip(
-      !allowDestructive ||
-        !ownerEmail ||
-        !ownerPassword ||
-        !disposableWorkspaceName,
-      "Requires an explicitly disposable owner/workspace fixture and E2E_DATA_LIFECYCLE_ALLOW_DESTRUCTIVE=1.",
+    requireFixture("data-lifecycle-workspace-destructive");
+    await signIn(
+      page,
+      disposableWorkspaceOwner?.email,
+      disposableWorkspaceOwner?.password,
     );
-    await signIn(page, ownerEmail, ownerPassword);
     await page.goto("/settings/members");
-    await confirmPassword(page, ownerPassword);
+    await confirmPassword(page, disposableWorkspaceOwner?.password);
     await page
       .getByLabel(/type.*delete the entire workspace/i)
       .fill(disposableWorkspaceName!);

@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import type { PlaidApiActor } from "@/lib/auth/api";
 import { getServerEnv } from "@/lib/env/server";
+import { logServerEvent } from "@/lib/security/log";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { collectAllPages } from "@/lib/supabase/pagination";
 import {
@@ -351,10 +352,14 @@ export async function activatePlaidReview(
           .eq("plaid_item_id", result.itemId)
           .eq("provider_account_id", row.provider_account_id);
         if (balanceError) {
-          console.warn("Activated Plaid balance cache could not be persisted", {
-            itemId: result.itemId,
-            providerAccountId: row.provider_account_id,
-          });
+          logServerEvent(
+            "warn",
+            "Activated Plaid balance cache could not be persisted",
+            {
+              itemId: result.itemId,
+              providerAccountId: row.provider_account_id,
+            },
+          );
         }
       }),
   );
@@ -413,7 +418,8 @@ export async function revokeDepartingMemberPlaidItems(
     } catch {
       // Continue to fail closed in the database. The caller may proceed with
       // membership cleanup, but this Item can never synchronize again.
-      console.warn(
+      logServerEvent(
+        "warn",
         "Plaid Item revocation did not receive provider confirmation",
         { itemId: item.id },
       );

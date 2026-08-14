@@ -254,6 +254,98 @@ select results_eq(
   'GH-9 DB-002 rejected direct mutation leaves the service-controlled balance unchanged'
 );
 
+-- GH-14 DB-001: the complete six-role matrix over every Personal-bearing
+-- table at once. Per-table denials are asserted above; this proves no single
+-- table was forgotten, which is how a privacy boundary actually fails.
+--
+-- Roles: Personal owner (...0002), Family owner (...0001), departed member
+-- (...0003, status inactive), invited-but-unaccepted member (...0004),
+-- unrelated user (...0005), and the trusted service role.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-000000000002","role":"authenticated"}',true);
+select results_eq(
+  $$select (select count(*) from public.categories where id='c0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.accounts where id='e0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.transactions where id='f0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.transaction_metadata where transaction_id='f0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.manual_entries where id='f2000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.merchant_rules where id='f3000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.budgets where id='f4000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.audit_events where id='f1000000-0000-0000-0000-000000000002')$$,
+  array[8::bigint],
+  'GH-14 DB-001 the Personal owner reads all eight of their own Personal records'
+);
+select set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
+select results_eq(
+  $$select (select count(*) from public.categories where id='c0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.accounts where id='e0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.transactions where id='f0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.transaction_metadata where transaction_id='f0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.manual_entries where id='f2000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.merchant_rules where id='f3000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.budgets where id='f4000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.audit_events where id='f1000000-0000-0000-0000-000000000002')$$,
+  array[0::bigint],
+  'GH-14 DB-001 a Family owner cannot read another member Personal data through any ordinary application path'
+);
+select results_eq(
+  $$select (select count(*) from public.categories where id='c0000000-0000-0000-0000-000000000001')
+         + (select count(*) from public.accounts where id='e0000000-0000-0000-0000-000000000001')
+         + (select count(*) from public.transactions where id='f0000000-0000-0000-0000-000000000001')
+         + (select count(*) from public.audit_events where id='f1000000-0000-0000-0000-000000000001')$$,
+  array[4::bigint],
+  'GH-14 DB-001 the same Family owner still reads every shared Family record, so the denial is scope-specific'
+);
+select set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-000000000003","role":"authenticated"}',true);
+select results_eq(
+  $$select (select count(*) from public.categories where id='c0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.accounts where id='e0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.transactions where id='f0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.transaction_metadata where transaction_id='f0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.manual_entries where id='f2000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.merchant_rules where id='f3000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.budgets where id='f4000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.audit_events where id='f1000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.categories where id='c0000000-0000-0000-0000-000000000001')
+         + (select count(*) from public.accounts where id='e0000000-0000-0000-0000-000000000001')
+         + (select count(*) from public.transactions where id='f0000000-0000-0000-0000-000000000001')$$,
+  array[0::bigint],
+  'GH-14 DB-001 a departed member reads neither Personal nor Family records after their membership went inactive'
+);
+select set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-000000000004","role":"authenticated"}',true);
+select results_eq(
+  $$select (select count(*) from public.manual_entries where id='f2000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.budgets where id='f4000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.transactions where id='f0000000-0000-0000-0000-000000000001')$$,
+  array[0::bigint],
+  'GH-14 DB-001 an invited but unaccepted member reads nothing'
+);
+select set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-000000000005","role":"authenticated"}',true);
+select results_eq(
+  $$select (select count(*) from public.manual_entries where id='f2000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.budgets where id='f4000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.transactions where id='f0000000-0000-0000-0000-000000000001')$$,
+  array[0::bigint],
+  'GH-14 DB-001 an unrelated authenticated user reads nothing'
+);
+
+-- The trusted server is the only caller that crosses every privacy domain,
+-- which is exactly why a service-role key must never reach a browser.
+reset role;
+set local role service_role;
+select results_eq(
+  $$select (select count(*) from public.categories where id='c0000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.manual_entries where id='f2000000-0000-0000-0000-000000000002')
+         + (select count(*) from public.budgets where id='f4000000-0000-0000-0000-000000000002')$$,
+  array[3::bigint],
+  'GH-14 DB-001 the service role reads across privacy domains and is the only role that may'
+);
+select results_eq(
+  $$select count(*)::bigint from public.workspace_memberships where profile_id='a0000000-0000-0000-0000-000000000003' and status='inactive'$$,
+  array[1::bigint],
+  'GH-14 DB-001 the departed member row is retained as inactive rather than deleted, preserving Family history'
+);
+
 reset role;
 select * from finish();
 rollback;

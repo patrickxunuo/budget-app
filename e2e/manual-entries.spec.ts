@@ -1,13 +1,8 @@
 ﻿import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { sameOriginHeaders } from "./support/api";
+import { fixtureCredentials, requireFixture } from "./support/fixtures";
 
-const memberEmail =
-  process.env.E2E_MANUAL_ENTRY_MEMBER_EMAIL ??
-  process.env.E2E_CATEGORIES_MEMBER_EMAIL ??
-  process.env.E2E_PLAID_MEMBER_EMAIL;
-const memberPassword =
-  process.env.E2E_MANUAL_ENTRY_MEMBER_PASSWORD ??
-  process.env.E2E_CATEGORIES_MEMBER_PASSWORD ??
-  process.env.E2E_PLAID_MEMBER_PASSWORD;
+const credentials = fixtureCredentials("manual-entries");
 const runSeed = Date.now().toString(36);
 
 let personalCategoryId = "";
@@ -17,17 +12,14 @@ let familyEntryId = "";
 let refundEntryId = "";
 
 function requireMemberFixture() {
-  test.skip(
-    !memberEmail || !memberPassword,
-    "Requires an active member via E2E_MANUAL_ENTRY_MEMBER_* (or category/Plaid fallback) credentials.",
-  );
+  requireFixture("manual-entries");
 }
 
 async function signIn(page: Page) {
-  if (!memberEmail || !memberPassword) return;
+  if (!credentials) return;
   await page.goto("/sign-in");
-  await page.getByLabel("Email").fill(memberEmail);
-  await page.getByLabel("Password", { exact: true }).fill(memberPassword);
+  await page.getByLabel("Email").fill(credentials.email);
+  await page.getByLabel("Password", { exact: true }).fill(credentials.password);
   await page.getByTestId("sign-in-submit").click();
   await expect(page).toHaveURL(
     /\/(?:dashboard|transactions|categories)(?:\?.*)?$/,
@@ -63,6 +55,7 @@ async function prepareCategories(page: Page, testInfo: TestInfo) {
   const personalName = `E2E Manual Personal ${testInfo.project.name} ${runSeed}`;
   const personalResponse = await page.request.post("/api/categories", {
     data: { name: personalName, color: "#477b74", scope: "personal" },
+    headers: sameOriginHeaders(page),
   });
   expect(personalResponse.status()).toBe(201);
   const personalBody = (await personalResponse.json()) as {
@@ -290,6 +283,7 @@ test.describe("GH-8 Manual/Cash ledger", () => {
         `/api/manual-entries/${refundEntryId}`,
         {
           data: { confirmed: true },
+          headers: sameOriginHeaders(page),
         },
       );
       expect(response.status()).toBe(200);

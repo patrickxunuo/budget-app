@@ -1,13 +1,9 @@
 ﻿import { expect, test, type Page, type TestInfo } from "@playwright/test";
-
-const ownerEmail = process.env.E2E_AUTH_OWNER_EMAIL;
-const ownerPassword = process.env.E2E_AUTH_OWNER_PASSWORD;
-const memberEmail = process.env.E2E_AUTH_MEMBER_EMAIL;
-const memberPassword = process.env.E2E_AUTH_MEMBER_PASSWORD;
-const validInviteToken = process.env.E2E_AUTH_VALID_INVITE_TOKEN;
-const expiredInviteToken = process.env.E2E_AUTH_EXPIRED_INVITE_TOKEN;
-const revokedInviteToken = process.env.E2E_AUTH_REVOKED_INVITE_TOKEN;
-const replayedInviteToken = process.env.E2E_AUTH_REPLAYED_INVITE_TOKEN;
+import {
+  fixtureCredentials,
+  fixtureEnv,
+  requireFixture,
+} from "./support/fixtures";
 
 async function expectNoHorizontalOverflow(page: Page) {
   const dimensions = await page.evaluate(() => ({
@@ -34,10 +30,7 @@ async function signIn(page: Page, email: string, password: string) {
 test("FE-001 first visitor completes owner setup and reaches the protected dashboard", async ({
   page,
 }, testInfo) => {
-  test.skip(
-    process.env.E2E_AUTH_ALLOW_SETUP !== "1",
-    "Requires an isolated, empty Supabase project and E2E_AUTH_ALLOW_SETUP=1.",
-  );
+  requireFixture("auth-setup");
 
   await page.goto("/setup");
   await expect(page.getByTestId("auth-form")).toBeVisible();
@@ -75,7 +68,9 @@ test("FE-002 sign-in, recovery, and reset pages are accessible and recovery does
   );
   const absentConfirmation = await recoveryStatus.textContent();
 
-  await page.getByLabel("Email").fill(ownerEmail ?? "known@example.test");
+  await page
+    .getByLabel("Email")
+    .fill(fixtureEnv("auth-owner").email ?? "known@example.test");
   await expect(page.getByTestId("recovery-submit")).toBeEnabled();
   await page.getByTestId("recovery-submit").click();
   await expect(recoveryStatus).toHaveText(absentConfirmation ?? "");
@@ -88,13 +83,13 @@ test("FE-002 sign-in, recovery, and reset pages are accessible and recovery does
 test("FE-003 invite links distinguish a joinable invitation from terminal invalid states without exposing token data", async ({
   page,
 }, testInfo) => {
-  test.skip(
-    !validInviteToken ||
-      !expiredInviteToken ||
-      !revokedInviteToken ||
-      !replayedInviteToken,
-    "Requires valid, expired, revoked, and replayed invite fixtures in the live Supabase test project.",
-  );
+  requireFixture("auth-invites");
+  const {
+    valid: validInviteToken,
+    expired: expiredInviteToken,
+    revoked: revokedInviteToken,
+    replayed: replayedInviteToken,
+  } = fixtureEnv("auth-invites");
   if (
     !validInviteToken ||
     !expiredInviteToken ||
@@ -126,12 +121,16 @@ test("FE-003 invite links distinguish a joinable invitation from terminal invali
 test("FE-004 owner creates, copies, and revokes invitations and sees guarded membership operations", async ({
   page,
 }) => {
-  test.skip(!ownerEmail || !ownerPassword, "Requires live owner credentials.");
-  if (!ownerEmail || !ownerPassword) return;
-  await signIn(page, ownerEmail, ownerPassword);
+  requireFixture("auth-owner");
+  const owner = fixtureCredentials("auth-owner");
+  if (!owner) return;
+  await signIn(page, owner.email, owner.password);
   await page.goto("/settings/members");
   await expect(page.getByTestId("membership-list")).toBeVisible();
-  await expect(page.getByTestId("invitation-list")).toBeVisible();
+  // Attached rather than visible: with no outstanding invitations this is an
+  // empty <ul>, which has zero height and is therefore "hidden" to Playwright.
+  // The list gaining a row is asserted below, after one is created.
+  await expect(page.getByTestId("invitation-list")).toBeAttached();
   await expect(page.getByTestId("invitation-create-form")).toBeVisible();
 
   await page
@@ -149,23 +148,23 @@ test("FE-004 owner creates, copies, and revokes invitations and sees guarded mem
     .getByRole("button", { name: /revoke/i })
     .last()
     .click();
-  // Scoped to <main>: the shell's connectivity and update live regions sit
-  // outside it, and an unscoped status role is ambiguous (GH-13).
-  await expect(page.getByRole("main").getByRole("status")).toContainText(
-    /revoked/i,
-  );
+  // Scoped to this action's own feedback region. Scoping to <main> is not
+  // enough: the console keeps one live region per action, and the <output>
+  // holding the invite URL carries an implicit status role too, so three
+  // elements matched and strict mode rejected it.
+  await expect(
+    page.getByTestId("invitation-revocation-feedback"),
+  ).toContainText(/revoked/i);
   await expect(page.getByTestId("password-confirmation")).toBeAttached();
 });
 
 test("FE-005 member can leave but cannot see or invoke owner-only controls", async ({
   page,
 }) => {
-  test.skip(
-    !memberEmail || !memberPassword,
-    "Requires live member credentials.",
-  );
-  if (!memberEmail || !memberPassword) return;
-  await signIn(page, memberEmail, memberPassword);
+  requireFixture("auth-member");
+  const member = fixtureCredentials("auth-member");
+  if (!member) return;
+  await signIn(page, member.email, member.password);
   await page.goto("/settings/members");
   await expect(page.getByTestId("membership-list")).toBeVisible();
   await expect(
@@ -190,11 +189,8 @@ test("API-011 a session older than 30 days is signed out before protected conten
   context,
   page,
 }) => {
-  const serializedCookies = process.env.E2E_AUTH_EXPIRED_SESSION_COOKIES;
-  test.skip(
-    !serializedCookies,
-    "Requires E2E_AUTH_EXPIRED_SESSION_COOKIES from a live user whose absolute session start is over 30 days old.",
-  );
+  requireFixture("auth-expired-session");
+  const serializedCookies = fixtureEnv("auth-expired-session").cookies;
   if (!serializedCookies) return;
   const cookies = JSON.parse(serializedCookies) as Parameters<
     typeof context.addCookies
@@ -225,14 +221,19 @@ test("FE-007 desktop and mobile auth surfaces avoid overflow, expose focus, and 
     await capture(page, testInfo, name);
   }
 
+  // Both blocks are opportunistic extras rather than gates: this case must keep
+  // running with no fixtures at all, so it reads the values without requiring
+  // the family.
+  const validInviteToken = fixtureEnv("auth-invites").valid;
   if (validInviteToken) {
     await page.goto(`/invite/${validInviteToken}`);
     await expectNoHorizontalOverflow(page);
     await capture(page, testInfo, "invite-responsive");
   }
 
-  if (ownerEmail && ownerPassword) {
-    await signIn(page, ownerEmail, ownerPassword);
+  const owner = fixtureCredentials("auth-owner");
+  if (owner) {
+    await signIn(page, owner.email, owner.password);
     await page.goto("/settings/members");
     await expectNoHorizontalOverflow(page);
     await capture(page, testInfo, "member-settings-responsive");

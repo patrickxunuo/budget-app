@@ -21,6 +21,7 @@ import type {
   SyncStatus,
   SyncTrigger,
 } from "@/lib/plaid/types";
+import { logServerEvent } from "@/lib/security/log";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const syncClaimSchema = z.object({
@@ -157,11 +158,14 @@ async function recordFailure(
       .eq("plaid_item_id", itemId)
       .eq("current_request_id", requestId);
     if (releaseError) {
-      console.error("Plaid sync claim release failed", { itemId, requestId });
+      logServerEvent("error", "Plaid sync claim release failed", {
+        itemId,
+        requestId,
+      });
       throw new Error("sync failure state could not be persisted");
     }
   }
-  console.warn("Plaid sync failed", {
+  logServerEvent("warn", "Plaid sync failed", {
     itemId,
     requestId,
     providerRequestId: failure.providerRequestId,
@@ -275,7 +279,7 @@ export async function syncPlaidItem(
           removed: number;
           lastSuccessAt: string;
         };
-        console.info("Plaid sync completed", {
+        logServerEvent("info", "Plaid sync completed", {
           itemId,
           requestId,
           providerRequestId: providerRequestIds.at(-1) ?? null,
@@ -302,7 +306,7 @@ export async function syncPlaidItem(
         } catch {
           // Transaction sync has already committed. Balance refresh is a
           // separately retryable provider cache and must not falsify success.
-          console.warn("Plaid account balance cache refresh failed", {
+          logServerEvent("warn", "Plaid account balance cache refresh failed", {
             itemId,
             requestId,
           });

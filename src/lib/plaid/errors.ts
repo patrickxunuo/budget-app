@@ -1,5 +1,7 @@
 ﻿import "server-only";
 
+import { logServerEvent } from "@/lib/security/log";
+
 export class PlaidFlowError extends Error {
   constructor(
     public readonly status: 400 | 403 | 409 | 410 | 422 | 502,
@@ -69,7 +71,7 @@ export function sanitizedPlaidFailure(
       "The initial transaction import could not finish. Please try again.",
   } as const;
   if (cause !== undefined) {
-    console.error("Plaid flow failed", {
+    logServerEvent("error", "Plaid flow failed", {
       operation,
       ...describeCause(cause),
     });

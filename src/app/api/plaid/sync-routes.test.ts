@@ -3,11 +3,14 @@
 vi.mock("server-only", () => ({}));
 
 const state = vi.hoisted(() => ({ cronSecret: "cron-secret-value" }));
-const db = vi.hoisted(() => ({ maybeSingle: vi.fn() }));
+const db = vi.hoisted(() => ({ maybeSingle: vi.fn(), rpc: vi.fn() }));
 
 vi.mock("@/lib/env/server", () => ({
   getServerEnv: () => ({ CRON_SECRET: state.cronSecret }),
 }));
+// `rpc` backs the GH-14 rate limiter. It has to be present: the limiter fails
+// closed, so an admin client without it turns every webhook assertion below
+// into a 429 rather than the status under test.
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
     from: () => ({
@@ -17,6 +20,7 @@ vi.mock("@/lib/supabase/admin", () => ({
         }),
       }),
     }),
+    rpc: db.rpc,
   }),
 }));
 vi.mock("@/lib/auth/api", () => {
@@ -82,6 +86,10 @@ function request(path: string, init: RequestInit & { json?: unknown } = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   db.maybeSingle.mockResolvedValue({ data: { id: itemId }, error: null });
+  db.rpc.mockResolvedValue({
+    data: [{ allowed: true, remaining: 599, retry_after_seconds: 0 }],
+    error: null,
+  });
   vi.mocked(requirePlaidApiActor).mockResolvedValue(actor);
   vi.mocked(syncService.verifyPlaidWebhook).mockResolvedValue(syncPayload);
   vi.mocked(syncService.handlePlaidWebhook).mockResolvedValue({
@@ -178,6 +186,42 @@ describe("GH-5 Plaid sync route acceptance", () => {
       code: "invalid_webhook_payload",
     });
     expect(syncService.syncPlaidItem).not.toHaveBeenCalled();
+  });
+
+  it("API-014 rejects a rate-limited webhook with 429 and Retry-After, without verifying it", async () => {
+    db.rpc.mockResolvedValue({
+      data: [{ allowed: false, remaining: 0, retry_after_seconds: 42 }],
+      error: null,
+    });
+    const response = await webhook(
+      request("/api/plaid/webhook", {
+        method: "POST",
+        headers: { "Plaid-Verification": "signed-es256-jwt" },
+        body: JSON.stringify(syncPayload),
+      }),
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("42");
+    expect(syncService.handlePlaidWebhook).not.toHaveBeenCalled();
+    expect(syncService.syncPlaidItem).not.toHaveBeenCalled();
+  });
+
+  it("API-015 fails closed when the rate-limit counter is unavailable", async () => {
+    db.rpc.mockResolvedValue({
+      data: null,
+      error: { message: "counter unavailable" },
+    });
+    const response = await webhook(
+      request("/api/plaid/webhook", {
+        method: "POST",
+        headers: { "Plaid-Verification": "signed-es256-jwt" },
+        body: JSON.stringify(syncPayload),
+      }),
+    );
+
+    expect(response.status).toBe(429);
+    expect(syncService.handlePlaidWebhook).not.toHaveBeenCalled();
   });
 
   it.each([

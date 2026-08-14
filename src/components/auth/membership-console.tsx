@@ -21,10 +21,25 @@ type Member = {
   display_name: string;
 };
 type Invite = { id: string; email: string; expires_at: string };
-function Feedback({ state }: { state: AuthActionState }) {
+/**
+ * `testId` is required rather than optional on purpose. The console renders one
+ * of these per action, so several can be live at once, and `role="status"` alone
+ * is then ambiguous — a browser assertion scoped only to `<main>` matches every
+ * open feedback region plus the `<output>` holding the invite URL, which carries
+ * an implicit `status` role of its own. Naming each region is what lets a spec
+ * assert on the one action it just performed.
+ */
+function Feedback({
+  state,
+  testId,
+}: {
+  state: AuthActionState;
+  testId: string;
+}) {
   if (state.status === "idle") return null;
   return (
     <p
+      data-testid={testId}
       role="status"
       aria-live="polite"
       className={
@@ -199,8 +214,8 @@ export function MembershipConsole({
             </li>
           ))}
         </ul>
-        <Feedback state={transferState} />
-        <Feedback state={removeState} />
+        <Feedback state={transferState} testId="ownership-transfer-feedback" />
+        <Feedback state={removeState} testId="member-removal-feedback" />
       </section>
 
       {isOwner && (
@@ -233,7 +248,7 @@ export function MembershipConsole({
               {invitePending ? "Creating…" : "Create link"}
             </button>
           </form>
-          <Feedback state={inviteState} />
+          <Feedback state={inviteState} testId="invitation-feedback" />
           {createdInviteUrl && (
             <div>
               <output
@@ -268,7 +283,10 @@ export function MembershipConsole({
               </li>
             ))}
           </ul>
-          <Feedback state={revokeState} />
+          <Feedback
+            state={revokeState}
+            testId="invitation-revocation-feedback"
+          />
         </section>
       )}
 
@@ -302,7 +320,10 @@ export function MembershipConsole({
             {confirmPending ? "Checking…" : "Confirm password"}
           </button>
         </form>
-        <Feedback state={confirmState} />
+        <Feedback
+          state={confirmState}
+          testId="password-confirmation-feedback"
+        />
       </section>
 
       <section
@@ -329,7 +350,7 @@ export function MembershipConsole({
                 {leavePending ? "Leaving…" : "Leave workspace"}
               </button>
             </form>
-            <Feedback state={leaveState} />
+            <Feedback state={leaveState} testId="leave-workspace-feedback" />
           </div>
           <div>
             <p className="text-muted mb-3 text-sm">
@@ -364,7 +385,7 @@ export function MembershipConsole({
                 {accountPending ? "Revoking banks…" : "Delete my account"}
               </button>
             </form>{" "}
-            <Feedback state={accountState} />
+            <Feedback state={accountState} testId="account-deletion-feedback" />
           </div>
           {isOwner && (
             <div className="lg:col-span-2">
@@ -418,7 +439,10 @@ export function MembershipConsole({
                     : "Delete family workspace"}
                 </button>
               </form>{" "}
-              <Feedback state={workspaceState} />
+              <Feedback
+                state={workspaceState}
+                testId="workspace-deletion-feedback"
+              />
             </div>
           )}
         </div>

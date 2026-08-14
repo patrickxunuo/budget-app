@@ -57,7 +57,19 @@ jobs:
             echo "PLAID_SECRET=ci-local-secret"
             echo "PLAID_TOKEN_ENCRYPTION_KEY=ci-local-token-key-000000000000000000"
             echo "PLAID_WEBHOOK_URL=http://127.0.0.1:3100/api/plaid/webhook"
+            echo "PLAID_E2E_PROVIDER=deterministic"
           } >> "$GITHUB_ENV"
+          # `pnpm test:db` ends with `supabase db reset`, so the database now
+          # holds no Auth users and the application is invite-only. Without a
+          # seeded owner every authenticated journey skips and the run reports
+          # green on coverage it never executed — the exact failure GH-14 exists
+          # to end. The script is idempotent, refuses any non-loopback Supabase,
+          # and appends the fixture credentials it provisions to $GITHUB_ENV
+          # itself. It is read from the shell variables above rather than
+          # $GITHUB_ENV, which only takes effect in later steps.
+          NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
+          SUPABASE_SERVICE_ROLE_KEY="$SECRET_KEY" \
+            pnpm seed:e2e
 
       - name: Build
         run: pnpm build
@@ -66,6 +78,31 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run end-to-end tests
+        env:
+          # The deterministic Plaid journeys cannot run against a production
+          # build. The client guard in src/components/plaid/plaid-link-flow.tsx
+          # is a compile-time `NODE_ENV !== "production"` check — deliberately,
+          # because it stops a forged link-token response from pushing a real
+          # member down the fake provider path — and `next start` is
+          # NODE_ENV=production. Driving `next dev` is therefore the only honest
+          # way to execute them. This is a harness choice and weakens no product
+          # control; the `Build` step above still proves the production build
+          # compiles, and getPlaidProvider() still refuses anything that is not
+          # Sandbox on a loopback origin off Vercel.
+          E2E_SERVER_MODE: dev
+          # Only the families this job genuinely provisions. A name here that is
+          # not provisioned fails the run instead of skipping, which is the
+          # point of GH-14 F1. Everything else stays optional and is printed as
+          # ABSENT by the end-of-run inventory, so a reader can see what did not
+          # execute. Notably excluded, because the seed creates an identity and
+          # not financial data:
+          #
+          #   dashboard          needs accounts, transactions, budget progress
+          #   plaid-connection   needs an activated multi-account Item
+          #   manual-entries     see the note in e2e/support/fixtures.ts; FE-001
+          #                      asserts Personal and Family rows on one page,
+          #                      which the scoped ledger cannot satisfy
+          E2E_REQUIRED_FIXTURES: plaid,auth-owner,categories,budgets-service-cleanup
         run: pnpm test:e2e
 
       - name: Upload Playwright report

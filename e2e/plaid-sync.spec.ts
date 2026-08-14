@@ -1,24 +1,17 @@
 ﻿import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { fixtureCredentials, requireFixture } from "./support/fixtures";
 
-const plaidE2eEnabled =
-  process.env.PLAID_E2E_PROVIDER === "deterministic" &&
-  process.env.PLAID_ENV === "sandbox";
-const memberEmail = process.env.E2E_PLAID_MEMBER_EMAIL;
-const memberPassword = process.env.E2E_PLAID_MEMBER_PASSWORD;
-const repairFixtureEnabled = process.env.E2E_PLAID_REPAIR_STATE === "1";
+const credentials = fixtureCredentials("plaid");
 
 function requireSyncFixture() {
-  test.skip(
-    !plaidE2eEnabled || !memberEmail || !memberPassword,
-    "Requires deterministic Plaid Sandbox and an active member with an activated Item.",
-  );
+  requireFixture("plaid");
 }
 
 async function signIn(page: Page) {
-  if (!memberEmail || !memberPassword) return;
+  if (!credentials) return;
   await page.goto("/sign-in");
-  await page.getByLabel("Email").fill(memberEmail);
-  await page.getByLabel("Password", { exact: true }).fill(memberPassword);
+  await page.getByLabel("Email").fill(credentials.email);
+  await page.getByLabel("Password", { exact: true }).fill(credentials.password);
   await page.getByTestId("sign-in-submit").click();
   await expect(page).toHaveURL(/\/dashboard(?:\?.*)?$/);
 }
@@ -86,10 +79,7 @@ test.describe("GH-5 Plaid transaction synchronization", () => {
   test("FE-003 repair state stays actionable and never exposes Plaid internals", async ({
     page,
   }, testInfo) => {
-    test.skip(
-      !repairFixtureEnabled,
-      "Requires E2E_PLAID_REPAIR_STATE=1 with the member Item seeded in login-repair or expiring-consent state.",
-    );
+    requireFixture("plaid-repair");
     await openAccounts(page);
     const status = page.getByTestId("plaid-sync-status").first();
     await expect(status).toContainText(

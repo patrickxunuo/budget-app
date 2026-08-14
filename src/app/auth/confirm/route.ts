@@ -4,9 +4,11 @@ import {
   establishRecoveryFlow,
   verifyRecoveryCallbackState,
 } from "@/lib/auth/session-state";
+import { consumeRateLimit, rateLimitSubject } from "@/lib/security/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const allowedDestinations = new Set(["/dashboard", "/reset-password"]);
+const confirmationFailed = "/sign-in?message=confirmation-failed";
 
 function destination(value: string | null) {
   return value && allowedDestinations.has(value) ? value : "/dashboard";
@@ -14,6 +16,14 @@ function destination(value: string | null) {
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
+  // A denial is indistinguishable from a bad link: the callback must not
+  // report that this address was the one being probed.
+  const verdict = await consumeRateLimit(
+    "auth_callback",
+    rateLimitSubject(request.headers),
+  );
+  if (!verdict.allowed)
+    return NextResponse.redirect(new URL(confirmationFailed, url.origin));
   const code = url.searchParams.get("code");
   const tokenHash = url.searchParams.get("token_hash");
   const type = url.searchParams.get("type") as EmailOtpType | null;
@@ -28,12 +38,12 @@ export async function GET(request: NextRequest) {
     }));
   else error = new Error("missing confirmation code");
 
-  let target = "/sign-in?message=confirmation-failed";
+  let target = confirmationFailed;
   if (!error) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) target = "/sign-in?message=confirmation-failed";
+    if (!user) target = confirmationFailed;
     else if (
       type === "recovery" &&
       verifyRecoveryCallbackState(url.searchParams.get("state"), user.email)
@@ -41,7 +51,7 @@ export async function GET(request: NextRequest) {
       await establishRecoveryFlow(user.id);
       target = "/reset-password";
     } else if (type === "recovery") {
-      target = "/sign-in?message=confirmation-failed";
+      target = confirmationFailed;
     } else {
       target = destination(url.searchParams.get("next"));
     }

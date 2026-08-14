@@ -6,7 +6,7 @@
 - Command: `pnpm test:e2e`
 - Test directory: `e2e/`
 - GH-3 suite: `e2e/auth.spec.ts`
-- Latest run: 36 passed, 96 fixture-dependent scenarios skipped, 0 failed (132 desktop/mobile cases). GH-13 raised the runnable count from 14 to 36 because every PWA case is fixtureless.
+- Latest run: 98 passed, 70 fixture-dependent scenarios skipped, 0 failed (168 desktop/mobile cases). GH-14 raised the runnable count from 36 to 98 by seeding an owner with `pnpm seed:e2e` and adding the fixtureless security-hardening spec; GH-13 had raised it from 14 to 36.
 - Running the suite needs roughly 2 GB of headroom. On a loaded workstation `next dev` is killed by the OS with `FATAL ERROR: Zone Allocation failed`, and every case then fails with `ERR_CONNECTION_REFUSED` from a dead web server rather than from a real defect. Run `CI=1 pnpm exec playwright test --workers=1` in that situation: `CI=1` switches the `webServer` to the production `pnpm start`, which is far lighter than the dev server.
 
 ## GH-13 Installable, Accessible, Mobile-First PWA
@@ -27,7 +27,7 @@
 - Also covered in jsdom rather than the browser: theme switching and the bottom-nav/rail swap, both of which live inside the authenticated shell.
 - The application shell mounts two always-present `role="status"` live regions (connectivity and service-worker updates). Any Playwright assertion on a page's own status message must be scoped — `page.getByRole("main").getByRole("status")`, or scoped to the form — or it is ambiguous under strict mode.
 - Latest automated verification: 486 Vitest checks across 47 files (189 new), lint, Next route generation/typecheck, and the production build are green.
-- Residual, fixture-gated: `e2e/auth.spec.ts` FE-004 and `e2e/data-lifecycle.spec.ts` can still match more than one `role="status"` inside `<main>`, because the membership console renders a `Feedback` region per non-idle action. That multiplicity predates GH-13; scoping to `<main>` removed the shell ambiguity but not this one. Give the console's feedback regions test ids when those fixtures are provisioned.
+- Resolved in GH-14. Provisioning the `auth-owner` fixture made the predicted ambiguity fire: `auth.spec.ts` FE-004 matched three elements inside `<main>` — two open `Feedback` regions plus the `<output>` holding the invite URL, which carries an implicit `status` role of its own. Each of the membership console's eight feedback regions now takes a required `testId`, and the three assertions in `auth.spec.ts` and `data-lifecycle.spec.ts` target the region for the action they just performed rather than `getByRole("status")`.
 
 ## GH-12 Data Portability and Lifecycle Controls
 
@@ -131,6 +131,10 @@ All four defects below were found by hand against real Plaid Sandbox, not by the
 
 ## Known Coverage Gaps
 
-- `.github/workflows/ci.yml` never exports `PLAID_E2E_PROVIDER`, so the guards in `e2e/plaid-link.spec.ts` and `e2e/plaid-sync.spec.ts` skip on every CI run. Tracked in GH-14.
-- Fixture-absent browser journeys skip silently rather than failing, so a green CI result overstates real coverage: 14 runnable versus 96 skipped. Tracked in GH-14.
+- Closed in GH-14. CI now exports `PLAID_E2E_PROVIDER`, seeds an owner, and runs the browser suite against `next dev` (`E2E_SERVER_MODE=dev`), so the deterministic Plaid journeys execute rather than skipping. They cannot run against a production build: the client guard in `plaid-link-flow.tsx` is a compile-time `NODE_ENV !== "production"` check.
+- Closed in GH-14. A family named in `E2E_REQUIRED_FIXTURES` that is not provisioned now fails the run naming its missing variables, and `globalTeardown` prints the full inventory either way. CI requires `plaid`, `auth-owner`, `categories`, and `budgets-service-cleanup`.
+- Still open, and now visible rather than silent: `dashboard`, `manual-entries`, and `plaid-connection` need financial data or a linked Item that the identity-only seed does not create, so 70 of 168 cases still skip. Two of them are also blocked on spec defects rather than fixtures — see below.
+- Journey defects surfaced by GH-14, not caused by it. Both specs were authored under GH-8/GH-9 and had never executed, because their families always skipped:
+  - `manual-entries.spec.ts` FE-001 creates one Personal and two Family entries, then asserts all three rows on a single page. The ledger is URL-scoped (`/transactions?scope=…`) with deliberately no combined view, so the assertion cannot hold against the product as built. It needs restructuring per scope.
+  - `dashboard.spec.ts` FE-002/003/004 assert on balances, freshness, trend rows, and budget progress, none of which exist for a member with no accounts or transactions. They need a data fixture, not just an identity.
 - Live Plaid contract coverage is the `pnpm smoke:plaid` script (`scripts/plaid-sandbox-smoke.mjs`), which is manual and Sandbox-only. It covers link token creation, Canadian Transactions entitlement, Item exchange, institution lookup, CAD accounts, transaction sync, update mode with and without account selection, `ITEM_LOGIN_REQUIRED` recovery, and item removal. Webhook signature verification is not covered because it needs a publicly reachable URL.

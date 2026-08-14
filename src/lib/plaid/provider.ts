@@ -17,6 +17,7 @@ import type {
   ProviderAccount,
   ProviderTransaction,
 } from "@/lib/plaid/types";
+import { logServerEvent } from "@/lib/security/log";
 
 export type LinkTokenInput = {
   userId: string;
@@ -74,7 +75,7 @@ function balanceCents(value: number | null | undefined): number | null {
   if (value == null) return null;
   const cents = Math.round(value * 100);
   if (!Number.isSafeInteger(cents) || Number(value.toFixed(2)) !== value) {
-    console.warn("Plaid balance is not representable in CAD cents", {
+    logServerEvent("warn", "Plaid balance is not representable in CAD cents", {
       decimalPlaces: String(value).split(".")[1]?.length ?? 0,
     });
     return null;
@@ -365,11 +366,24 @@ export function getPlaidProvider(): PlaidProvider {
   const env = getServerEnv();
   if (env.PLAID_E2E_PROVIDER === "deterministic") {
     const origin = new URL(env.APP_URL);
+    // The controls that matter are Sandbox plus a loopback APP_URL: fabricated
+    // bank data can only reach a real member through a real deployment, and no
+    // deployment serves itself from 127.0.0.1. `VERCEL` covers every Vercel
+    // environment, preview included, which is stricter than the old
+    // VERCEL_ENV === "production" test.
+    //
+    // NODE_ENV is deliberately NOT part of this. It was, and it made the
+    // deterministic journeys unrunnable in CI for no security benefit: `next
+    // start` is NODE_ENV=production even on loopback, so the browser specs the
+    // adapter exists to serve could never execute against a production build.
     if (
       env.PLAID_ENV !== "sandbox" ||
-      !["localhost", "127.0.0.1", "::1"].includes(origin.hostname) ||
-      process.env.NODE_ENV === "production" ||
-      process.env.VERCEL_ENV === "production"
+      // `URL.hostname` keeps the brackets on an IPv6 literal, so a bare "::1"
+      // in this list never matched http://[::1]:3100 and the guard refused a
+      // legitimate loopback origin.
+      !["localhost", "127.0.0.1", "::1", "[::1]"].includes(origin.hostname) ||
+      process.env.VERCEL === "1" ||
+      process.env.VERCEL_ENV
     ) {
       throw new Error(
         "Deterministic Plaid provider is restricted to local sandbox E2E runs",

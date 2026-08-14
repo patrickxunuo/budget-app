@@ -1,26 +1,20 @@
 ﻿import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import {
+  fixtureCredentials,
+  fixtureEnv,
+  requireFixture,
+} from "./support/fixtures";
 
-const memberEmail =
-  process.env.E2E_BUDGET_MEMBER_EMAIL ?? process.env.E2E_DASHBOARD_MEMBER_EMAIL;
-const memberPassword =
-  process.env.E2E_BUDGET_MEMBER_PASSWORD ??
-  process.env.E2E_DASHBOARD_MEMBER_PASSWORD;
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const credentials = fixtureCredentials("budgets");
+const { supabaseUrl, serviceRoleKey } = fixtureEnv("budgets-service-cleanup");
 
 function requireBudgetFixture() {
-  test.skip(
-    !memberEmail || !memberPassword,
-    "Requires an active member with budget categories, progress thresholds, and Family/Personal fixtures via E2E_BUDGET_MEMBER_* credentials.",
-  );
+  requireFixture("budgets");
 }
 
 function requireServiceCleanup() {
-  test.skip(
-    !supabaseUrl || !serviceRoleKey,
-    "Mutating budget journeys require runtime Supabase URL/service-role credentials for deterministic test-only cleanup.",
-  );
+  requireFixture("budgets-service-cleanup");
 }
 
 async function cleanupBudgetVersions(ids: readonly string[]) {
@@ -38,10 +32,10 @@ async function cleanupBudgetVersions(ids: readonly string[]) {
   if (error) throw new Error("Budget test cleanup failed: " + error.message);
 }
 async function signIn(page: Page) {
-  if (!memberEmail || !memberPassword) return;
+  if (!credentials) return;
   await page.goto("/sign-in");
-  await page.getByLabel("Email").fill(memberEmail);
-  await page.getByLabel("Password", { exact: true }).fill(memberPassword);
+  await page.getByLabel("Email").fill(credentials.email);
+  await page.getByLabel("Password", { exact: true }).fill(credentials.password);
   await page.getByTestId("sign-in-submit").click();
   await expect(page).toHaveURL(/\/dashboard(?:\?.*)?$/);
 }
