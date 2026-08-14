@@ -13,6 +13,21 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    ignore:
+      # @types/node must track the Node runtime, not npm's latest. Nothing else
+      # anchors it, so Dependabot reached straight for 26 and broke the build on
+      # a type that had moved. Raise this ceiling deliberately when the runtime
+      # moves, and note that Vercel currently runs a different major than CI.
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
+      # react-plaid-link 5 widened PlaidLinkOnSuccess's publicToken to
+      # `string | null`, which is a behaviour change the application has to
+      # handle rather than cast away. Tracked separately; unignore when that
+      # lands.
+      - dependency-name: "react-plaid-link"
+        update-types:
+          - version-update:semver-major
     groups:
       # One pull request per ecosystem-sized concern keeps the review surface
       # small; security updates stay ungrouped so they can land on their own.
@@ -38,3 +53,14 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    groups:
+      # Without a group this block opened five separate pull requests the first
+      # time it ran. Action bumps are CI-only and reviewed together anyway, so
+      # one pull request per week is the right review surface. Majors are
+      # included deliberately: an action major that breaks CI is visible
+      # immediately and cannot reach production.
+      github-actions:
+        update-types:
+          - major
+          - minor
+          - patch

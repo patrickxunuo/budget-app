@@ -1,9 +1,4 @@
-﻿import {
-  createHash,
-  generateKeyPairSync,
-  sign,
-  type JsonWebKey,
-} from "node:crypto";
+﻿import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -561,6 +556,9 @@ describe("GH-5 Plaid webhook verification", () => {
   const { privateKey, publicKey } = generateKeyPairSync("ec", {
     namedCurve: "P-256",
   });
+  // `JsonWebKey` is the WebCrypto global from lib.dom, not a `node:crypto`
+  // export. @types/node happened to re-export it through v20 and stopped
+  // later, so importing it from there breaks on any newer @types/node.
   const publicJwk = publicKey.export({ format: "jwk" }) as JsonWebKey;
 
   function token(
