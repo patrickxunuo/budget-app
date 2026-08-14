@@ -7,6 +7,13 @@
 //
 //   pnpm smoke:plaid
 //
+// This is the runnable Sandbox counterpart of docs/production-smoke-checklist.md.
+// Each check is tagged with the numbered step of that checklist it stands in
+// for, so a failure here tells you exactly which manual step to expect trouble
+// in. Two checklist steps (webhook receipt, and the dashboard/budget/CSV pass)
+// cannot be automated from a local shell and are reported as MANUAL rather than
+// quietly omitted.
+//
 // Credentials come from the process environment, falling back to .env.local.
 // The script creates a Sandbox Item and removes it again; it refuses to run
 // outside Sandbox so it can never revoke a real member's connection.
@@ -75,9 +82,20 @@ const client = new PlaidApi(
 
 const checks = [];
 
-function record(name, ok, detail) {
-  checks.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name} — ${detail}`);
+/** Numbered against docs/production-smoke-checklist.md, not against this file. */
+function label(step) {
+  return `[step ${String(step).padStart(2, " ")}]`;
+}
+
+function record(step, name, status, detail) {
+  checks.push({ step, name, status, detail });
+  const marker = {
+    pass: "PASS  ",
+    fail: "FAIL  ",
+    skip: "SKIP  ",
+    manual: "MANUAL",
+  }[status];
+  console.log(`${label(step)} ${marker} ${name} — ${detail}`);
 }
 
 function describeError(error) {
@@ -87,14 +105,24 @@ function describeError(error) {
     : (error?.message ?? String(error));
 }
 
-async function check(name, run) {
+async function check(step, name, run) {
   try {
-    record(name, true, await run());
+    record(step, name, "pass", await run());
     return true;
   } catch (error) {
-    record(name, false, describeError(error));
+    record(step, name, "fail", describeError(error));
     return false;
   }
+}
+
+/** A check that could not be attempted because an earlier one failed. */
+function skip(step, name, reason) {
+  record(step, name, "skip", reason);
+}
+
+/** A checklist step this script structurally cannot cover. */
+function manual(step, name, reason) {
+  record(step, name, "manual", reason);
 }
 
 // Mirrors oauthRedirectUri() in src/lib/plaid/service.ts.
@@ -118,7 +146,7 @@ console.log(
 );
 
 // Mirrors PlaidSdkProvider.createLinkToken() in src/lib/plaid/provider.ts.
-await check("linkTokenCreate (initial link)", async () => {
+await check(1, "linkTokenCreate (initial link)", async () => {
   const { data } = await client.linkTokenCreate({
     client_name: "Budget App",
     country_codes: [CountryCode.Ca],
@@ -133,7 +161,7 @@ await check("linkTokenCreate (initial link)", async () => {
 });
 
 let institution;
-await check("institutionsGet (CA + Transactions)", async () => {
+await check(2, "institutionsGet (CA + Transactions)", async () => {
   const { data } = await client.institutionsGet({
     count: 20,
     offset: 0,
@@ -146,7 +174,7 @@ await check("institutionsGet (CA + Transactions)", async () => {
 
 let accessToken;
 if (institution) {
-  await check("sandbox Item create and exchange", async () => {
+  await check(3, "sandbox Item create and exchange", async () => {
     const { data } = await client.sandboxPublicTokenCreate({
       institution_id: institution.institution_id,
       initial_products: [Products.Transactions],
@@ -158,11 +186,17 @@ if (institution) {
     accessToken = exchanged.access_token;
     return "Item created";
   });
+} else {
+  skip(
+    3,
+    "sandbox Item create and exchange",
+    "no Canadian Transactions institution was returned by step 2",
+  );
 }
 
 if (accessToken) {
   // Mirrors PlaidSdkProvider.getInstitution().
-  await check("getInstitution (itemGet + institutionsGetById)", async () => {
+  await check(4, "getInstitution (itemGet + institutionsGetById)", async () => {
     const { data: item } = await client.itemGet({ access_token: accessToken });
     const institutionId = item.item.institution_id;
     const { data } = await client.institutionsGetById({
@@ -173,7 +207,7 @@ if (accessToken) {
   });
 
   // Mirrors PlaidSdkProvider.getAccounts().
-  await check("accountsGet", async () => {
+  await check(5, "accountsGet", async () => {
     const { data } = await client.accountsGet({ access_token: accessToken });
     const currencies = new Set(
       data.accounts.map((account) => account.balances.iso_currency_code),
@@ -182,7 +216,7 @@ if (accessToken) {
   });
 
   // Mirrors PlaidSdkProvider.syncTransactions().
-  await check("transactionsSync", async () => {
+  await check(6, "transactionsSync", async () => {
     let cursor;
     let added = 0;
     let pages = 0;
@@ -202,7 +236,7 @@ if (accessToken) {
   });
 
   // Update mode and Item lifecycle, required by GH-11.
-  await check("linkTokenCreate (update mode)", async () => {
+  await check(7, "linkTokenCreate (update mode)", async () => {
     const { data } = await client.linkTokenCreate({
       client_name: "Budget App",
       country_codes: [CountryCode.Ca],
@@ -210,24 +244,29 @@ if (accessToken) {
       webhook: webhookUrl,
       user: { client_user_id: clientUserId },
       access_token: accessToken,
-    });
-    return `expires ${data.expiration}`;
-  });
-
-  await check("linkTokenCreate (update mode + account selection)", async () => {
-    const { data } = await client.linkTokenCreate({
-      client_name: "Budget App",
-      country_codes: [CountryCode.Ca],
-      language: "en",
-      webhook: webhookUrl,
-      user: { client_user_id: clientUserId },
-      access_token: accessToken,
-      update: { account_selection_enabled: true },
     });
     return `expires ${data.expiration}`;
   });
 
   await check(
+    7,
+    "linkTokenCreate (update mode + account selection)",
+    async () => {
+      const { data } = await client.linkTokenCreate({
+        client_name: "Budget App",
+        country_codes: [CountryCode.Ca],
+        language: "en",
+        webhook: webhookUrl,
+        user: { client_user_id: clientUserId },
+        access_token: accessToken,
+        update: { account_selection_enabled: true },
+      });
+      return `expires ${data.expiration}`;
+    },
+  );
+
+  await check(
+    7,
     "sandboxItemResetLogin triggers ITEM_LOGIN_REQUIRED",
     async () => {
       await client.sandboxItemResetLogin({ access_token: accessToken });
@@ -242,17 +281,64 @@ if (accessToken) {
     },
   );
 
-  await check("itemRemove", async () => {
+  await check(10, "itemRemove", async () => {
     await client.itemRemove({ access_token: accessToken });
     return "Item revoked";
   });
+} else {
+  for (const [step, name] of [
+    [4, "getInstitution (itemGet + institutionsGetById)"],
+    [5, "accountsGet"],
+    [6, "transactionsSync"],
+    [7, "linkTokenCreate (update mode)"],
+    [7, "linkTokenCreate (update mode + account selection)"],
+    [7, "sandboxItemResetLogin triggers ITEM_LOGIN_REQUIRED"],
+    [10, "itemRemove"],
+  ]) {
+    skip(step, name, "no Sandbox access token: step 3 did not complete");
+  }
 }
 
-const failed = checks.filter((entry) => !entry.ok);
-console.log(
-  `\n${checks.length - failed.length}/${checks.length} checks passed`,
+// Structurally out of reach from a local shell, and called out here so the
+// summary never reads as full coverage of the checklist.
+manual(
+  8,
+  "webhook signature verification",
+  "needs a publicly reachable PLAID_WEBHOOK_URL; fire a test webhook from the Plaid dashboard",
+);
+manual(
+  9,
+  "dashboard, budget, and CSV review",
+  "product surfaces, not Plaid calls; verify in the browser against the deployed build",
 );
 
-if (failed.length > 0) {
+const passed = checks.filter((entry) => entry.status === "pass");
+const failed = checks.filter((entry) => entry.status === "fail");
+const skipped = checks.filter((entry) => entry.status === "skip");
+const manualSteps = checks.filter((entry) => entry.status === "manual");
+const automated = checks.length - manualSteps.length;
+
+console.log(
+  `\n${passed.length}/${automated} automated checks passed` +
+    (skipped.length > 0 ? `, ${skipped.length} not attempted` : "") +
+    (failed.length > 0 ? `, ${failed.length} failed` : "") +
+    `. ${manualSteps.length} checklist steps remain manual.`,
+);
+
+for (const entry of failed) {
+  console.log(`  FAIL  ${label(entry.step)} ${entry.name} — ${entry.detail}`);
+}
+for (const entry of skipped) {
+  console.log(`  SKIP  ${label(entry.step)} ${entry.name} — ${entry.detail}`);
+}
+for (const entry of manualSteps) {
+  console.log(`  TODO  ${label(entry.step)} ${entry.name} — ${entry.detail}`);
+}
+
+console.log(
+  "\nFollow docs/production-smoke-checklist.md for the Trial/Production pass.",
+);
+
+if (failed.length > 0 || skipped.length > 0) {
   process.exit(1);
 }

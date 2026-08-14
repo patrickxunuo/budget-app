@@ -1,23 +1,17 @@
 ﻿import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { fixtureCredentials, requireFixture } from "./support/fixtures";
 
-const memberEmail =
-  process.env.E2E_DASHBOARD_MEMBER_EMAIL ?? process.env.E2E_PLAID_MEMBER_EMAIL;
-const memberPassword =
-  process.env.E2E_DASHBOARD_MEMBER_PASSWORD ??
-  process.env.E2E_PLAID_MEMBER_PASSWORD;
+const credentials = fixtureCredentials("dashboard");
 
 function requireDashboardFixture() {
-  test.skip(
-    !memberEmail || !memberPassword,
-    "Requires an active member with Family and Personal dashboard fixtures via E2E_DASHBOARD_MEMBER_* credentials.",
-  );
+  requireFixture("dashboard");
 }
 
 async function signIn(page: Page) {
-  if (!memberEmail || !memberPassword) return;
+  if (!credentials) return;
   await page.goto("/sign-in");
-  await page.getByLabel("Email").fill(memberEmail);
-  await page.getByLabel("Password", { exact: true }).fill(memberPassword);
+  await page.getByLabel("Email").fill(credentials.email);
+  await page.getByLabel("Password", { exact: true }).fill(credentials.password);
   await page.getByTestId("sign-in-submit").click();
   await expect(page).toHaveURL(/\/dashboard(?:\?.*)?$/);
 }

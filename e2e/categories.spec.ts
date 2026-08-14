@@ -1,36 +1,30 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import {
+  fixtureCredentials,
+  isFixtureProvisioned,
+  requireFixture,
+} from "./support/fixtures";
 
-const memberEmail =
-  process.env.E2E_CATEGORIES_MEMBER_EMAIL ?? process.env.E2E_PLAID_MEMBER_EMAIL;
-const memberPassword =
-  process.env.E2E_CATEGORIES_MEMBER_PASSWORD ??
-  process.env.E2E_PLAID_MEMBER_PASSWORD;
-const transactionFixtureEnabled =
-  process.env.E2E_CATEGORIES_TRANSACTION_FIXTURE === "1";
+const credentials = fixtureCredentials("categories");
 const runSeed = Date.now().toString(36);
 const familyCategoryName = `E2E Family ${runSeed}`;
 const personalCategoryName = `E2E Personal ${runSeed}`;
 
 function requireMemberFixture() {
-  test.skip(
-    !memberEmail || !memberPassword,
-    "Requires an active member via E2E_CATEGORIES_MEMBER_* or E2E_PLAID_MEMBER_* credentials.",
-  );
+  requireFixture("categories");
 }
 
+// The transaction family declares the member credentials as well as the flag,
+// so one gate carries both halves of the old two-step skip.
 function requireTransactionFixture() {
-  requireMemberFixture();
-  test.skip(
-    !transactionFixtureEnabled,
-    "Requires E2E_CATEGORIES_TRANSACTION_FIXTURE=1 with at least one visible imported transaction.",
-  );
+  requireFixture("categories-transaction");
 }
 
 async function signIn(page: Page) {
-  if (!memberEmail || !memberPassword) return;
+  if (!credentials) return;
   await page.goto("/sign-in");
-  await page.getByLabel("Email").fill(memberEmail);
-  await page.getByLabel("Password", { exact: true }).fill(memberPassword);
+  await page.getByLabel("Email").fill(credentials.email);
+  await page.getByLabel("Password", { exact: true }).fill(credentials.password);
   await page.getByTestId("sign-in-submit").click();
   await expect(page).toHaveURL(
     /\/(?:dashboard|categories|transactions)(?:\?.*)?$/,
@@ -268,7 +262,7 @@ test.describe("GH-7 scoped categories and merchant rules", () => {
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
     await capture(page, testInfo, "categories-mobile-reduced-motion");
 
-    if (transactionFixtureEnabled) {
+    if (isFixtureProvisioned("categories-transaction")) {
       await page.goto("/transactions");
       await expect(page.getByTestId("transaction-ledger")).toBeVisible();
       const row = page.locator('[data-testid^="transaction-row-"]').first();

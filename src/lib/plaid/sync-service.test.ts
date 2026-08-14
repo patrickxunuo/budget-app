@@ -359,15 +359,18 @@ describe("GH-5 Plaid sync orchestration", () => {
     expect(JSON.stringify(caught)).not.toMatch(
       /access-token-must-stay-secret|raw financial provider payload|INTERNAL_SERVER_ERROR/,
     );
+    // GH-14 F4 routes this line through logServerEvent, which redacts
+    // sensitive identifier names. Correlation now runs on our own requestId
+    // and the provider request id; the raw Item identifier must not appear.
     expect(warn).toHaveBeenCalledWith(
       "Plaid sync failed",
       expect.objectContaining({
-        itemId,
         requestId: expect.any(String),
         providerRequestId: "provider-request-failed",
         errorCode: "provider_unavailable",
       }),
     );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(itemId);
   });
 
   it("API-013 statically forbids transactions/refresh and secret-bearing logging in sync paths", () => {
@@ -386,6 +389,171 @@ describe("GH-5 Plaid sync orchestration", () => {
     expect(sources).not.toMatch(
       /console\.(?:log|info|warn|error)\([^\n]*(?:accessToken|rawBody|verificationToken|provider_payload)/,
     );
+  });
+
+  it("SYNC-001 buffers a three-page pass and commits only the last cursor", async () => {
+    // API-001 proves two pages. A third proves the loop is not shaped around
+    // a single `hasMore` hop and that nothing from an earlier page is lost.
+    mocks.syncTransactions
+      .mockResolvedValueOnce({
+        added: [transaction],
+        modified: [],
+        removedIds: [],
+        nextCursor: "cursor-page-2",
+        hasMore: true,
+        requestId: "provider-request-page-1",
+      })
+      .mockResolvedValueOnce({
+        added: [{ ...transaction, transactionId: "transaction-2" }],
+        modified: [{ ...transaction, transactionId: "transaction-modified" }],
+        removedIds: ["transaction-removed-1"],
+        nextCursor: "cursor-page-3",
+        hasMore: true,
+        requestId: "provider-request-page-2",
+      })
+      .mockResolvedValueOnce({
+        added: [{ ...transaction, transactionId: "transaction-3" }],
+        modified: [],
+        removedIds: ["transaction-removed-2"],
+        nextCursor: "cursor-final",
+        hasMore: false,
+        requestId: "provider-request-page-3",
+      });
+
+    const result = await syncPlaidItem(itemId, "member", actor);
+    const commitCalls = mocks.rpc.mock.calls.filter(
+      ([name]) => name === "commit_plaid_sync",
+    );
+
+    expect(
+      mocks.syncTransactions.mock.calls.map(([, cursor]) => cursor),
+    ).toEqual(["original-cursor", "cursor-page-2", "cursor-page-3"]);
+    expect(commitCalls).toHaveLength(1);
+    expect(commitCalls[0]?.[1]).toMatchObject({
+      p_original_cursor: "original-cursor",
+      p_final_cursor: "cursor-final",
+      p_provider_request_id: "provider-request-page-3",
+      p_removed: ["transaction-removed-1", "transaction-removed-2"],
+    });
+    expect(
+      (commitCalls[0]?.[1].p_added as unknown[]).map(
+        (row) => (row as { transactionId: string }).transactionId,
+      ),
+    ).toEqual(["transaction-1", "transaction-2", "transaction-3"]);
+    expect(result).toMatchObject({ added: 3, modified: 1, removed: 2 });
+  });
+
+  it("SYNC-002 commits nothing when a later page fails, so the cursor stays put", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.syncTransactions
+      .mockResolvedValueOnce({
+        added: [transaction],
+        modified: [],
+        removedIds: [],
+        nextCursor: "cursor-page-2",
+        hasMore: true,
+        requestId: "provider-request-page-1",
+      })
+      .mockRejectedValueOnce(
+        Object.assign(new Error("gateway timeout"), {
+          response: {
+            data: {
+              error_code: "INTERNAL_SERVER_ERROR",
+              request_id: "provider-request-failed",
+            },
+          },
+        }),
+      );
+
+    await expect(syncPlaidItem(itemId, "nightly")).rejects.toMatchObject({
+      status: 502,
+      code: "sync_failed",
+    });
+
+    // A partial pass that advanced the cursor would silently drop every
+    // transaction on the page that never arrived.
+    expect(
+      mocks.rpc.mock.calls.filter(([name]) => name === "commit_plaid_sync"),
+    ).toHaveLength(0);
+    expect(mocks.syncTransactions).toHaveBeenCalledTimes(2);
+    const claimCall = mocks.rpc.mock.calls.find(
+      ([name]) => name === "claim_plaid_sync",
+    );
+    expect(
+      mocks.rpc.mock.calls.find(([name]) => name === "fail_plaid_sync")?.[1],
+    ).toMatchObject({
+      p_item_id: itemId,
+      p_request_id: claimCall?.[1].p_request_id,
+      p_provider_request_id: "provider-request-failed",
+    });
+    warn.mockRestore();
+  });
+
+  it("SYNC-003 gives up after the pagination restart limit without committing", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.syncTransactions.mockRejectedValue(
+      Object.assign(new Error("pagination changed"), {
+        response: {
+          data: { error_code: "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION" },
+        },
+      }),
+    );
+
+    await expect(syncPlaidItem(itemId, "nightly")).rejects.toMatchObject({
+      status: 502,
+      code: "sync_failed",
+    });
+
+    expect(mocks.syncTransactions).toHaveBeenCalledTimes(3);
+    expect(
+      mocks.rpc.mock.calls.filter(([name]) => name === "commit_plaid_sync"),
+    ).toHaveLength(0);
+    expect(
+      mocks.rpc.mock.calls.some(([name]) => name === "fail_plaid_sync"),
+    ).toBe(true);
+    warn.mockRestore();
+  });
+
+  it("SYNC-004 treats a rejected cursor/claim revalidation as a sanitized failure", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.rpc.mockImplementation(
+      (name: string, args: Record<string, unknown>) =>
+        name === "commit_plaid_sync"
+          ? Promise.resolve({
+              data: null,
+              error: {
+                code: "55000",
+                message: "sync claim superseded by request 00000000",
+              },
+            })
+          : successfulRpc(name, args),
+    );
+
+    let caught: unknown;
+    try {
+      await syncPlaidItem(itemId, "member", actor);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({ status: 502, code: "sync_failed" });
+    // The claim's starting cursor has to reach the RPC, or the database
+    // cannot detect that another pass already advanced it.
+    expect(
+      mocks.rpc.mock.calls.find(([name]) => name === "commit_plaid_sync")?.[1],
+    ).toMatchObject({ p_original_cursor: "original-cursor" });
+    const claimCall = mocks.rpc.mock.calls.find(
+      ([name]) => name === "claim_plaid_sync",
+    );
+    expect(
+      mocks.rpc.mock.calls.find(([name]) => name === "fail_plaid_sync")?.[1],
+    ).toMatchObject({
+      p_item_id: itemId,
+      p_request_id: claimCall?.[1].p_request_id,
+      p_error_code: "provider_unavailable",
+    });
+    expect(JSON.stringify(caught)).not.toMatch(/superseded|55000/);
+    warn.mockRestore();
   });
 });
 
@@ -669,5 +837,210 @@ describe("GH-5 Plaid webhook verification", () => {
     await expect(verifyPlaidWebhook(rawBody, token(rawBody))).rejects.toThrow(
       /invalid webhook key/i,
     );
+  });
+
+  /** Stubs the Item lookup and the sync-state writer for a webhook handler run. */
+  function stubItemLookup(item: { id: string; sync_state: unknown } | null) {
+    const plaidItemsQuery = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      is: vi.fn(),
+      maybeSingle: vi.fn(),
+    };
+    plaidItemsQuery.select.mockReturnValue(plaidItemsQuery);
+    plaidItemsQuery.eq.mockReturnValue(plaidItemsQuery);
+    plaidItemsQuery.is.mockReturnValue(plaidItemsQuery);
+    plaidItemsQuery.maybeSingle.mockResolvedValue({ data: item, error: null });
+    const syncStateQuery = {
+      upsert: vi.fn().mockResolvedValue({ error: null }),
+    };
+    mocks.from.mockImplementation((table: string) =>
+      table === "plaid_items" ? plaidItemsQuery : syncStateQuery,
+    );
+    return { plaidItemsQuery, syncStateQuery };
+  }
+
+  it("SYNC-005 rejects a webhook signed with a key Plaid never published", async () => {
+    // A forged webhook is the whole threat model here: the payload is
+    // well-formed and the body hash is honest, only the signer is wrong.
+    const foreign = generateKeyPairSync("ec", { namedCurve: "P-256" });
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        webhook_type: "TRANSACTIONS",
+        webhook_code: "SYNC_UPDATES_AVAILABLE",
+        item_id: "provider-item-owned",
+      }),
+    );
+    const header = Buffer.from(
+      JSON.stringify({ alg: "ES256", kid: "verification-key-1", typ: "JWT" }),
+    ).toString("base64url");
+    const claims = Buffer.from(
+      JSON.stringify({
+        iat: Math.floor(Date.now() / 1000),
+        request_body_sha256: createHash("sha256").update(rawBody).digest("hex"),
+      }),
+    ).toString("base64url");
+    const forged = `${header}.${claims}.${sign(
+      "sha256",
+      Buffer.from(`${header}.${claims}`),
+      { key: foreign.privateKey, dsaEncoding: "ieee-p1363" },
+    ).toString("base64url")}`;
+
+    await expect(verifyPlaidWebhook(rawBody, forged)).rejects.toThrow(
+      /invalid webhook signature/i,
+    );
+    await expect(
+      handlePlaidWebhook(rawBody.toString("utf8"), forged),
+    ).rejects.toMatchObject({ status: 401, code: "invalid_webhook" });
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it("SYNC-006 rejects a key whose kid does not match the token header", async () => {
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        webhook_type: "TRANSACTIONS",
+        webhook_code: "SYNC_UPDATES_AVAILABLE",
+        item_id: "provider-item-owned",
+      }),
+    );
+    mocks.getWebhookVerificationKey.mockResolvedValueOnce({
+      alg: "ES256",
+      crv: "P-256",
+      expiredAt: null,
+      kid: "some-other-key",
+      kty: "EC",
+      use: "sig",
+      x: publicJwk.x,
+      y: publicJwk.y,
+    });
+
+    await expect(verifyPlaidWebhook(rawBody, token(rawBody))).rejects.toThrow(
+      /invalid webhook key/i,
+    );
+  });
+
+  it("SYNC-007 rejects an unparseable body as a payload problem, not a signature problem", async () => {
+    const rawBody = Buffer.from("{not json at all");
+
+    await expect(
+      handlePlaidWebhook(rawBody.toString("utf8"), token(rawBody)),
+    ).rejects.toMatchObject({
+      status: 400,
+      code: "invalid_webhook_payload",
+    });
+  });
+
+  it("SYNC-008 accepts Plaid's explicit null error end to end and starts a sync", async () => {
+    // Regression lock for the 2026-08-13 production defect: verification
+    // already passed, and `"error": null` still produced a 400 from the
+    // handler, so no real TRANSACTIONS webhook could ever trigger a sync.
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    stubItemLookup({ id: itemId, sync_state: null });
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        webhook_type: "TRANSACTIONS",
+        webhook_code: "SYNC_UPDATES_AVAILABLE",
+        item_id: "provider-item-owned",
+        error: null,
+        environment: "sandbox",
+      }),
+    );
+
+    await expect(
+      handlePlaidWebhook(rawBody.toString("utf8"), token(rawBody)),
+    ).resolves.toEqual({ accepted: true });
+
+    expect(
+      mocks.rpc.mock.calls.find(([name]) => name === "claim_plaid_sync")?.[1],
+    ).toMatchObject({ p_item_id: itemId, p_trigger: "webhook" });
+    expect(mocks.syncTransactions).toHaveBeenCalledTimes(1);
+    info.mockRestore();
+    warn.mockRestore();
+  });
+
+  it("SYNC-009 records login-repair state from an ITEM_LOGIN_REQUIRED webhook", async () => {
+    const { syncStateQuery } = stubItemLookup({
+      id: itemId,
+      sync_state: null,
+    });
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        webhook_type: "ITEM",
+        webhook_code: "ERROR",
+        item_id: "provider-item-owned",
+        error: {
+          error_code: "ITEM_LOGIN_REQUIRED",
+          request_id: "provider-item-request",
+        },
+      }),
+    );
+
+    await expect(
+      handlePlaidWebhook(rawBody.toString("utf8"), token(rawBody)),
+    ).resolves.toEqual({ accepted: true });
+
+    expect(syncStateQuery.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plaid_item_id: itemId,
+        status: "failed",
+        error_code: "login_required",
+        error_message: "Reconnect this institution to resume updates.",
+        needs_login_repair: true,
+        provider_request_id: "provider-item-request",
+        current_request_id: null,
+        claim_started_at: null,
+      }),
+    );
+    expect(mocks.syncTransactions).not.toHaveBeenCalled();
+  });
+
+  it("SYNC-010 records the consent expiry from a PENDING_EXPIRATION webhook", async () => {
+    const { syncStateQuery } = stubItemLookup({
+      id: itemId,
+      sync_state: null,
+    });
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        webhook_type: "ITEM",
+        webhook_code: "PENDING_EXPIRATION",
+        item_id: "provider-item-owned",
+        consent_expiration_time: "2026-09-01T00:00:00Z",
+      }),
+    );
+
+    await expect(
+      handlePlaidWebhook(rawBody.toString("utf8"), token(rawBody)),
+    ).resolves.toEqual({ accepted: true });
+
+    expect(syncStateQuery.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plaid_item_id: itemId,
+        status: "idle",
+        error_code: null,
+        needs_login_repair: false,
+        consent_expires_at: "2026-09-01T00:00:00Z",
+      }),
+    );
+  });
+
+  it("SYNC-011 acknowledges a webhook for an Item this workspace does not hold", async () => {
+    stubItemLookup(null);
+    const rawBody = Buffer.from(
+      JSON.stringify({
+        webhook_type: "TRANSACTIONS",
+        webhook_code: "SYNC_UPDATES_AVAILABLE",
+        item_id: "provider-item-unknown",
+        error: null,
+      }),
+    );
+
+    await expect(
+      handlePlaidWebhook(rawBody.toString("utf8"), token(rawBody)),
+    ).resolves.toEqual({ accepted: true });
+    expect(mocks.syncTransactions).not.toHaveBeenCalled();
+    expect(
+      mocks.rpc.mock.calls.some(([name]) => name === "claim_plaid_sync"),
+    ).toBe(false);
   });
 });

@@ -1,7 +1,24 @@
 import { PlaidFlowError } from "@/lib/plaid/errors";
 import { handlePlaidWebhook } from "@/lib/plaid/sync-service";
+import { consumeRateLimit, rateLimitSubject } from "@/lib/security/rate-limit";
 
 export async function POST(request: Request) {
+  // Checked before the body is buffered, so a delivery flood cannot make us
+  // read it. The webhook is exempt from the origin gate by design, which makes
+  // this the only volumetric control in front of signature verification.
+  const verdict = await consumeRateLimit(
+    "plaid_webhook",
+    rateLimitSubject(request.headers),
+  );
+  if (!verdict.allowed) {
+    return Response.json(
+      { code: "rate_limited", message: "Too many webhook deliveries." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(verdict.retryAfterSeconds) },
+      },
+    );
+  }
   const token = request.headers.get("plaid-verification");
   const rawBody = await request.text();
   if (!token) {

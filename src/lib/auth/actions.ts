@@ -2,11 +2,19 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getServerEnv } from "@/lib/env/server";
 import { revokeDepartingMemberPlaidItems } from "@/lib/plaid/service";
+import { logServerEvent } from "@/lib/security/log";
+import {
+  consumeRateLimit,
+  rateLimitSubject,
+  resetRateLimit,
+  type RateLimitBucket,
+} from "@/lib/security/rate-limit";
 import { deleteAccountData, deleteWorkspaceData } from "./data-lifecycle";
 import { deleteQueuedAuthUser, enqueueAuthDeletion } from "./deletion-queue";
 import {
@@ -62,8 +70,29 @@ async function rpcError(
   error: unknown,
   message = genericAuthError,
 ): Promise<AuthActionState> {
-  console.error("Authentication operation failed", error);
+  logServerEvent("error", "Authentication operation failed", { error });
   return { status: "error", message };
+}
+
+// The denial is deliberately silent: telling a caller that this address is
+// rate limited would turn the control into an account-enumeration oracle, so
+// every surface answers with the message it would have given anyway.
+async function rateLimited(bucket: RateLimitBucket, discriminator?: string) {
+  const verdict = await consumeRateLimit(
+    bucket,
+    rateLimitSubject(await headers(), discriminator),
+  );
+  return !verdict.allowed;
+}
+
+// Called once an identity is proven, so only failed attempts accumulate. See
+// resetRateLimit: counting successes turns a brute-force control into a usage
+// cap and locks out legitimate bursts.
+async function clearRateLimit(bucket: RateLimitBucket, discriminator?: string) {
+  await resetRateLimit(
+    bucket,
+    rateLimitSubject(await headers(), discriminator),
+  );
 }
 
 async function compensateCreatedUser(userId: string) {
@@ -71,7 +100,9 @@ async function compensateCreatedUser(userId: string) {
   const signOutResult = await supabase.auth.signOut();
   await clearApplicationAuthCookies();
   if (signOutResult.error)
-    console.error("Compensation sign-out failed", signOutResult.error);
+    logServerEvent("error", "Compensation sign-out failed", {
+      error: signOutResult.error,
+    });
   if (!(await enqueueAuthDeletion(userId, "orphaned_auth_identity")))
     return false;
   return deleteQueuedAuthUser(userId);
@@ -140,6 +171,8 @@ export async function signIn(
 ): Promise<AuthActionState> {
   const parsed = signInSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error);
+  if (await rateLimited("sign_in", parsed.data.email))
+    return { status: "error", message: "Email or password is incorrect." };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
@@ -158,6 +191,10 @@ export async function signIn(
     await clearApplicationAuthCookies();
     return { status: "error", message: "Email or password is incorrect." };
   }
+  // Cleared only here — after both the password AND an active membership are
+  // proven, so a valid password for a removed member still counts as a failed
+  // attempt and keeps consuming the budget.
+  await clearRateLimit("sign_in", parsed.data.email);
   await establishSessionStart(data.user.id);
   redirect(safeNext(parsed.data.next));
 }
@@ -176,6 +213,13 @@ export async function requestPasswordReset(
 ): Promise<AuthActionState> {
   const parsed = requestPasswordResetSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error);
+  const recoverySent = {
+    status: "success",
+    message:
+      "If that address belongs to this family, a recovery link is on its way.",
+  } as const;
+  if (await rateLimited("password_reset", parsed.data.email))
+    return recoverySent;
   const env = getServerEnv();
   const supabase = await createSupabaseServerClient();
   const recoveryState = createRecoveryCallbackState(parsed.data.email);
@@ -186,11 +230,7 @@ export async function requestPasswordReset(
   await supabase.auth.resetPasswordForEmail(parsed.data.email, {
     redirectTo: callback.toString(),
   });
-  return {
-    status: "success",
-    message:
-      "If that address belongs to this family, a recovery link is on its way.",
-  };
+  return recoverySent;
 }
 
 export async function resetPassword(
@@ -199,23 +239,21 @@ export async function resetPassword(
 ): Promise<AuthActionState> {
   const parsed = resetPasswordSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error);
+  const recoveryRejected = {
+    status: "error",
+    message: "This recovery session is invalid or expired.",
+  } as const;
+  if (await rateLimited("password_confirm")) return recoveryRejected;
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !(await consumeRecoveryFlow(user.id)))
-    return {
-      status: "error",
-      message: "This recovery session is invalid or expired.",
-    };
+  if (!user || !(await consumeRecoveryFlow(user.id))) return recoveryRejected;
   const { error } = await supabase.auth.updateUser({
     password: parsed.data.password,
   });
-  if (error)
-    return {
-      status: "error",
-      message: "This recovery session is invalid or expired.",
-    };
+  if (error) return recoveryRejected;
+  await clearRateLimit("password_confirm");
   const confirmationError = await recordConfirmation(user.id);
   if (confirmationError) return confirmationError;
   await establishSessionStart(user.id);
@@ -281,6 +319,10 @@ export async function acceptInvitation(
 ): Promise<AuthActionState> {
   const parsed = acceptInvitationSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error);
+  // Keyed on the caller alone, never on the token: a per-token window would
+  // give every guess its own budget and throttle nothing.
+  if (await rateLimited("invitation_accept"))
+    return { status: "error", message: genericInviteError };
   const tokenHash = hashToken(parsed.data.token);
   const admin = createSupabaseAdminClient();
   const { data: invite } = await admin
@@ -333,6 +375,8 @@ export async function confirmPassword(
 ): Promise<AuthActionState> {
   const parsed = confirmationPasswordSchema.safeParse(formValues(formData));
   if (!parsed.success) return invalid(parsed.error);
+  if (await rateLimited("password_confirm"))
+    return { status: "error", message: "Password confirmation failed." };
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -348,6 +392,7 @@ export async function confirmPassword(
   });
   if (verified.error || verified.data.user?.id !== user.id)
     return { status: "error", message: "Password confirmation failed." };
+  await clearRateLimit("password_confirm");
   const confirmationError = await recordConfirmation(user.id);
   if (confirmationError) return confirmationError;
   return { status: "success", message: "Password confirmed for 15 minutes." };
@@ -419,7 +464,7 @@ async function preparePlaidDeparture(
       departingProfileId,
     );
   } catch (error) {
-    console.error("Plaid departure revocation failed", error);
+    logServerEvent("error", "Plaid departure revocation failed", { error });
     return {
       error:
         "The member's bank connections could not be secured. Try again before changing membership.",

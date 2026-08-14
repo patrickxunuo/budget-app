@@ -1,28 +1,17 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { fixtureCredentials, requireFixture } from "./support/fixtures";
 
-const deterministicPlaid =
-  process.env.PLAID_E2E_PROVIDER === "deterministic" &&
-  process.env.PLAID_ENV === "sandbox";
-const memberEmail =
-  process.env.E2E_PLAID_CONNECTION_MEMBER_EMAIL ??
-  process.env.E2E_PLAID_MEMBER_EMAIL;
-const memberPassword =
-  process.env.E2E_PLAID_CONNECTION_MEMBER_PASSWORD ??
-  process.env.E2E_PLAID_MEMBER_PASSWORD;
-const destructiveFixture = process.env.E2E_PLAID_CONNECTION_DESTRUCTIVE === "1";
+const credentials = fixtureCredentials("plaid-connection");
 
 function requireConnectionFixture() {
-  test.skip(
-    !deterministicPlaid || !memberEmail || !memberPassword,
-    "Requires deterministic Plaid Sandbox and an active linker with a managed multi-account Item.",
-  );
+  requireFixture("plaid-connection");
 }
 
 async function signIn(page: Page) {
-  if (!memberEmail || !memberPassword) return;
+  if (!credentials) return;
   await page.goto("/sign-in");
-  await page.getByLabel("Email").fill(memberEmail);
-  await page.getByLabel("Password", { exact: true }).fill(memberPassword);
+  await page.getByLabel("Email").fill(credentials.email);
+  await page.getByLabel("Password", { exact: true }).fill(credentials.password);
   await page.getByTestId("sign-in-submit").click();
   await expect(page).toHaveURL(/\/(?:dashboard|accounts)(?:\?.*)?$/);
 }
@@ -172,10 +161,7 @@ test.describe("GH-11 Plaid connection management", () => {
   test("FE-004 disconnect modes remain distinct, Item-wide, explicit, and announced by the real endpoint", async ({
     page,
   }, testInfo) => {
-    test.skip(
-      !destructiveFixture,
-      "Set E2E_PLAID_CONNECTION_DESTRUCTIVE=1 with a disposable Item to exercise disconnect.",
-    );
+    requireFixture("plaid-connection-destructive");
     await openConnections(page);
     const item = page.getByTestId(/^plaid-connection-/).first();
     await item.getByTestId(/^plaid-disconnect-/).click();

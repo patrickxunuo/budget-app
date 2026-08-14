@@ -150,11 +150,113 @@ select throws_ok(
   'API-006 an anonymous caller cannot manage invitations'
 );
 
+-- GH-14 DB-002: invitation validity bounds. `create_invitation` is the only
+-- writer, so its expiry window is the whole guard against a perpetual invite
+-- link or an already-dead one being minted.
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'b3000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims', '{"sub":"b3000000-0000-0000-0000-000000000001","email":"owner-gh3@example.test","role":"authenticated"}', true);
+select throws_ok(
+  $$select public.create_invitation('past-gh14@example.test', encode(digest('past-token-gh14','sha256'),'hex'), now() - interval '1 minute')$$,
+  '22023', null,
+  'GH-14 DB-002 an already-expired invitation is rejected at creation'
+);
+select throws_ok(
+  $$select public.create_invitation('forever-gh14@example.test', encode(digest('forever-token-gh14','sha256'),'hex'), now() + interval '169 hours')$$,
+  '22023', null,
+  'GH-14 DB-002 an invitation cannot outlive the seven-day maximum'
+);
+select lives_ok(
+  $$select public.create_invitation('bounds-gh14@example.test', encode(digest('bounds-token-gh14','sha256'),'hex'), now() + interval '168 hours')$$,
+  'GH-14 DB-002 an invitation exactly at the seven-day maximum is accepted'
+);
+select is(
+  (select count(*) from public.invitations where email in ('past-gh14@example.test','forever-gh14@example.test')),
+  0::bigint,
+  'GH-14 DB-002 a rejected expiry writes no invitation row'
+);
+
+-- GH-14 DB-003: revocation is terminal, and it is an owner-only authority.
+select lives_ok(
+  $$select public.revoke_invitation((select id from public.invitations where email='bounds-gh14@example.test'))$$,
+  'GH-14 DB-003 the owner revokes an unresolved invitation'
+);
+select throws_ok(
+  $$select public.revoke_invitation((select id from public.invitations where email='bounds-gh14@example.test'))$$,
+  'P0002', null,
+  'GH-14 DB-003 a revoked invitation cannot be revoked again'
+);
+select throws_ok(
+  $$select public.revoke_invitation((select id from public.invitations where email='member-gh3@example.test'))$$,
+  'P0002', null,
+  'GH-14 DB-003 an accepted invitation can no longer be revoked'
+);
+select public.create_invitation('member-revoke-gh14@example.test', encode(digest('member-revoke-token-gh14','sha256'),'hex'), now() + interval '24 hours');
+select set_config('request.jwt.claim.sub', 'b3000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims', '{"sub":"b3000000-0000-0000-0000-000000000002","email":"member-gh3@example.test","role":"authenticated"}', true);
+select throws_ok(
+  $$select public.revoke_invitation((select id from public.invitations where email='member-revoke-gh14@example.test'))$$,
+  'P0002', null,
+  'GH-14 DB-003 an active member cannot revoke a live invitation'
+);
+select set_config('request.jwt.claim.sub', 'b3000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims', '{"sub":"b3000000-0000-0000-0000-000000000001","email":"owner-gh3@example.test","role":"authenticated"}', true);
+select lives_ok(
+  $$select public.revoke_invitation((select id from public.invitations where email='member-revoke-gh14@example.test'))$$,
+  'GH-14 DB-003 the owner revokes the same invitation, so the member denial was authorization and not invitation state'
+);
+
 -- API-007: ownership transfer changes both roles and the workspace pointer atomically.
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'b3000000-0000-0000-0000-000000000001', true);
 select set_config('request.jwt.claims', '{"sub":"b3000000-0000-0000-0000-000000000001","email":"owner-gh3@example.test","role":"authenticated"}', true);
+
+-- GH-14 DB-004: recent reauthentication is a precondition of every ownership
+-- change, and the window is bounded on both sides. A 42501 means the caller
+-- never passed the confirmation gate; a 22023 means it did and only the
+-- target was wrong, which is how the boundary is proved rather than assumed.
+select throws_ok(
+  $$select public.transfer_ownership((select id from public.workspace_memberships where profile_id = 'b3000000-0000-0000-0000-000000000002'))$$,
+  '42501', null,
+  'GH-14 DB-004 ownership transfer is refused with no recent password confirmation at all'
+);
+set local role service_role;
+select public.mark_recent_password_confirmation('b3000000-0000-0000-0000-000000000001');
+update public.recent_auth_confirmations set confirmed_at = now() - interval '20 minutes'
+where profile_id = 'b3000000-0000-0000-0000-000000000001';
+set local role authenticated;
+select throws_ok(
+  $$select public.transfer_ownership((select id from public.workspace_memberships where profile_id = 'b3000000-0000-0000-0000-000000000002'))$$,
+  '42501', null,
+  'GH-14 DB-004 a password confirmation older than the reauthentication window no longer authorizes a transfer'
+);
+set local role service_role;
+update public.recent_auth_confirmations set confirmed_at = now() - interval '14 minutes'
+where profile_id = 'b3000000-0000-0000-0000-000000000001';
+set local role authenticated;
+select throws_ok(
+  $$select public.transfer_ownership('00000000-0000-0000-0000-000000000000')$$,
+  '22023', null,
+  'GH-14 DB-004 a confirmation inside the window authorizes the caller and fails only on the invalid target'
+);
+select set_config('request.jwt.claim.sub', 'b3000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims', '{"sub":"b3000000-0000-0000-0000-000000000002","email":"member-gh3@example.test","role":"authenticated"}', true);
+select throws_ok(
+  $$select public.transfer_ownership((select id from public.workspace_memberships where profile_id = 'b3000000-0000-0000-0000-000000000002'))$$,
+  '42501', null,
+  'GH-14 DB-004 an ordinary member cannot promote themselves to owner'
+);
+select set_config('request.jwt.claim.sub', 'b3000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims', '{"sub":"b3000000-0000-0000-0000-000000000001","email":"owner-gh3@example.test","role":"authenticated"}', true);
+select ok(
+  (select owner_profile_id = 'b3000000-0000-0000-0000-000000000001' from public.workspaces)
+  and (select role = 'owner' from public.workspace_memberships where profile_id = 'b3000000-0000-0000-0000-000000000001')
+  and (select role = 'member' from public.workspace_memberships where profile_id = 'b3000000-0000-0000-0000-000000000002'),
+  'GH-14 DB-004 every rejected transfer leaves the workspace owner pointer and both roles unchanged'
+);
+
 set local role service_role;
 select public.mark_recent_password_confirmation('b3000000-0000-0000-0000-000000000001');
 set local role authenticated;

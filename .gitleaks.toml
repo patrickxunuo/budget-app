@@ -1,0 +1,50 @@
+title = "Budget App secret scanning"
+
+# The upstream rule set is the baseline. Nothing is disabled: this file only
+# names the handful of values in this repository that look like credentials and
+# provably are not. Every entry below is a literal placeholder or a fabricated
+# test fixture — never a pattern wide enough to hide a real key.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known non-secrets: .env.example placeholders, CI dummy values, and unit-test fixtures."
+
+# Generated or vendored artifacts that carry integrity hashes rather than
+# credentials, and Playwright output that is never committed.
+paths = [
+  '''pnpm-lock\.yaml''',
+  '''playwright-report/''',
+  '''test-results/''',
+  '''public/icons/''',
+]
+
+regexes = [
+  # .env.example — the file exists to be copied and filled in, so every value
+  # in it is a prompt, not a secret.
+  '''your-project\.supabase\.co''',
+  '''your-supabase-(publishable|service-role)-key''',
+  '''your-plaid-(client-id|environment-secret)''',
+  '''replace-with-a-random-encryption-key''',
+  '''replace-with-a-different-random-cron-secret''',
+
+  # .github/workflows/ci.yml — deliberately inert values that only have to
+  # satisfy the Zod minimum lengths in src/lib/env/schemas.ts. The real
+  # Supabase values in that job come from `supabase status` at run time.
+  '''ci-local-(cron-secret|client|secret|token-key)[0-9a-z-]*''',
+
+  # A literal used by several older Plaid tests. It is the word "secret" rather
+  # than a token, so it carries no entropy; `access-production-*` is
+  # deliberately absent from this list, because a real one must still be caught.
+  '''access-sandbox-secret''',
+]
+
+# Deliberately absent: entries for the credential-shaped fixtures in
+# src/lib/security/*.test.ts. Those values are now assembled at run time by
+# src/lib/security/secret-shapes.fixture.ts, so no literal exists to allowlist.
+# That is the better trade. An allowlist entry narrow enough to be safe has to
+# pin an exact value, so it needs extending for every new fixture, and one loose
+# enough to avoid that is wide enough to hide a real key. It also only ever
+# teaches *this* scanner: GitGuardian and GitHub push protection flagged the
+# same literals independently and would have kept doing so. Prefer constructing
+# a fixture over widening this file.

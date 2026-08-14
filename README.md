@@ -172,6 +172,8 @@ pnpm lint && pnpm typecheck && pnpm build
 
 `pnpm smoke:plaid` exists because mocks cannot catch provider contract drift. It exercises every live Plaid call the app makes — link tokens, item exchange, institution lookup, accounts, transaction sync, update mode, login repair, and item removal — against real Sandbox. Run it after touching Plaid request construction or rotating credentials.
 
+Before a Trial or Production release, work through the [production smoke checklist](./docs/production-smoke-checklist.md). It is the numbered manual pass against a real Canadian institution that Sandbox cannot stand in for.
+
 ## Roadmap
 
 - [x] Invite-only family authentication and membership
