@@ -9,6 +9,11 @@
 - Latest run: 98 passed, 70 fixture-dependent scenarios skipped, 0 failed (168 desktop/mobile cases). GH-14 raised the runnable count from 36 to 98 by seeding an owner with `pnpm seed:e2e` and adding the fixtureless security-hardening spec; GH-13 had raised it from 14 to 36.
 - Running the suite needs roughly 2 GB of headroom. On a loaded workstation `next dev` is killed by the OS with `FATAL ERROR: Zone Allocation failed`, and every case then fails with `ERR_CONNECTION_REFUSED` from a dead web server rather than from a real defect. Run `CI=1 pnpm exec playwright test --workers=1` in that situation: `CI=1` switches the `webServer` to the production `pnpm start`, which is far lighter than the dev server.
 
+## GH-15 Deployment and Operations Documentation
+
+- No new runtime flow or application UI changed, so no Playwright spec was added and the full E2E suite was not rerun for this documentation-only flight.
+- Real, data-free captures of `/` and `/install` were visually verified and committed under `docs/screenshots/`; the documentation contract is covered by 10 Vitest checks.
+
 ## GH-13 Installable, Accessible, Mobile-First PWA
 
 - [x] Installable manifest with reachable 192/512 `any` and 192/512 `maskable` PNG icons, plus a 180px Apple touch icon — manifest/route coverage passes; desktop/mobile Playwright runnable

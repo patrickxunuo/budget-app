@@ -16,4 +16,4 @@ Project memory. Read this file first to find what you need.
 
 ## Last Updated
 
-2026-08-14 — through GH-13 (installable, accessible, mobile-first PWA), merged in PR #28 and PR #29; `main` is at `8f6febf`, deployed to production and verified end to end against Plaid Sandbox. GH-14 is in flight on its own branch; GH-15 and GH-26 remain open.
+2026-08-14 — through GH-14 on `main`; GH-15 deployment and operations documentation is ready for PR with its documentation contract, production screenshots, and full verification green. GH-26 remains open.

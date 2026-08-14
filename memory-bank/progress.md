@@ -2,9 +2,13 @@
 
 ## Current Sprint / Focus
 
-Every issue through GH-13 is closed. The application is deployed to production at `piggy-budget-app.vercel.app` against a hosted Supabase project and Plaid Sandbox; a real Canadian institution links, activates, and syncs end to end, and the app installs to a home screen. GH-14 is in flight on `feat/GH-14-testing-security-hardening`. GH-15 is the remaining open v1.0 issue; GH-26 (themed select and searchable dropdown polish) is open with no milestone.
+Every issue through GH-14 is closed. The application is deployed to production at `piggy-budget-app.vercel.app` against a hosted Supabase project and Plaid Sandbox; a real Canadian institution links, activates, and syncs end to end, and the app installs to a home screen. GH-15 deployment/operations documentation is ready for PR; GH-26 (themed select and searchable dropdown polish) remains open with no milestone.
 
 ## Log
+
+- 2026-08-14T23:19Z [READY] GH-15 publishes the supported Vercel + hosted Supabase + user-owned Plaid deployment path, operator/troubleshooting guidance, contributor/security/release runbooks, safe environment examples, production screenshots, and repository-wide LF normalization. Documentation contract 10/10, full Vitest 709/709, lint, typecheck, production build, and independent review are green.
+
+- 2026-08-14T22:57Z [PLANNED] GH-15 will publish the supported Vercel + hosted Supabase + user-owned Plaid deployment path, operator and troubleshooting guidance, contribution/security/release runbooks, safe environment examples, public-page screenshots, documentation contract coverage, and repository-wide LF normalization.
 
 - 2026-08-14T09:00Z [IN FLIGHT] GH-14 (automated testing and security hardening) is being built on `feat/GH-14-testing-security-hardening`. Its working tree adds a `rate_limiting` migration with pgTAP coverage, `src/lib/security/`, a `security.yml` workflow, `.gitleaks.toml`, Dependabot, `e2e/security-hardening.spec.ts` with shared `e2e/support/`, and `docs/production-smoke-checklist.md`, and it touches the webhook route, auth actions/confirm, the deletion queue, `src/proxy.ts`, the Plaid service/errors/sync, `next.config.ts`, `.env.example`, `ci.yml`, and every existing `e2e` spec. Nothing is committed yet.
 
