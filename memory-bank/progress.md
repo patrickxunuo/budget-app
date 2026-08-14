@@ -2,11 +2,15 @@
 
 ## Current Sprint / Focus
 
-Every issue through GH-12 is closed and the application is deployed to production at `piggy-budget-app.vercel.app` against a hosted Supabase project and Plaid Sandbox. A real Canadian institution links, activates, and syncs end to end. GH-13 is review-ready in PR #28; GH-14, GH-15, and GH-26 remain in the v1.0 milestone.
+Every issue through GH-13 is closed. The application is deployed to production at `piggy-budget-app.vercel.app` against a hosted Supabase project and Plaid Sandbox; a real Canadian institution links, activates, and syncs end to end, and the app installs to a home screen. GH-14 is in flight on `feat/GH-14-testing-security-hardening`. GH-15 is the remaining open v1.0 issue; GH-26 (themed select and searchable dropdown polish) is open with no milestone.
 
 ## Log
 
-- 2026-08-13T23:55Z [READY] GH-13 ships the installable, accessible, mobile-first PWA in commit `7f9d51a` and [PR #28](https://github.com/patrickxunuo/budget-app/pull/28): a deny-by-default service worker that can only cache versioned static assets and a data-free `/offline` screen, cross-platform install guidance at `/install`, a mobile bottom bar with safe-area handling beside the existing desktop rail, System/Light/Dark themes applied before first paint, and a WCAG AA pass. 486 Vitest checks across 47 files, lint, typecheck, production build, and 36 runnable browser cases (96 fixture-gated) are green.
+- 2026-08-14T09:00Z [IN FLIGHT] GH-14 (automated testing and security hardening) is being built on `feat/GH-14-testing-security-hardening`. Its working tree adds a `rate_limiting` migration with pgTAP coverage, `src/lib/security/`, a `security.yml` workflow, `.gitleaks.toml`, Dependabot, `e2e/security-hardening.spec.ts` with shared `e2e/support/`, and `docs/production-smoke-checklist.md`, and it touches the webhook route, auth actions/confirm, the deletion queue, `src/proxy.ts`, the Plaid service/errors/sync, `next.config.ts`, `.env.example`, `ci.yml`, and every existing `e2e` spec. Nothing is committed yet.
+
+- 2026-08-14T08:43Z [SHIPPED] GH-13 is merged and issue #13 is closed. [PR #28](https://github.com/patrickxunuo/budget-app/pull/28) landed as `1e00954`, and the follow-up [PR #29](https://github.com/patrickxunuo/budget-app/pull/29) landed as `8f6febf` to compact the header controls: the mobile header now carries only the theme toggle and the essential links, "Install app" is hidden below `sm` and removed entirely in standalone mode, and the theme toggle was rebuilt around the 44px minimum touch target. `main` is at `8f6febf`; 486 Vitest checks across 47 files are green on it as of 2026-08-14.
+
+- 2026-08-13T23:55Z [READY] GH-13 ships the installable, accessible, mobile-first PWA: a deny-by-default service worker that can only cache versioned static assets and a data-free `/offline` screen, cross-platform install guidance at `/install`, a mobile bottom bar with safe-area handling beside the existing desktop rail, System/Light/Dark themes applied before first paint, and a WCAG AA pass. 486 Vitest checks across 47 files, lint, typecheck, production build, and 36 runnable browser cases (96 fixture-gated) are green.
   - The palette contrast test found a real defect rather than confirming a belief: `bg-brand` with `text-white` is **2.05:1 in dark mode**, so every accent foreground moved to a contrast-gated `--on-accent`. `--line` was darkened to a true 3:1 control border and the old value kept as `--line-soft` for decorative hairlines.
   - Two review passes each found defects that no test could have caught. A PowerShell `Get-Content -Raw` round-trip silently re-encoded UTF-8 as the ANSI codepage and destroyed `→` and `·` in `src/app/page.tsx` — with data loss, since unmappable characters became `?`. Use `[System.IO.File]::ReadAllText`/`WriteAllText`, or an editor tool, never `Get-Content -Raw` without `-Encoding utf8`, on any file that might contain non-ASCII.
   - Declaring `metadata.icons` at all makes Next drop **every** file-convention icon (`accumulateMetadata` applies them only when `resolvedMetadata.icons` is unset). Adding an Apple icon silently unlinked `app/icon.svg`; both `icon.svg` and `favicon.ico` now have to be listed explicitly.
@@ -68,8 +72,11 @@ Every issue through GH-12 is closed and the application is deployed to productio
 
 ## Planned
 
-- Provision live owner/member/invitation fixtures for the environment-gated browser journeys. This is the largest standing coverage gap: the full browser suite runs 14 cases and skips 96.
+- Provision live owner/member/invitation fixtures for the environment-gated browser journeys. This is the largest standing coverage gap: the full browser suite runs 36 cases and skips 96, and GH-13 supplied all 22 of the newly runnable ones because PWA cases need no fixture.
 - Submit the Plaid Trial/Production application. The review is the long-lead item for real bank data and nothing else depends on it, so it should start now rather than at GH-15.
 - Verify the destructive GH-11 and GH-12 flows against the deployment while the data is disposable: per-Item disconnect in both modes, account-data deletion, and workspace deletion back to first-owner setup. None has ever run against a real backend.
-- Under GH-14: export `PLAID_E2E_PROVIDER` in CI and stop fixture-absent browser journeys from skipping silently; add Sandbox credentials as repository secrets.
+- Install the deployed PWA on a real Android and a real iOS device and confirm the service worker registers, the offline screen appears on a failed navigation, and the update prompt fires. None of this has browser evidence yet — `public/sw.js` is proven only against the synthetic Vitest harness.
+- Apply GH-14's `20260814090000_rate_limiting.sql` with `pnpm exec supabase db push --linked` when that branch merges. A Vercel deploy ships code only, and rate limiting that never reaches the hosted database fails open.
+- Under GH-14 (in flight): export `PLAID_E2E_PROVIDER` in CI and stop fixture-absent browser journeys from skipping silently; add Sandbox credentials as repository secrets.
 - Under GH-15: add `.gitattributes` (`* text=auto eol=lf`) so `pnpm format:check` passes on Windows checkouts.
+- GH-26 (themed select and searchable dropdown polish) is open with no milestone. It is independent of GH-14 and can run concurrently.

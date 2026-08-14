@@ -100,4 +100,6 @@ Ensure all values from `.env.example` are present. Only the two `NEXT_PUBLIC_*` 
 
 ## Last Verified
 
-2026-08-13 — Windows/PowerShell; 294 Vitest checks, lint, typecheck, production build, and 10/10 live Plaid Sandbox smoke checks green.
+2026-08-14 — Windows/PowerShell; 486 Vitest checks across 47 files green on `main` at `8f6febf`. Lint, typecheck, production build, and 10/10 live Plaid Sandbox smoke checks last verified 2026-08-13.
+
+Verification is memory-bound on this workstation rather than slow. `next dev`, `next build`, and Vitest all hit `FATAL ERROR: Zone Allocation failed` under concurrency with roughly 2 GB free, which reads as a test failure but is not one. Check free memory before blaming a suite, and run the browser suite as `CI=1 pnpm exec playwright test --workers=1` so Playwright drives the much lighter `pnpm start`.
