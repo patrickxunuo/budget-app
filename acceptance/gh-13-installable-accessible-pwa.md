@@ -93,6 +93,7 @@ Cache names are versioned (`budget-app-static-v<N>`). `activate` deletes every c
 - [ ] When the browser fires `beforeinstallprompt`, an **Install Budget App** button appears and calls `prompt()`; the button is absent when the event never fires.
 - [ ] When the app is already running in `display-mode: standalone`, the page says so instead of repeating the instructions.
 - [ ] The install entry point is reachable from the application shell and the landing page.
+- [ ] The persistent application header hides its install entry point in standalone PWA mode, where the app is already installed.
 
 ### AC3 — Mobile-first shell with a desktop layout
 
@@ -106,7 +107,7 @@ Cache names are versioned (`budget-app-static-v<N>`). `activate` deletes every c
 ### AC4 — Light and dark themes, device preference by default
 
 - [ ] The default preference is `system`; with no stored choice the palette follows `prefers-color-scheme`.
-- [ ] A member can choose System, Light, or Dark; the choice persists across reloads in `localStorage`.
+- [ ] A fresh install follows the device theme; one compact icon button switches between explicit Light and Dark choices, and that choice persists across reloads in `localStorage`.
 - [ ] The chosen theme is applied by an inline script before first paint, so a hard reload never flashes the wrong palette.
 - [ ] `<meta name="theme-color">` is declared for both colour schemes, and `color-scheme` is set so native form controls and scrollbars match.
 - [ ] The toggle is a labelled radio group operable by keyboard, and the selected option is conveyed to assistive technology.

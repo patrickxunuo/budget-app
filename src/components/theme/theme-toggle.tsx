@@ -8,8 +8,6 @@ import {
   DEFAULT_THEME_PREFERENCE,
   isThemePreference,
   readStoredPreference,
-  THEME_PREFERENCE_LABELS,
-  THEME_PREFERENCES,
   THEME_STORAGE_KEY,
   writeStoredPreference,
   type ThemePreference,
@@ -96,12 +94,27 @@ const preferenceStore = (() => {
   };
 })();
 
-/** A three-way radio group: System (the default), Light, and Dark. */
+const deviceThemeStore = {
+  subscribe(onStoreChange: () => void): () => void {
+    const query = window.matchMedia?.(DARK_SCHEME_QUERY);
+    query?.addEventListener?.("change", onStoreChange);
+    return () => query?.removeEventListener?.("change", onStoreChange);
+  },
+  getSnapshot: prefersDark,
+  getServerSnapshot: () => false,
+};
+
+/** A compact light/dark switch sized for a touch target, not a toolbar panel. */
 export function ThemeToggle() {
   const preference = useSyncExternalStore(
     preferenceStore.subscribe,
     preferenceStore.getSnapshot,
     preferenceStore.getServerSnapshot,
+  );
+  const devicePrefersDark = useSyncExternalStore(
+    deviceThemeStore.subscribe,
+    deviceThemeStore.getSnapshot,
+    deviceThemeStore.getServerSnapshot,
   );
 
   useLayoutEffect(() => {
@@ -122,55 +135,52 @@ export function ThemeToggle() {
     applyTheme(document.documentElement, next, prefersDark());
   };
 
+  const resolvedTheme =
+    preference === "system"
+      ? devicePrefersDark
+        ? "dark"
+        : "light"
+      : preference;
+  const nextTheme = resolvedTheme === "dark" ? "light" : "dark";
+
   return (
-    <fieldset
+    <button
+      type="button"
       data-testid="theme-toggle"
-      className="border-line min-w-0 rounded-2xl border px-2 pt-1 pb-2"
+      data-theme-icon={resolvedTheme === "dark" ? "moon" : "sun"}
+      aria-label={`Switch to ${nextTheme} theme`}
+      aria-pressed={resolvedTheme === "dark"}
+      title={`Switch to ${nextTheme} theme`}
+      onClick={() => choose(nextTheme)}
+      className="border-line text-ink hover:border-brand hover:text-brand focus-visible:outline-focus grid size-11 shrink-0 place-items-center rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
     >
-      <legend className="font-utility text-muted px-1 text-[.62rem] tracking-[.12em] uppercase">
-        Appearance
-      </legend>
-      <div className="flex min-w-0 items-stretch gap-1">
-        {THEME_PREFERENCES.map((value) => {
-          const selected = value === preference;
-          const inputId = `theme-preference-${value}`;
-          return (
-            <div key={value} className="min-w-0 flex-1">
-              <input
-                type="radio"
-                name="theme-preference"
-                id={inputId}
-                value={value}
-                checked={selected}
-                onChange={() => choose(value)}
-                className="peer sr-only"
-              />
-              <label
-                htmlFor={inputId}
-                // Selected state is carried by a filled surface, a heavier
-                // weight, and a check glyph — never by colour alone.
-                className={`peer-focus-visible:outline-focus flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl px-2 text-center text-xs transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 ${
-                  selected
-                    ? "bg-brand text-on-accent font-bold"
-                    : "text-muted hover:text-ink font-medium"
-                }`}
-              >
-                {selected ? (
-                  <span
-                    aria-hidden="true"
-                    className="text-[.7rem] leading-none"
-                  >
-                    ✓
-                  </span>
-                ) : null}
-                <span className="truncate">
-                  {THEME_PREFERENCE_LABELS[value]}
-                </span>
-              </label>
-            </div>
-          );
-        })}
-      </div>
-    </fieldset>
+      {resolvedTheme === "dark" ? (
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className="size-5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M20.4 14.1A8.5 8.5 0 0 1 9.9 3.6 8.5 8.5 0 1 0 20.4 14.1Z" />
+        </svg>
+      ) : (
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className="size-5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        >
+          <circle cx="12" cy="12" r="3.75" />
+          <path d="M12 2.25v2M12 19.75v2M4.25 12h-2M21.75 12h-2M5.1 5.1l1.4 1.4M17.5 17.5l1.4 1.4M18.9 5.1l-1.4 1.4M6.5 17.5l-1.4 1.4" />
+        </svg>
+      )}
+    </button>
   );
 }
