@@ -39,7 +39,11 @@ async function confirmPassword(page: Page, password?: string) {
   if (!password) return;
   await page.getByLabel("Current password").fill(password);
   await page.getByRole("button", { name: /confirm password/i }).click();
-  await expect(page.getByRole("status")).toContainText(/confirmed|15 minutes/i);
+  // Scoped to <main>: the shell's connectivity and update live regions sit
+  // outside it, and an unscoped status role is ambiguous (GH-13).
+  await expect(page.getByRole("main").getByRole("status")).toContainText(
+    /confirmed|15 minutes/i,
+  );
 }
 
 test.describe("GH-12 data portability and lifecycle", () => {
@@ -155,7 +159,7 @@ test.describe("GH-12 data portability and lifecycle", () => {
       .fill("DELETE MY ACCOUNT");
     await page.getByTestId("delete-account").click();
 
-    const feedback = page.getByRole("status");
+    const feedback = page.getByRole("main").getByRole("status");
     await expect(feedback).toContainText(/could not.*confirm|retry/i);
     await expect(feedback).not.toContainText(/access[_ -]?token|smtp|secret/i);
     await expect(page.getByTestId("account-deletion-confirmation")).toHaveValue(

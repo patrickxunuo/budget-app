@@ -1,6 +1,10 @@
 export default function Loading() {
   return (
-    <main className="grid min-h-screen place-items-center px-5">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="grid min-h-screen place-items-center px-5"
+    >
       <div className="w-full max-w-lg" aria-live="polite" aria-busy="true">
         <p className="font-utility text-brand text-[0.68rem] tracking-[0.14em] uppercase">
           Opening ledger

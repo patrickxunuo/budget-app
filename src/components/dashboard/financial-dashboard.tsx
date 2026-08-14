@@ -133,7 +133,11 @@ export function FinancialDashboard({
     );
   const exportHref = `/api/transactions/export?${exportQuerySnapshot}`;
   return (
-    <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-8 lg:px-12">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-8 lg:px-12"
+    >
       <div className="mx-auto max-w-7xl">
         <header className="border-line grid gap-6 border-b pb-8 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>

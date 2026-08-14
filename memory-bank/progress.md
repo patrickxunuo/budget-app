@@ -2,9 +2,16 @@
 
 ## Current Sprint / Focus
 
-Every issue through GH-12 is closed and the application is deployed to production at `piggy-budget-app.vercel.app` against a hosted Supabase project and Plaid Sandbox. A real Canadian institution links, activates, and syncs end to end. GH-13, GH-14, and GH-15 remain in the v1.0 milestone, plus GH-26. GH-13 is no longer blocked: a live HTTPS origin now exists for install and service-worker verification.
+Every issue through GH-12 is closed and the application is deployed to production at `piggy-budget-app.vercel.app` against a hosted Supabase project and Plaid Sandbox. A real Canadian institution links, activates, and syncs end to end. GH-13 is review-ready in PR #28; GH-14, GH-15, and GH-26 remain in the v1.0 milestone.
 
 ## Log
+
+- 2026-08-13T23:55Z [READY] GH-13 ships the installable, accessible, mobile-first PWA in commit `7f9d51a` and [PR #28](https://github.com/patrickxunuo/budget-app/pull/28): a deny-by-default service worker that can only cache versioned static assets and a data-free `/offline` screen, cross-platform install guidance at `/install`, a mobile bottom bar with safe-area handling beside the existing desktop rail, System/Light/Dark themes applied before first paint, and a WCAG AA pass. 486 Vitest checks across 47 files, lint, typecheck, production build, and 36 runnable browser cases (96 fixture-gated) are green.
+  - The palette contrast test found a real defect rather than confirming a belief: `bg-brand` with `text-white` is **2.05:1 in dark mode**, so every accent foreground moved to a contrast-gated `--on-accent`. `--line` was darkened to a true 3:1 control border and the old value kept as `--line-soft` for decorative hairlines.
+  - Two review passes each found defects that no test could have caught. A PowerShell `Get-Content -Raw` round-trip silently re-encoded UTF-8 as the ANSI codepage and destroyed `→` and `·` in `src/app/page.tsx` — with data loss, since unmappable characters became `?`. Use `[System.IO.File]::ReadAllText`/`WriteAllText`, or an editor tool, never `Get-Content -Raw` without `-Encoding utf8`, on any file that might contain non-ASCII.
+  - Declaring `metadata.icons` at all makes Next drop **every** file-convention icon (`accumulateMetadata` applies them only when `resolvedMetadata.icons` is unset). Adding an Apple icon silently unlinked `app/icon.svg`; both `icon.svg` and `favicon.ico` now have to be listed explicitly.
+  - The branch was two commits behind `main` when it was cut, and the app-shell rewrite would have reverted `1211e33`'s pinned workspace header. Rebase before opening a PR that rewrites a file another commit just touched.
+  - Verification is memory-bound on this workstation, not slow: `next dev`, `next build`, and Vitest all hit `FATAL ERROR: Zone Allocation failed` under concurrency with ~2 GB free. Four DOM-free suites moved to `// @vitest-environment node`, and the browser suite runs as `CI=1 pnpm exec playwright test --workers=1` so Playwright drives the much lighter `pnpm start`.
 
 - 2026-08-13T22:40Z [SHIPPED] First real end-to-end production link against Tartan-Dominion Bank of Canada: exchange, account review, activation, and an initial sync of 175 transactions. Four defects had to be fixed to get there, none of which any automated test could see, because every Plaid path is covered only by mocks and the deterministic adapter.
   - `53138e4` GH-4 sent an unregistered `redirect_uri` on every link-token call.

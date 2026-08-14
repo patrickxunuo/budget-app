@@ -84,7 +84,7 @@ export function AuthForm({
         type="submit"
         data-testid={submitTestId}
         disabled={pending}
-        className="bg-brand hover:bg-brand-strong focus-visible:outline-brand flex min-h-12 w-full items-center justify-center rounded-xl px-5 text-sm font-semibold text-white transition focus-visible:outline-2 focus-visible:outline-offset-4 disabled:cursor-wait disabled:opacity-60"
+        className="bg-brand hover:bg-brand-strong focus-visible:outline-brand text-on-accent flex min-h-12 w-full items-center justify-center rounded-xl px-5 text-sm font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-4 disabled:cursor-wait disabled:opacity-60"
       >
         {pending ? pendingLabel : submitLabel}
       </button>

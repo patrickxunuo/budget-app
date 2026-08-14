@@ -6,7 +6,28 @@
 - Command: `pnpm test:e2e`
 - Test directory: `e2e/`
 - GH-3 suite: `e2e/auth.spec.ts`
-- Latest run: 14 passed, 96 fixture-dependent scenarios skipped, 0 failed (110 desktop/mobile cases; local Supabase environment)
+- Latest run: 36 passed, 96 fixture-dependent scenarios skipped, 0 failed (132 desktop/mobile cases). GH-13 raised the runnable count from 14 to 36 because every PWA case is fixtureless.
+- Running the suite needs roughly 2 GB of headroom. On a loaded workstation `next dev` is killed by the OS with `FATAL ERROR: Zone Allocation failed`, and every case then fails with `ERR_CONNECTION_REFUSED` from a dead web server rather than from a real defect. Run `CI=1 pnpm exec playwright test --workers=1` in that situation: `CI=1` switches the `webServer` to the production `pnpm start`, which is far lighter than the dev server.
+
+## GH-13 Installable, Accessible, Mobile-First PWA
+
+- [x] Installable manifest with reachable 192/512 `any` and 192/512 `maskable` PNG icons, plus a 180px Apple touch icon — manifest/route coverage passes; desktop/mobile Playwright runnable
+- [x] `/sw.js` served uncacheable (`no-cache, no-store, must-revalidate`) and scoped to the whole origin with `Service-Worker-Allowed: /` — desktop/mobile Playwright runnable
+- [x] Cross-platform install guidance at `/install` for Android/Chromium, iOS/iPadOS Safari, and desktop, reachable from the landing page and the app shell — component/Playwright coverage passes
+- [x] Data-free offline screen asserted to contain no figure or currency symbol — component/Playwright coverage passes
+- [x] "Skip to content" as the first tab stop, moving focus into `#main-content` — desktop/mobile Playwright runnable
+- [x] Overflow-free public shell at 390px, 768px, and 1280px — desktop/mobile Playwright runnable
+- [x] Service-worker cache policy: `public/sw.js` is executed in Vitest against synthetic fetch events, proving `/api/**`, every application document, cross-origin Supabase/Plaid, non-GET, and range requests are never read from or written to a cache — 38 unit assertions pass
+- [x] WCAG AA palette gate: `src/lib/theme/contrast.test.ts` parses `src/app/globals.css` and asserts every text pair at 4.5:1 and every UI pair at 3:1 in both themes, and that the `prefers-color-scheme` palette cannot drift from the explicit one — 71 unit assertions pass
+- [x] Theme preference (System default, Light, Dark), pre-hydration application, and storage-failure fallback — unit/component coverage passes
+- [x] Mobile bottom navigation versus desktop rail, `aria-current="page"`, and a non-colour active indicator — component coverage passes
+- [x] Service-worker update prompt: no self-`skipWaiting`, prompt only when a controller already exists, single guarded reload — component coverage passes
+- Test file: `e2e/pwa.spec.ts` (11 scenarios × desktop/mobile = 22 cases, all runnable with no fixtures). Screenshots of `/install` are attached on both projects.
+- Known gap — the worker is never exercised by a real browser. `public/sw.js` is proven only against the synthetic harness in `src/lib/pwa/service-worker.test.ts`, so registration, the offline fallback on a failed navigation, and the update prompt have no end-to-end evidence. This is a genuine gap, not a limitation: the registrar is production-only, but `CI=1` already runs the suite against `pnpm start`, so a `context.setOffline(true)` navigation case is possible and worth adding.
+- Also covered in jsdom rather than the browser: theme switching and the bottom-nav/rail swap, both of which live inside the authenticated shell.
+- The application shell mounts two always-present `role="status"` live regions (connectivity and service-worker updates). Any Playwright assertion on a page's own status message must be scoped — `page.getByRole("main").getByRole("status")`, or scoped to the form — or it is ambiguous under strict mode.
+- Latest automated verification: 486 Vitest checks across 47 files (189 new), lint, Next route generation/typecheck, and the production build are green.
+- Residual, fixture-gated: `e2e/auth.spec.ts` FE-004 and `e2e/data-lifecycle.spec.ts` can still match more than one `role="status"` inside `<main>`, because the membership console renders a `Feedback` region per non-idle action. That multiplicity predates GH-13; scoping to `<main>` removed the shell ambiguity but not this one. Give the console's feedback regions test ids when those fixtures are provisioned.
 
 ## GH-12 Data Portability and Lifecycle Controls
 

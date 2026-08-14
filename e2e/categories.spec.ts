@@ -235,7 +235,13 @@ test.describe("GH-7 scoped categories and merchant rules", () => {
     );
     await page.getByTestId("rule-confirm").click();
     expect((await createResponse).status()).toBe(201);
-    const status = page.locator('[aria-live="polite"]').last();
+    // Scoped to <main>: the shell mounts always-present connectivity and
+    // service-worker live regions outside it, and the last one on the page is
+    // now the (empty) update region rather than this feedback (GH-13).
+    const status = page
+      .getByRole("main")
+      .locator('[aria-live="polite"]')
+      .last();
     await expect(status).toHaveAttribute("aria-live", "polite");
     await expect(status).toContainText(/applied|updated|saved/i);
     await capture(page, testInfo, "merchant-rule-applied");

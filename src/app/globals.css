@@ -1,16 +1,82 @@
 @import "tailwindcss";
 
+/* Light is the authored default. Every token below is paired against
+   --background, --surface, and --panel by src/lib/theme/contrast.test.ts:
+   text tokens hold at least 4.5:1 and --line/--focus at least 3:1 in both
+   themes, so the palette cannot regress below WCAG AA unnoticed.
+   --line-soft is deliberately excluded: it draws decorative hairlines and the
+   page grid only, and never carries meaning or bounds a control. */
 :root {
   --background: #e8eee9;
   --surface: #f8faf7;
   --panel: #edf2ee;
   --ink: #14231c;
-  --muted: #5b6c63;
-  --line: #cbd6ce;
+  --muted: #53645a;
+  --line: #7a887e;
+  --line-soft: #cbd6ce;
   --brand: #176044;
   --brand-strong: #0d4431;
-  --mineral: #4e7180;
-  --alert: #a24f40;
+  --mineral: #456776;
+  --alert: #9a4636;
+  --on-accent: #ffffff;
+  --focus: #0d4431;
+  color-scheme: light dark;
+}
+
+/* Device preference is the default when the member has expressed no choice. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0c1712;
+    --surface: #111f19;
+    --panel: #172821;
+    --ink: #eef6f0;
+    --muted: #9eaea5;
+    --line: #5e7b6c;
+    --line-soft: #31463b;
+    --brand: #67c79b;
+    --brand-strong: #83d8b1;
+    --mineral: #8eb5c3;
+    --alert: #e39787;
+    --on-accent: #071410;
+    --focus: #83d8b1;
+  }
+}
+
+/* An explicit choice outranks the device preference: `:root[data-theme=…]`
+   is more specific than the bare `:root` inside the media query above, so
+   source order between these two blocks does not matter. */
+:root[data-theme="light"] {
+  --background: #e8eee9;
+  --surface: #f8faf7;
+  --panel: #edf2ee;
+  --ink: #14231c;
+  --muted: #53645a;
+  --line: #7a887e;
+  --line-soft: #cbd6ce;
+  --brand: #176044;
+  --brand-strong: #0d4431;
+  --mineral: #456776;
+  --alert: #9a4636;
+  --on-accent: #ffffff;
+  --focus: #0d4431;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --background: #0c1712;
+  --surface: #111f19;
+  --panel: #172821;
+  --ink: #eef6f0;
+  --muted: #9eaea5;
+  --line: #5e7b6c;
+  --line-soft: #31463b;
+  --brand: #67c79b;
+  --brand-strong: #83d8b1;
+  --mineral: #8eb5c3;
+  --alert: #e39787;
+  --on-accent: #071410;
+  --focus: #83d8b1;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -20,28 +86,16 @@
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
   --color-brand: var(--brand);
   --color-brand-strong: var(--brand-strong);
   --color-mineral: var(--mineral);
   --color-alert: var(--alert);
+  --color-on-accent: var(--on-accent);
+  --color-focus: var(--focus);
   --font-sans: var(--font-body);
   --font-display: var(--font-display);
   --font-utility: var(--font-utility);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0c1712;
-    --surface: #111f19;
-    --panel: #172821;
-    --ink: #eef6f0;
-    --muted: #9eaea5;
-    --line: #31463b;
-    --brand: #67c79b;
-    --brand-strong: #83d8b1;
-    --mineral: #8eb5c3;
-    --alert: #e39787;
-  }
 }
 
 * {
@@ -57,12 +111,12 @@ body {
   background-image:
     linear-gradient(
       to right,
-      color-mix(in srgb, var(--line) 42%, transparent) 1px,
+      color-mix(in srgb, var(--line-soft) 42%, transparent) 1px,
       transparent 1px
     ),
     linear-gradient(
       to bottom,
-      color-mix(in srgb, var(--line) 42%, transparent) 1px,
+      color-mix(in srgb, var(--line-soft) 42%, transparent) 1px,
       transparent 1px
     );
   background-size: 2rem 2rem;
@@ -77,6 +131,70 @@ body {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Baseline focus indicator for every control, so nothing can be reached by
+   keyboard without showing where focus is.
+
+   It has to live in `@layer base`. Tailwind puts its utilities in
+   `@layer utilities`, and an unlayered declaration beats every layered one
+   regardless of specificity — outside a layer this rule would silently
+   override every `focus-visible:outline-*` utility in the codebase. Inside
+   `base` the cascade order is base < utilities, so a component that wants a
+   different ring still wins. `:where()` keeps specificity at zero on top of
+   that. */
+@layer base {
+  :where(
+    a,
+    area,
+    button,
+    input,
+    label[tabindex],
+    select,
+    summary,
+    textarea,
+    [tabindex]
+  ):focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+}
+
+/* Keyboard entry point to the main region. Visible only while focused, but
+   always present in the DOM so it is the first tab stop. */
+.skip-link {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  color: var(--ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  left: 0.75rem;
+  padding: 0.75rem 1rem;
+  position: fixed;
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  transform: translateY(calc(-100% - 1.5rem));
+  transition: transform 150ms ease;
+  z-index: 100;
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* Display-cutout and home-indicator padding. `viewport-fit=cover` is set by
+   the root viewport export; without it every env() below resolves to 0. */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 @media (prefers-reduced-motion: reduce) {

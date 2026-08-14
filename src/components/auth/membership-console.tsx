@@ -228,7 +228,7 @@ export function MembershipConsole({
             </label>
             <button
               disabled={invitePending}
-              className="bg-brand min-h-12 rounded-xl px-5 text-sm font-semibold text-white"
+              className="bg-brand text-on-accent min-h-12 rounded-xl px-5 text-sm font-semibold"
             >
               {invitePending ? "Creating…" : "Create link"}
             </button>
@@ -297,7 +297,7 @@ export function MembershipConsole({
           </div>
           <button
             disabled={confirmPending}
-            className="bg-mineral min-h-12 rounded-xl px-5 text-sm font-semibold text-white"
+            className="bg-mineral text-on-accent min-h-12 rounded-xl px-5 text-sm font-semibold"
           >
             {confirmPending ? "Checking…" : "Confirm password"}
           </button>
@@ -359,7 +359,7 @@ export function MembershipConsole({
                 disabled={
                   accountPending || accountConfirmation !== "DELETE MY ACCOUNT"
                 }
-                className="bg-alert min-h-11 rounded-xl px-4 text-sm font-semibold text-white disabled:opacity-60"
+                className="bg-alert text-on-accent min-h-11 rounded-xl px-4 text-sm font-semibold disabled:opacity-60"
               >
                 {accountPending ? "Revoking banks…" : "Delete my account"}
               </button>
@@ -411,7 +411,7 @@ export function MembershipConsole({
                     workspaceConfirmation.trim() !== workspaceName.trim() ||
                     !workspaceAcknowledged
                   }
-                  className="bg-alert min-h-11 rounded-xl px-4 text-sm font-semibold text-white disabled:opacity-60"
+                  className="bg-alert text-on-accent min-h-11 rounded-xl px-4 text-sm font-semibold disabled:opacity-60"
                 >
                   {workspacePending
                     ? "Warning members and revoking banks…"

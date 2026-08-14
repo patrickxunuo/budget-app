@@ -16,7 +16,11 @@ export default async function BudgetsPage() {
     month,
   );
   return (
-    <main className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-8 lg:px-12 lg:py-14">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-w-0 overflow-x-hidden px-4 py-8 sm:px-8 lg:px-12 lg:py-14"
+    >
       <div className="mx-auto max-w-7xl">
         <BudgetWorkbench initialModel={initialModel} />
       </div>

@@ -2,7 +2,11 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <main className="grid min-h-screen place-items-center px-5">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="grid min-h-screen place-items-center px-5"
+    >
       <div className="border-line bg-surface w-full max-w-lg rounded-2xl border p-7">
         <p className="font-utility text-muted text-[0.68rem] tracking-[0.14em] uppercase">
           404 / No entry
@@ -15,7 +19,7 @@ export default function NotFound() {
         </p>
         <Link
           href="/"
-          className="bg-brand focus-visible:outline-brand mt-6 inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-4"
+          className="bg-brand focus-visible:outline-brand text-on-accent mt-6 inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-4"
         >
           Return home
         </Link>
