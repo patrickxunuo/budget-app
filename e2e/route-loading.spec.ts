@@ -22,6 +22,7 @@ const RAIL_BREAKPOINT = 1024;
 
 type Destination = { readonly label: string; readonly path: string };
 
+const DASHBOARD: Destination = { label: "Overview", path: "/dashboard" };
 const ACCOUNTS: Destination = { label: "Accounts", path: "/accounts" };
 const TRANSACTIONS: Destination = {
   label: "Transactions",
@@ -438,4 +439,71 @@ test("FE-006 a displayed skeleton drops its sweep entirely under prefers-reduced
   // assertion above cannot pass on a rule that simply never applied.
   await page.emulateMedia({ reducedMotion: "no-preference" });
   expect(await sweepContent()).not.toBe("none");
+});
+test("GH-31 FE-007 streams the data-free dashboard fallback with exactly four route-shaped blocks", async ({
+  page,
+}, testInfo) => {
+  requireFixture("auth-owner");
+  test.setTimeout(120_000);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await signIn(page);
+
+  // Listen before the source route mounts: production Next.js prefetches the
+  // visible Overview link, and the fallback is only testable after that real
+  // RSC response succeeds.
+  const prefetched = page.waitForResponse(
+    (response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname === DASHBOARD.path &&
+        response.request().headers().rsc === "1"
+      );
+    },
+    { timeout: PREFETCH_TIMEOUT_MS },
+  );
+  await page.goto(TRANSACTIONS.path);
+  const prefetchResponse = await prefetched;
+  expect(
+    prefetchResponse.ok(),
+    "dashboard fallback prefetch must succeed",
+  ).toBe(true);
+
+  const dashboardLink = primaryNavigation(page).getByRole("link", {
+    name: DASHBOARD.label,
+  });
+  await expect(dashboardLink).toBeVisible();
+  await throttleNavigation(page, DASHBOARD.path, 20_000);
+  await dashboardLink.click();
+
+  const skeleton = page.getByTestId("route-skeleton");
+  await expect(skeleton).toBeVisible({ timeout: 15_000 });
+  await expect(skeleton).toHaveAttribute("id", "main-content");
+  await expect(skeleton).toHaveAttribute("tabindex", "-1");
+  await expect(skeleton).toHaveAttribute("aria-busy", "true");
+  await expect(skeleton.getByRole("status")).toHaveCount(1);
+  for (const id of [
+    "dashboard-skeleton-heading-scope",
+    "dashboard-skeleton-budget",
+    "dashboard-skeleton-comparison",
+    "dashboard-skeleton-accounts",
+  ]) {
+    await expect(skeleton.getByTestId(id)).toBeVisible();
+  }
+  await expect(
+    skeleton.locator('[data-testid^="dashboard-skeleton-"]'),
+  ).toHaveCount(4);
+  expect(await skeleton.textContent()).not.toMatch(
+    /[\d$£€]|chequing|credit|grocer/i,
+  );
+  const reducedMotionContent = await skeleton
+    .locator(".skeleton")
+    .first()
+    .evaluate((element) => getComputedStyle(element, "::after").content);
+  expect(reducedMotionContent).toBe("none");
+  await expectNoHorizontalOverflow(page);
+  await capture(page, testInfo, "dashboard-route-skeleton");
+
+  await expect(page).toHaveURL(/\/dashboard(?:\?.*)?$/);
+  await expect(skeleton).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId("dashboard-heading")).toBeVisible();
 });

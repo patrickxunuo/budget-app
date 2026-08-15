@@ -61,6 +61,7 @@
 
 ## Known Pitfalls
 
+- A one-point SVG line series produces only an `M` (move) command, which paints nothing. Time-series charts that can render on day one need an explicit point marker; when two one-point series coincide, use distinguishable marker shapes and keep a complete accessible table as the non-visual equivalent.
 - Run `next typegen` before `tsc --noEmit`; fresh checkouts do not contain generated route types.
 - On Windows, never edit a source file through `Get-Content -Raw` + `WriteAllText`. Windows PowerShell 5.1 reads a BOM-less UTF-8 file as the ANSI codepage, so `→` and `·` come back as mojibake and unmappable characters are replaced by `?` — data loss a diff review can miss. Use `[System.IO.File]::ReadAllText`/`WriteAllText` (which detect and preserve the BOM) or an editor tool.
 - `pnpm format:check` covers `acceptance/` and `memory-bank/` as well as source, and `ci.yml` runs it _before_ lint — unformatted markdown fails the build exactly like unformatted TypeScript. A green `pnpm test`/`lint`/`build` locally says nothing about the gate CI hits first.

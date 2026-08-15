@@ -6,6 +6,11 @@ Every issue through GH-30 is closed and on `main`. The application is deployed t
 
 ## Log
 
+- 2026-08-15T08:12Z [READY] GH-31 replaces the dashboard with a request-current, privacy-scoped Toronto month-to-date overview: aggregate budget health and pace, normalized cumulative spending against the available prior three months, account balances, and a one-to-one route skeleton. The existing transaction explorer read model remains isolated and unchanged. All 880 Vitest checks, lint, typecheck, production build, formatting, and independent review are green; the configured browser command was attempted once but Playwright did not start because the local Volta npm launcher is missing `npm-prefix.js`.
+  - Review caught a day-one chart edge case: a one-point SVG path contains only a move command and paints no line. The chart now renders explicit current and baseline point markers, with component coverage for the single-point model.
+
+- 2026-08-15T07:19Z [PLANNED] GH-31 will replace the dashboard with a request-current, privacy-scoped month-to-date overview: aggregate budget health and pace, a normalized trailing three-month cumulative-spend comparison, account balances, and a one-to-one route skeleton. The transaction explorer's existing read model remains unchanged.
+
 - 2026-08-14T23:19Z [READY] GH-15 publishes the supported Vercel + hosted Supabase + user-owned Plaid deployment path, operator/troubleshooting guidance, contributor/security/release runbooks, safe environment examples, production screenshots, and repository-wide LF normalization. Documentation contract 10/10, full Vitest 709/709, lint, typecheck, production build, and independent review are green.
 
 - 2026-08-14T22:57Z [PLANNED] GH-15 will publish the supported Vercel + hosted Supabase + user-owned Plaid deployment path, operator and troubleshooting guidance, contribution/security/release runbooks, safe environment examples, public-page screenshots, documentation contract coverage, and repository-wide LF normalization.
