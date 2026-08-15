@@ -144,12 +144,16 @@ async function blockPrefetchAndThrottle(
 
 /**
  * Signs in while listening for the production Link prefetches that cache each
- * destination's route-level fallback, then returns those destinations' links.
+ * destination's route-level fallback, waits for every streamed RSC body to
+ * finish, then returns those destinations' links.
  *
  * The listener starts before the dashboard mounts because production Next.js
- * prefetches visible links automatically. Missing that response is a harness
- * failure: continuing without a cached fallback makes a delayed navigation
- * keep showing the previous route, which can never prove loading.tsx behavior.
+ * prefetches visible links automatically. `waitForResponse` resolves at the
+ * headers; clicking before `response.finished()` can adopt that still-in-flight
+ * prefetch and bypass the navigation throttle entirely. Missing or unfinished
+ * prefetches are harness failures: continuing without a cached fallback makes
+ * a delayed navigation keep showing the previous route, which can never prove
+ * loading.tsx behavior.
  */
 async function signInWithPrefetchedFallbacks<
   const Destinations extends readonly Destination[],
@@ -163,7 +167,8 @@ async function signInWithPrefetchedFallbacks<
         const url = new URL(response.url());
         return (
           url.pathname === destination.path &&
-          response.request().headers().rsc === "1"
+          response.request().headers().rsc === "1" &&
+          response.request().headers()["next-router-prefetch"] !== undefined
         );
       },
       { timeout: PREFETCH_TIMEOUT_MS },
@@ -178,6 +183,10 @@ async function signInWithPrefetchedFallbacks<
       response.ok(),
       `${destinations[index]?.path} fallback prefetch must succeed`,
     ).toBe(true);
+    expect(
+      await response.finished(),
+      `${destinations[index]?.path} fallback prefetch must finish before navigation`,
+    ).toBeNull();
   }
 
   return (await Promise.all(
@@ -456,7 +465,8 @@ test("GH-31 FE-007 streams the data-free dashboard fallback with exactly four ro
       const url = new URL(response.url());
       return (
         url.pathname === DASHBOARD.path &&
-        response.request().headers().rsc === "1"
+        response.request().headers().rsc === "1" &&
+        response.request().headers()["next-router-prefetch"] !== undefined
       );
     },
     { timeout: PREFETCH_TIMEOUT_MS },
@@ -467,6 +477,10 @@ test("GH-31 FE-007 streams the data-free dashboard fallback with exactly four ro
     prefetchResponse.ok(),
     "dashboard fallback prefetch must succeed",
   ).toBe(true);
+  expect(
+    await prefetchResponse.finished(),
+    "dashboard fallback prefetch must finish before navigation",
+  ).toBeNull();
 
   const dashboardLink = primaryNavigation(page).getByRole("link", {
     name: DASHBOARD.label,
