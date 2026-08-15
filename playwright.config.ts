@@ -21,6 +21,10 @@ const serverMode = (process.env.E2E_SERVER_MODE ??
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore:
+    process.env.E2E_EXCLUDE_ROUTE_LOADING === "1"
+      ? "**/route-loading.spec.ts"
+      : undefined,
   // Prints the fixture inventory once at end of run and fails when a family
   // named in E2E_REQUIRED_FIXTURES was never provisioned, so a skipped suite
   // can no longer read as a passing one.

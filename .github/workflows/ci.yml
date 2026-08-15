@@ -77,6 +77,16 @@ jobs:
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Run route-loading end-to-end tests
+        env:
+          # Next only enables automatic/partial Link prefetching in production.
+          # These cases assert that prefetched loading.tsx boundaries appear,
+          # so they must exercise the already-built production server rather
+          # than the development server used by the deterministic Plaid cases.
+          E2E_SERVER_MODE: start
+          E2E_REQUIRED_FIXTURES: auth-owner
+        run: pnpm exec playwright test e2e/route-loading.spec.ts
+
       - name: Run end-to-end tests
         env:
           # The deterministic Plaid journeys cannot run against a production
@@ -103,10 +113,14 @@ jobs:
           #                      asserts Personal and Family rows on one page,
           #                      which the scoped ledger cannot satisfy
           E2E_REQUIRED_FIXTURES: plaid,auth-owner,categories,budgets-service-cleanup
+          # The route-loading cases ran above against the production behavior
+          # they specify. Do not repeat them against `next dev`, where automatic
+          # Link prefetching is disabled by Next itself.
+          E2E_EXCLUDE_ROUTE_LOADING: "1"
         run: pnpm test:e2e
 
       - name: Upload Playwright report
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report

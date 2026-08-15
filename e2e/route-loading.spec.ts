@@ -36,8 +36,8 @@ const CATEGORIES: Destination = { label: "Categories", path: "/categories" };
  */
 const THROTTLE_MS = 4000;
 
-/** How long a hover-triggered prefetch is given before the spec moves on. */
-const PREFETCH_TIMEOUT_MS = 8000;
+/** How long the production server gets to deliver a partial route prefetch. */
+const PREFETCH_TIMEOUT_MS = 15_000;
 
 /**
  * Marks a live DOM node so a later assertion can tell "still the same element"
@@ -142,43 +142,52 @@ async function blockPrefetchAndThrottle(
 }
 
 /**
- * Visits a destination once so the server has compiled it.
+ * Signs in while listening for the production Link prefetches that cache each
+ * destination's route-level fallback, then returns those destinations' links.
  *
- * CI runs this suite against `next dev` (`E2E_SERVER_MODE=dev`, see
- * `memory-bank/devSetup.md`), where the first request for a route pays for its
- * compilation. Without the warm-up, a "prefetch" would time out on a compile
- * and the click would land with nothing cached to commit.
+ * The listener starts before the dashboard mounts because production Next.js
+ * prefetches visible links automatically. Missing that response is a harness
+ * failure: continuing without a cached fallback makes a delayed navigation
+ * keep showing the previous route, which can never prove loading.tsx behavior.
  */
-async function warmDestination(page: Page, destination: Destination) {
-  await page.goto(destination.path);
-  await expect(page).toHaveURL(new RegExp(`${destination.path}(?:\\?.*)?$`));
-}
-
-/**
- * Leaves the destination's route-level fallback cached, and returns its link.
- *
- * `next dev` compiles viewport prefetching out for performance, so the hover is
- * not decoration: intent prefetching is the only path that populates the cache
- * there. AC3 names the prefetched fallback as the primary feedback, so this is
- * the state the product is specified to navigate from.
- */
-async function prefetchFromShell(
+async function signInWithPrefetchedFallbacks<
+  const Destinations extends readonly Destination[],
+>(
   page: Page,
-  destination: Destination,
-): Promise<Locator> {
-  const link = primaryNavigation(page).getByRole("link", {
-    name: destination.label,
-  });
-  await expect(link).toBeVisible();
-  const prefetched = page
-    .waitForResponse(
-      (response) => new URL(response.url()).pathname === destination.path,
+  destinations: Destinations,
+): Promise<{ [Index in keyof Destinations]: Locator }> {
+  const prefetched = destinations.map((destination) =>
+    page.waitForResponse(
+      (response) => {
+        const url = new URL(response.url());
+        return (
+          url.pathname === destination.path &&
+          response.request().headers().rsc === "1"
+        );
+      },
       { timeout: PREFETCH_TIMEOUT_MS },
-    )
-    .catch(() => undefined);
-  await link.hover();
-  await prefetched;
-  return link;
+    ),
+  );
+
+  await signIn(page);
+
+  const responses = await Promise.all(prefetched);
+  for (const [index, response] of responses.entries()) {
+    expect(
+      response.ok(),
+      `${destinations[index]?.path} fallback prefetch must succeed`,
+    ).toBe(true);
+  }
+
+  return (await Promise.all(
+    destinations.map(async (destination) => {
+      const link = primaryNavigation(page).getByRole("link", {
+        name: destination.label,
+      });
+      await expect(link).toBeVisible();
+      return link;
+    }),
+  )) as { [Index in keyof Destinations]: Locator };
 }
 
 async function markShellNode(locator: Locator) {
@@ -213,13 +222,9 @@ for (const destination of [ACCOUNTS, BUDGETS]) {
     page,
   }, testInfo) => {
     requireFixture("auth-owner");
-    // Two warm-up navigations plus a deliberately throttled one, against a dev
-    // server that compiles on demand.
     test.setTimeout(120_000);
 
-    await signIn(page);
-    await warmDestination(page, destination);
-    await page.goto("/dashboard");
+    const [link] = await signInWithPrefetchedFallbacks(page, [destination]);
 
     const nav = primaryNavigation(page);
     const header = page.getByTestId("workspace-header");
@@ -230,7 +235,6 @@ for (const destination of [ACCOUNTS, BUDGETS]) {
     const navBefore = await handleOf(nav, "the primary navigation");
     const headerBefore = await handleOf(header, "the workspace header");
 
-    const link = await prefetchFromShell(page, destination);
     await throttleNavigation(page, destination.path);
     await link.click();
 
@@ -281,13 +285,10 @@ test("FE-002 a destination activated while another is pending is the one that re
   requireFixture("auth-owner");
   test.setTimeout(120_000);
 
-  await signIn(page);
-  await warmDestination(page, ACCOUNTS);
-  await warmDestination(page, BUDGETS);
-  await page.goto("/dashboard");
-
-  const abandoned = await prefetchFromShell(page, ACCOUNTS);
-  const intended = await prefetchFromShell(page, BUDGETS);
+  const [abandoned, intended] = await signInWithPrefetchedFallbacks(page, [
+    ACCOUNTS,
+    BUDGETS,
+  ]);
   // Only the first destination is held back, so the second can land while the
   // first is still in flight and the slow response has something to overwrite.
   await throttleNavigation(page, ACCOUNTS.path);
@@ -313,17 +314,14 @@ test("FE-003 the cold-boot root loader never appears while switching authenticat
   requireFixture("auth-owner");
   test.setTimeout(120_000);
 
-  await signIn(page);
   const rootLoader = page.getByTestId("root-loading");
   const skeleton = page.getByTestId("route-skeleton");
+  const destinations = [ACCOUNTS, TRANSACTIONS, BUDGETS] as const;
+  const links = await signInWithPrefetchedFallbacks(page, destinations);
 
-  for (const destination of [ACCOUNTS, TRANSACTIONS, BUDGETS]) {
-    await warmDestination(page, destination);
-  }
-  await page.goto("/dashboard");
-
-  for (const destination of [ACCOUNTS, TRANSACTIONS, BUDGETS]) {
-    const link = await prefetchFromShell(page, destination);
+  for (const [index, destination] of destinations.entries()) {
+    // Both tuples are created from the same `destinations` value above.
+    const link = links[index]!;
     await throttleNavigation(page, destination.path);
     await link.click();
 
@@ -352,16 +350,13 @@ for (const destination of [TRANSACTIONS, ACCOUNTS]) {
         width: viewport.width,
         height: viewport.height,
       });
-      await signIn(page);
-      await warmDestination(page, destination);
-      await page.goto("/dashboard");
+      const [link] = await signInWithPrefetchedFallbacks(page, [destination]);
 
       // The prefetch has to go through: a route-level fallback is only instant
       // because Next already holds it, and blocking the prefetch leaves the old
       // page on screen for the whole throttle instead of showing a skeleton
       // (measured — the sweep of this case with the prefetch refused fails
       // outright). So the navigation alone is held back, exactly as in FE-001.
-      const link = await prefetchFromShell(page, destination);
       await throttleNavigation(page, destination.path, 10_000);
       await link.click();
 
@@ -385,14 +380,12 @@ test("FE-005 the activated navigation item reports a real pending state while it
   requireFixture("auth-owner");
   test.setTimeout(120_000);
 
-  await signIn(page);
-  await warmDestination(page, CATEGORIES);
-  await page.goto("/dashboard");
-
   // Deliberately no prefetch here: this is the one case that exercises the live
   // `useLinkStatus` hook rather than a jsdom mock of it, so the pending phase
-  // has to be real.
+  // has to be real. Install the route before sign-in so production's automatic
+  // dashboard prefetch is refused as soon as the shell mounts.
   await blockPrefetchAndThrottle(page, CATEGORIES.path);
+  await signIn(page);
 
   const link = primaryNavigation(page).getByRole("link", {
     name: CATEGORIES.label,
@@ -429,11 +422,7 @@ test("FE-006 a displayed skeleton drops its sweep entirely under prefers-reduced
     });
 
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await signIn(page);
-  await warmDestination(page, BUDGETS);
-  await page.goto("/dashboard");
-
-  const link = await prefetchFromShell(page, BUDGETS);
+  const [link] = await signInWithPrefetchedFallbacks(page, [BUDGETS]);
   // Long enough to read the computed style under both motion settings before
   // the real page arrives and the skeleton goes away.
   await throttleNavigation(page, BUDGETS.path, 20_000);
