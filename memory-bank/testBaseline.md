@@ -32,6 +32,11 @@
 - Latest GH-30 browser result: **not run.** The suite could not be executed against this branch — port 3100 was already held by a foreign `next` server from another checkout, and `reuseExistingServer` would have tested that checkout's code rather than this branch's, which is worse than not running. Separately, the `dashboard` and `data-lifecycle` fixture families remain unprovisioned, so all six re-pointed/new cases would have skipped even with a correct server. Every `/transactions` browser assertion above is therefore authored-only.
 - Latest automated verification: 754 Vitest checks across 57 files, green on consecutive full-suite runs rather than one — the first review's finding passed in isolation and failed only under full-suite load order, so a single green run is not evidence here. Lint, Next route generation/typecheck, the production build, and Prettier on every changed file are also green.
 
+## GH-15 Deployment and Operations Documentation
+
+- No new runtime flow or application UI changed, so no Playwright spec was added and the full E2E suite was not rerun for this documentation-only flight.
+- Real, data-free captures of `/` and `/install` were visually verified and committed under `docs/screenshots/`; the documentation contract is covered by 10 Vitest checks.
+
 ## GH-13 Installable, Accessible, Mobile-First PWA
 
 - [x] Installable manifest with reachable 192/512 `any` and 192/512 `maskable` PNG icons, plus a 180px Apple touch icon — manifest/route coverage passes; desktop/mobile Playwright runnable
