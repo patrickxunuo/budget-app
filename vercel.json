@@ -6,5 +6,5 @@
       "schedule": "17 7 * * *"
     }
   ],
-  "ignoreCommand": "case \"$VERCEL_GIT_COMMIT_REF\" in dependabot/*) exit 0 ;; *) exit 1 ;; esac"
+  "ignoreCommand": "case \"$VERCEL_GIT_COMMIT_REF\" in main) exit 1 ;; *) exit 0 ;; esac"
 }

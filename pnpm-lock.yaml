@@ -27,8 +27,8 @@ dependencies:
     specifier: 19.2.8
     version: 19.2.8(react@19.2.8)
   react-plaid-link:
-    specifier: 4.0.1
-    version: 4.0.1(react-dom@19.2.8)(react@19.2.8)
+    specifier: 4.2.0
+    version: 4.2.0(react-dom@19.2.8)(react@19.2.8)
   server-only:
     specifier: ^0.0.1
     version: 0.0.1
@@ -4324,8 +4324,8 @@ packages:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
     dev: true
 
-  /react-plaid-link@4.0.1(react-dom@19.2.8)(react@19.2.8):
-    resolution: {integrity: sha512-EZQWPWMCqX4ssffU4nHW7P+yzvWStW5o6ThfzgcaTULmJzTSHY2vrI8a5l+Qx1sRtKDEOrFQlZKj03FY3dneng==}
+  /react-plaid-link@4.2.0(react-dom@19.2.8)(react@19.2.8):
+    resolution: {integrity: sha512-qt+ZZUeGukBY5ru5XFOySUApfCNhs8H15+YyQSUPvBsZs5s3zyNlUx6E3Eiwr6C/xmra+NqMoqzKcpm2kmU6pg==}
     peerDependencies:
       react: ^16.8.0 || ^17 || ^18 || ^19
       react-dom: ^16.8.0 || ^17 || ^18 || ^19

@@ -41,20 +41,28 @@ async function confirmPassword(page: Page, password?: string) {
 }
 
 test.describe("GH-12 data portability and lifecycle", () => {
+  // Re-pointed to /transactions by GH-30, which moved exploration and export
+  // off the dashboard onto the Transactions tab. Still GH-12 criteria: the
+  // filename shape, the real download, and the absence of a Combined scope are
+  // asserted exactly as strictly as they were on /dashboard.
   test("FE-001 applied Family filters produce a real scoped CSV download with a clear filename", async ({
     page,
   }, testInfo) => {
     requireFixture("data-lifecycle");
     await signIn(page, member?.email, member?.password);
-    await page.goto("/dashboard");
+    await page.goto("/transactions");
 
-    await page.getByTestId("dashboard-scope-family").click();
-    await page.getByTestId("dashboard-status-filter").selectOption("all");
-    await page.getByTestId("dashboard-inclusion-filter").selectOption("all");
-    await page.getByTestId("dashboard-search").fill("a");
-    await page.getByTestId("dashboard-search").press("Enter");
+    await page.getByTestId("transactions-scope-family").click();
+    await expect(page.getByTestId("transactions-scope-family")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await page.getByTestId("transactions-status-filter").selectOption("all");
+    await page.getByTestId("transactions-inclusion-filter").selectOption("all");
+    await page.getByTestId("transactions-search").fill("a");
+    await page.getByTestId("transactions-search").press("Enter");
 
-    const exportLink = page.getByTestId("dashboard-export-csv");
+    const exportLink = page.getByTestId("transactions-export-csv");
     await expect(exportLink).toHaveAttribute("href", /scope=family/);
     await expect(exportLink).toHaveAttribute("href", /status=all/);
     await expect(exportLink).toHaveAttribute("href", /inclusion=all/);
@@ -69,21 +77,30 @@ test.describe("GH-12 data portability and lifecycle", () => {
     await capture(page, testInfo, "data-export-family-filtered");
   });
 
+  // Re-pointed to /transactions by GH-30; see the note on the case above.
   test("FE-001 Personal export preserves exact custom range and never offers Combined", async ({
     page,
   }) => {
     requireFixture("data-lifecycle");
     await signIn(page, member?.email, member?.password);
-    await page.goto("/dashboard");
-    await page.getByTestId("dashboard-scope-personal").click();
-    await page.getByTestId("dashboard-period-custom").click();
-    await page.getByLabel(/^from$/i).fill("2026-08-01");
-    await page.getByLabel(/^to$/i).fill("2026-08-13");
-    await page.getByRole("button", { name: /apply|show custom/i }).click();
+    await page.goto("/transactions");
+    await page.getByTestId("transactions-scope-personal").click();
+    await expect(
+      page.getByTestId("transactions-scope-personal"),
+    ).toHaveAttribute("aria-pressed", "true");
+    await page.getByTestId("transactions-period-custom").click();
+    await page.getByTestId("transactions-custom-from").fill("2026-08-01");
+    await page.getByTestId("transactions-custom-to").fill("2026-08-13");
+    await page.getByTestId("transactions-custom-apply").click();
 
-    const href = await page
-      .getByTestId("dashboard-export-csv")
-      .getAttribute("href");
+    // The href is withheld while the refresh it describes is in flight, so wait
+    // for the applied snapshot rather than reading a torn intermediate value.
+    // Wait on the applied end date, not merely on `period=custom`: choosing the
+    // Custom period already fires a request carrying the model's own range, and
+    // that earlier snapshot also matches `period=custom`.
+    const exportLink = page.getByTestId("transactions-export-csv");
+    await expect(exportLink).toHaveAttribute("href", /to=2026-08-13/);
+    const href = await exportLink.getAttribute("href");
     expect(href).toContain("scope=personal");
     expect(href).toContain("period=custom");
     expect(href).toContain("from=2026-08-01");
@@ -177,5 +194,83 @@ test.describe("GH-12 data portability and lifecycle", () => {
     await page.getByTestId("workspace-deletion-acknowledgement").check();
     await page.getByTestId("delete-workspace").click();
     await expect(page).toHaveURL(/\/setup$/);
+  });
+});
+
+/**
+ * New under GH-30. The shareable-link criterion is the reason filter state is
+ * synchronised into the address bar at all: the view a household member builds
+ * has to survive a reload and be reproducible by anyone who opens the same URL
+ * in the same household. It rides the same `data-lifecycle` member as the
+ * re-pointed GH-12 export journeys above, because it needs the same thing from
+ * the environment: a signed-in member who can load `/transactions`.
+ */
+test.describe("GH-30 transactions exploration and export", () => {
+  test("FE-007 a filtered view survives a reload and is reproduced from a shared link", async ({
+    page,
+    context,
+  }, testInfo) => {
+    requireFixture("data-lifecycle");
+    await signIn(page, member?.email, member?.password);
+    await page.goto("/transactions");
+
+    await page.getByTestId("transactions-status-filter").selectOption("posted");
+    await page.getByTestId("transactions-inclusion-filter").selectOption("all");
+    await page.getByTestId("transactions-search").fill("a");
+    await page.getByTestId("transactions-search").press("Enter");
+
+    // The applied view lives in the address bar, not only in component state.
+    await expect(page).toHaveURL(/status=posted/);
+    await expect(page).toHaveURL(/inclusion=all/);
+    await expect(page).toHaveURL(/search=a/);
+    const shared = page.url();
+
+    const rowsOf = (target: Page) =>
+      target.locator(
+        '[data-testid^="transactions-result-"]:not([data-testid="transactions-result-list"])',
+      );
+    const spending = await page
+      .getByTestId("transactions-summary-spending")
+      .textContent();
+    const rowCount = await rowsOf(page).count();
+
+    await page.reload();
+    await expect(page.getByTestId("transactions-status-filter")).toHaveValue(
+      "posted",
+    );
+    await expect(page.getByTestId("transactions-inclusion-filter")).toHaveValue(
+      "all",
+    );
+    await expect(page.getByTestId("transactions-search")).toHaveValue("a");
+    await expect(page.getByTestId("transactions-summary-spending")).toHaveText(
+      spending ?? "",
+    );
+    await expect(rowsOf(page)).toHaveCount(rowCount);
+    await expect(page.getByTestId("transactions-export-csv")).toHaveAttribute(
+      "href",
+      /status=posted/,
+    );
+
+    // A fresh page in the same household reproduces the same filtered view.
+    const sharedPage = await context.newPage();
+    await sharedPage.goto(shared);
+    await expect(
+      sharedPage.getByTestId("transactions-status-filter"),
+    ).toHaveValue("posted");
+    await expect(
+      sharedPage.getByTestId("transactions-inclusion-filter"),
+    ).toHaveValue("all");
+    await expect(sharedPage.getByTestId("transactions-search")).toHaveValue(
+      "a",
+    );
+    await expect(
+      sharedPage.getByTestId("transactions-summary-spending"),
+    ).toHaveText(spending ?? "");
+    await expect(rowsOf(sharedPage)).toHaveCount(rowCount);
+    await expect(
+      sharedPage.getByRole("button", { name: /combined/i }),
+    ).toHaveCount(0);
+    await capture(sharedPage, testInfo, "transactions-shared-filtered-view");
+    await sharedPage.close();
   });
 });

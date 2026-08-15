@@ -1,56 +1,60 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { ManualEntryWorkbench } from "@/components/transactions/manual-entry-workbench";
+import { TransactionExplorer } from "@/components/transactions/transaction-explorer";
 import { TransactionLedger } from "@/components/transactions/transaction-ledger";
 import {
   getApiContext,
   listCategoriesAndRules,
   listTransactions,
 } from "@/lib/categories/service";
+import { readDashboard } from "@/lib/dashboard/service";
 import {
   getManualEntryContext,
   listManualEntries,
 } from "@/lib/manual-entries/service";
+import { formatLocalDate } from "@/lib/transactions/accounting";
 import {
-  calculateSummary,
-  manualEntryToAccountingTransaction,
-  plaidViewToAccountingTransaction,
-} from "@/lib/transactions/accounting";
+  parseExplorerFilters,
+  toExplorerSearchParams,
+  toReadModelQuery,
+} from "@/lib/transactions/explorer-filters";
 
 export const metadata: Metadata = {
   title: "Transactions",
   description: "Review connected and off-bank household activity.",
 };
 
+const EXPLORER_LIMIT = 50;
+
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ scope?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const requestedScope = (await searchParams).scope;
-  const scope = requestedScope === "personal" ? "personal" : "family";
-  const [categoryContext, manualContext] = await Promise.all([
+  const today = formatLocalDate(new Date(), "America/Toronto");
+  const filters = parseExplorerFilters(await searchParams, today);
+  const scope = filters.scope;
+  const [context, manualContext] = await Promise.all([
     getApiContext(),
     getManualEntryContext(),
   ]);
-  const [accountingPlaidEntries, data, manualEntries] = await Promise.all([
-    listTransactions(categoryContext, undefined, undefined, { scope }),
-    listCategoriesAndRules(categoryContext),
-    listManualEntries(manualContext, { scope }),
-  ]);
-  const transactions = accountingPlaidEntries.slice(0, 50);
+  const [accountingPlaidEntries, data, manualEntries, explorerModel] =
+    await Promise.all([
+      listTransactions(context, undefined, undefined, { scope }),
+      listCategoriesAndRules(context),
+      listManualEntries(manualContext, { scope }),
+      // The explorer's summary and ledger are filter-faithful: the same read
+      // model the client refetches, seeded so first paint costs no request.
+      readDashboard(context, {
+        ...toReadModelQuery(filters),
+        limit: EXPLORER_LIMIT,
+      }),
+    ]);
+  const explorerKey = toExplorerSearchParams(filters);
+  const transactions = accountingPlaidEntries.slice(0, EXPLORER_LIMIT);
   const activeCategories = data.categories.filter(
     (category) => !category.archivedAt,
   );
-  const summary = calculateSummary([
-    ...accountingPlaidEntries.map(plaidViewToAccountingTransaction),
-    ...manualEntries.map(manualEntryToAccountingTransaction),
-  ]);
-  const cad = (cents: number) =>
-    new Intl.NumberFormat("en-CA", {
-      style: "currency",
-      currency: "CAD",
-    }).format(cents / 100);
   return (
     <main
       id="main-content"
@@ -73,56 +77,27 @@ export default async function TransactionsPage({
           </p>
         </header>
 
-        <nav
-          aria-label="Transaction privacy scope"
-          className="border-line bg-panel mb-6 flex w-fit rounded-full border p-1"
-        >
-          {(["family", "personal"] as const).map((option) => (
-            <Link
-              key={option}
-              href={`/transactions?scope=${option}`}
-              aria-current={scope === option ? "page" : undefined}
-              className={`rounded-full px-5 py-2 text-sm font-semibold capitalize ${scope === option ? "bg-brand text-surface" : "text-muted"}`}
-            >
-              {option}
-            </Link>
-          ))}
-        </nav>
+        {/* Keyed on the whole applied query, not just scope. The explorer seeds
+            `useState` from these props and ignores later changes to them, so a
+            navigation whose applied query differs from the last render's — a
+            scope switch, a shared link, back/forward — has to remount it or the
+            screen keeps a view the address bar no longer describes. Filter
+            changes sync the URL with `replaceState`, which does not re-render
+            this server component, so the key is stable across them.
 
-        <section
-          aria-label={`${scope} ledger summary`}
-          className="border-line bg-panel mb-9 grid overflow-hidden rounded-2xl border sm:grid-cols-3"
-          data-testid="scoped-ledger-summary"
-        >
-          {[
-            ["Income", summary.incomeCents, "scoped-summary-income"],
-            [
-              "Spending after refunds",
-              summary.spendingCents,
-              "scoped-summary-spending",
-            ],
-            ["Net flow", summary.netFlowCents, "scoped-summary-net"],
-          ].map(([label, cents, testId]) => (
-            <div
-              key={String(label)}
-              className="border-line px-5 py-4 not-last:border-b sm:not-last:border-r sm:not-last:border-b-0"
-            >
-              <p className="font-utility text-muted text-[.62rem] font-semibold tracking-[.14em] uppercase">
-                {label}
-              </p>
-              <p
-                className="font-display text-ink mt-2 text-2xl font-semibold tabular-nums"
-                data-testid={String(testId)}
-              >
-                {cad(Number(cents))}
-              </p>
-            </div>
-          ))}
-          <p className="text-muted border-line col-span-full border-t px-5 py-3 text-xs leading-5">
-            Plaid and Manual/Cash records share these category and budget
-            totals; Manual rows never enter Plaid pending reconciliation.
-          </p>
-        </section>
+            Known limit: a key cannot catch a return to a URL the server already
+            rendered once. Land on a bare /transactions, apply filters (client
+            side only), then click the nav's own /transactions link: the server
+            sees identical input both times, emits the same key, and the filtered
+            view survives under a bare URL until the next reload. Narrow, and
+            never a scope or privacy mismatch — any scope difference does change
+            the key. Closing it needs the explorer to reconcile against
+            `useSearchParams()`, which is follow-up work, not this ticket. */}
+        <TransactionExplorer
+          key={explorerKey}
+          initialModel={explorerModel}
+          initialFilters={filters}
+        />
 
         <section aria-labelledby="manual-ledger-title" className="mb-16">
           <div className="sr-only">

@@ -22,6 +22,18 @@ async function openDashboard(page: Page) {
   await expect(page.getByTestId("dashboard-scope-family")).toBeVisible();
 }
 
+/**
+ * GH-30 moved exploration and export off `/dashboard` and onto the Transactions
+ * tab. The journeys below that exercise period navigation, composed filters and
+ * the 390 px surface are the same GH-9 acceptance criteria — only the surface
+ * they run against moved, so they keep their GH-9 identity and describe block.
+ */
+async function openTransactions(page: Page, query = "") {
+  await signIn(page);
+  await page.goto(`/transactions${query}`);
+  await expect(page.getByTestId("transactions-scope-family")).toBeVisible();
+}
+
 async function capture(page: Page, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`${name}.png`);
   await page.screenshot({ animations: "disabled", fullPage: true, path });
@@ -71,47 +83,50 @@ test.describe("GH-9 Family and Personal financial dashboards", () => {
     await capture(page, testInfo, "dashboard-personal-desktop");
   });
 
+  // Re-pointed to /transactions by GH-30: the exploration controls now live on
+  // the Transactions tab. Still a GH-9 criterion, still the same behaviour.
   test("FE-002 previous, next, week, and custom period navigation refreshes real calendar ranges", async ({
     page,
   }, testInfo) => {
     requireDashboardFixture();
-    await openDashboard(page);
+    await openTransactions(page);
     const before = await page.locator("main").textContent();
     await waitForDashboardResponse(page, () =>
-      page.getByTestId("dashboard-previous-period").click(),
+      page.getByTestId("transactions-previous-period").click(),
     );
     expect(await page.locator("main").textContent()).not.toBe(before);
     await waitForDashboardResponse(page, () =>
-      page.getByTestId("dashboard-next-period").click(),
+      page.getByTestId("transactions-next-period").click(),
     );
     await expect(
-      page.getByTestId("dashboard-period-week"),
+      page.getByTestId("transactions-period-week"),
     ).toHaveAccessibleName(/monday|week/i);
     await waitForDashboardResponse(page, () =>
-      page.getByTestId("dashboard-period-week").click(),
+      page.getByTestId("transactions-period-week").click(),
     );
-    await page.getByTestId("dashboard-period-custom").click();
-    await page.getByLabel(/^from$/i).fill("2026-08-03");
-    await page.getByLabel(/^to$/i).fill("2026-08-09");
+    await page.getByTestId("transactions-period-custom").click();
+    await page.getByTestId("transactions-custom-from").fill("2026-08-03");
+    await page.getByTestId("transactions-custom-to").fill("2026-08-09");
     await waitForDashboardResponse(page, () =>
-      page.getByRole("button", { name: /apply|show custom/i }).click(),
+      page.getByTestId("transactions-custom-apply").click(),
     );
-    await expect(page.locator("main")).toContainText(
+    await expect(page.getByTestId("transactions-range-label")).toContainText(
       /Aug(?:ust)? 3|2026-08-03/i,
     );
-    await expect(page.locator("main")).toContainText(
+    await expect(page.getByTestId("transactions-range-label")).toContainText(
       /Aug(?:ust)? 9|2026-08-09/i,
     );
-    await capture(page, testInfo, "dashboard-custom-range");
+    await capture(page, testInfo, "transactions-custom-range");
   });
 
+  // Re-pointed to /transactions by GH-30; see the note on FE-002.
   test("FE-003 combined real filters keep rows and totals aligned with visible semantic labels", async ({
     page,
   }, testInfo) => {
     requireDashboardFixture();
-    await openDashboard(page);
-    const account = page.getByTestId("dashboard-account-filter");
-    const category = page.getByTestId("dashboard-category-filter");
+    await openTransactions(page);
+    const account = page.getByTestId("transactions-account-filter");
+    const category = page.getByTestId("transactions-category-filter");
     const accountValue = await account
       .locator("option[value]:not([value=''])")
       .first()
@@ -126,22 +141,29 @@ test.describe("GH-9 Family and Personal financial dashboards", () => {
     );
     await account.selectOption(accountValue!);
     await category.selectOption(categoryValue!);
-    await page.getByTestId("dashboard-status-filter").selectOption("pending");
-    await page.getByTestId("dashboard-inclusion-filter").selectOption("all");
+    await page
+      .getByTestId("transactions-status-filter")
+      .selectOption("pending");
+    await page.getByTestId("transactions-inclusion-filter").selectOption("all");
     await waitForDashboardResponse(page, async () => {
-      await page.getByTestId("dashboard-search").fill("a");
-      await page.getByTestId("dashboard-search").press("Enter");
+      await page.getByTestId("transactions-search").fill("a");
+      await page.getByTestId("transactions-search").press("Enter");
     });
-    const ledger = page.getByTestId("dashboard-transaction-list");
+    const ledger = page.getByTestId("transactions-result-list");
     await expect(ledger).toContainText(/pending|no matching/i);
+    // `transactions-result-list` shares the row prefix, so it is excluded here.
     if (
       (await ledger
-        .locator('[data-testid^="dashboard-transaction-"]')
+        .locator(
+          '[data-testid^="transactions-result-"]:not([data-testid="transactions-result-list"])',
+        )
         .count()) > 0
     )
       await expect(ledger).toContainText(/plaid|manual|transfer|excluded/i);
-    await expect(page.getByTestId("dashboard-summary-spending")).toBeVisible();
-    await capture(page, testInfo, "dashboard-filtered-ledger");
+    await expect(
+      page.getByTestId("transactions-summary-spending"),
+    ).toBeVisible();
+    await capture(page, testInfo, "transactions-filtered-ledger");
   });
 
   test("FE-004 summaries, chart fallback, budget progress, balances, and freshness are readable without colour", async ({
@@ -188,14 +210,16 @@ test.describe("GH-9 Family and Personal financial dashboards", () => {
     await capture(page, testInfo, "dashboard-refresh-error-preserves-data");
   });
 
+  // Re-pointed to /transactions by GH-30; see the note on FE-002. The 44 px
+  // target check comes from the acceptance doc's responsive section.
   test("FE-006 mobile keyboard and reduced-motion use has no page overflow and captures the responsive dashboard", async ({
     page,
   }, testInfo) => {
     requireDashboardFixture();
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.setViewportSize({ width: 390, height: 844 });
-    await openDashboard(page);
-    const family = page.getByTestId("dashboard-scope-family");
+    await openTransactions(page);
+    const family = page.getByTestId("transactions-scope-family");
     await family.focus();
     await expect(family).toBeFocused();
     await page.keyboard.press("Tab");
@@ -208,13 +232,37 @@ test.describe("GH-9 Family and Personal financial dashboards", () => {
     }));
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
     for (const id of [
-      "dashboard-search",
-      "dashboard-account-filter",
-      "dashboard-category-filter",
-      "dashboard-status-filter",
-      "dashboard-inclusion-filter",
-    ])
-      await expect(page.getByTestId(id)).toHaveAccessibleName(/.+/);
-    await capture(page, testInfo, "dashboard-mobile-reduced-motion");
+      "transactions-scope-family",
+      "transactions-scope-personal",
+      "transactions-period-day",
+      "transactions-period-week",
+      "transactions-period-month",
+      "transactions-period-custom",
+      "transactions-previous-period",
+      "transactions-next-period",
+      "transactions-search",
+      "transactions-account-filter",
+      "transactions-category-filter",
+      "transactions-status-filter",
+      "transactions-inclusion-filter",
+    ]) {
+      const control = page.getByTestId(id);
+      await expect(control).toHaveAccessibleName(/.+/);
+      const box = await control.boundingBox();
+      expect(box, `${id} must be laid out at 390 px`).not.toBeNull();
+      expect(
+        Math.min(box!.width, box!.height),
+        `${id} must be at least 44 px on its smallest side`,
+      ).toBeGreaterThanOrEqual(44);
+    }
+    // The controls sit above the ledger rather than overlaying it.
+    const controls = await page
+      .getByTestId("transactions-search")
+      .boundingBox();
+    const ledger = await page
+      .getByTestId("transactions-result-list")
+      .boundingBox();
+    expect(controls!.y + controls!.height).toBeLessThanOrEqual(ledger!.y + 1);
+    await capture(page, testInfo, "transactions-mobile-reduced-motion");
   });
 });

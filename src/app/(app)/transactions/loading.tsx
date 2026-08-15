@@ -5,14 +5,22 @@ import {
 
 /* Counts are chosen to establish the page's rhythm, not to predict how much
    activity the scope holds. */
-const SUMMARY_CELLS = [0, 1, 2];
+const PERIOD_PILLS = [0, 1, 2, 3];
+const EXPLORER_FILTERS = [0, 1, 2, 3, 4];
+const EXPLORER_ROWS = [0, 1, 2];
 const MANUAL_FIELDS = [0, 1, 2, 3];
 const MANUAL_ENTRIES = [0, 1, 2];
 const LEDGER_ROWS = [0, 1, 2, 3];
 
 /**
- * Mirrors the ledger: masthead, the scope pill pair, the three-cell scoped
- * summary, the Manual/Cash desk beside its register, and the Plaid rows.
+ * Mirrors the ledger: masthead, the exploration console, the Manual/Cash desk
+ * beside its register, and the Plaid rows.
+ *
+ * GH-30 moved the scope pair and the scoped summary inside the console and put
+ * period navigation, five filters, and export beside them, so the console is
+ * the tallest thing above the fold. An earlier version of this file skipped it
+ * and drew the pre-GH-30 standalone scope pills instead, which shifted every
+ * section below it the moment real content arrived.
  */
 export default function Loading() {
   return (
@@ -36,24 +44,60 @@ export default function Loading() {
         </div>
       </div>
 
-      <div className="border-line bg-panel mb-6 flex w-fit gap-1 rounded-full border p-1">
-        <SkeletonShape className="h-9 w-24 rounded-full" />
-        <SkeletonShape className="h-9 w-24 rounded-full" />
-      </div>
-
-      <div className="border-line bg-panel mb-9 grid overflow-hidden rounded-2xl border sm:grid-cols-3">
-        {SUMMARY_CELLS.map((cell) => (
-          <div
-            key={cell}
-            className="border-line px-5 py-4 not-last:border-b sm:not-last:border-r sm:not-last:border-b-0"
-          >
-            <SkeletonShape className="h-2.5 w-32 max-w-full rounded-full" />
-            <SkeletonShape className="mt-3 h-7 w-28 max-w-full rounded-lg" />
+      <div className="mb-14 grid min-w-0 gap-5">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="grid min-w-0 gap-2.5">
+            <SkeletonShape className="h-2.5 w-44 max-w-full rounded-full" />
+            <SkeletonShape className="h-8 w-72 max-w-full rounded-lg" />
           </div>
-        ))}
-        <div className="border-line col-span-full grid gap-2.5 border-t px-5 py-3">
-          <SkeletonShape className="h-2.5 rounded-full" />
-          <SkeletonShape className="h-2.5 w-2/3 rounded-full" />
+          <div className="border-line bg-panel flex gap-1 rounded-full border p-1">
+            <SkeletonShape className="h-9 w-24 rounded-full" />
+            <SkeletonShape className="h-9 w-24 rounded-full" />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {PERIOD_PILLS.map((pill) => (
+            <SkeletonShape key={pill} className="h-9 w-20 rounded-full" />
+          ))}
+          <div className="flex gap-2 sm:ml-auto">
+            <SkeletonShape className="h-9 w-24 rounded-full" />
+            <SkeletonShape className="h-9 w-24 rounded-full" />
+          </div>
+        </div>
+
+        <SkeletonShape className="h-2.5 w-64 max-w-full rounded-full" />
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {EXPLORER_FILTERS.map((filter) => (
+            <div key={filter} className="grid gap-2">
+              <SkeletonShape className="h-2.5 w-20 rounded-full" />
+              <SkeletonShape className="h-11 rounded-xl" />
+            </div>
+          ))}
+        </div>
+
+        <div className="border-line flex flex-wrap items-end justify-between gap-4 border-t pt-5">
+          <div className="grid min-w-0 gap-2.5">
+            <SkeletonShape className="h-2.5 w-32 rounded-full" />
+            <SkeletonShape className="h-2.5 w-56 max-w-full rounded-full" />
+          </div>
+          <SkeletonShape className="h-11 w-36 rounded-full" />
+        </div>
+
+        <div className="border-line divide-line grid divide-y overflow-hidden rounded-2xl border">
+          {EXPLORER_ROWS.map((row) => (
+            <div
+              key={row}
+              className="bg-surface grid gap-4 p-5 sm:grid-cols-[1fr_auto] sm:items-center"
+            >
+              <div className="grid min-w-0 gap-2.5">
+                <SkeletonShape className="h-4 w-52 max-w-full rounded" />
+                <SkeletonShape className="h-2.5 w-full max-w-sm rounded-full" />
+              </div>
+              <SkeletonShape className="h-6 w-24 rounded sm:justify-self-end" />
+            </div>
+          ))}
         </div>
       </div>
 
