@@ -1,21 +1,23 @@
 import type { Metadata } from "next";
 import { FinancialDashboard } from "@/components/dashboard/financial-dashboard";
-import { getDashboardApiContext, readDashboard } from "@/lib/dashboard/service";
-import { formatLocalDate } from "@/lib/transactions/accounting";
+import {
+  getDashboardOverviewApiContext,
+  readDashboardOverview,
+} from "@/lib/dashboard/overview-service";
+import { delayRouteForE2E } from "@/lib/testing/route-loading-delay";
+
 export const metadata: Metadata = {
-  title: "Financial field report",
-  description: "Private Family and Personal cash-flow reporting.",
+  title: "Month-to-date overview",
+  description: "Private Family and Personal month-to-date budget health.",
 };
+
 export default async function DashboardPage() {
-  const context = await getDashboardApiContext();
-  const reference = formatLocalDate(new Date(), "America/Toronto");
-  const initialModel = await readDashboard(context, {
-    scope: "family",
-    period: "month",
-    reference,
-    status: "all",
-    inclusion: "default",
-    limit: 50,
-  });
+  await delayRouteForE2E();
+  const context = await getDashboardOverviewApiContext();
+  const initialModel = await readDashboardOverview(
+    context,
+    "family",
+    new Date(),
+  );
   return <FinancialDashboard initialModel={initialModel} />;
 }

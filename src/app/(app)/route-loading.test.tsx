@@ -47,10 +47,11 @@ const ROUTES: readonly RouteCase[] = [
     name: "dashboard",
     Loading: DashboardLoading,
     source: "src/components/dashboard/financial-dashboard.tsx",
-    mainClassName: "min-w-0 overflow-x-hidden px-4 py-8 sm:px-8 lg:px-12",
+    mainClassName:
+      "min-w-0 overflow-x-hidden px-4 py-6 sm:px-8 sm:py-8 lg:px-12",
     containerClassName: "mx-auto max-w-7xl",
-    // header, scope/period strip, summary tiles, chart, account panel, rows.
-    regions: 6,
+    // compact heading/scope, budget health, comparison chart, account balances.
+    regions: 4,
   },
   {
     name: "accounts",

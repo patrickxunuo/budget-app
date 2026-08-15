@@ -10,6 +10,12 @@
 - Previous run: 98 passed, 70 fixture-dependent scenarios skipped, 0 failed (168 desktop/mobile cases). GH-14 raised the runnable count from 36 to 98 by seeding an owner with `pnpm seed:e2e` and adding the fixtureless security-hardening spec; GH-13 had raised it from 14 to 36.
 - Running the suite needs roughly 2 GB of headroom. On a loaded workstation `next dev` is killed by the OS with `FATAL ERROR: Zone Allocation failed`, and every case then fails with `ERR_CONNECTION_REFUSED` from a dead web server rather than from a real defect. Run `CI=1 pnpm exec playwright test --workers=1` in that situation: `CI=1` switches the `webServer` to the production `pnpm start`, which is far lighter than the dev server.
 
+## GH-31 Read-Only Month-to-Date Dashboard
+
+- [x] Request-current Toronto month, aggregate budget health/pace, no-budget fallback, normalized prior-month cumulative baseline, nullable account balances, and strict Family/Personal scope — 22 new domain/service/route/component checks pass; full Vitest is 880/880.
+- [x] `e2e/dashboard.spec.ts` now covers the read-only dashboard, real scope refresh, 390/768/1280 overflow, 44px scope targets, reduced motion, initial-viewport budget figures, and the four-block GH-31 loading skeleton without API mocks.
+- Browser verification did not start in this flight: the configured `npm run test:e2e` command failed inside the local Volta npm launcher because `npm-prefix.js` is missing. No Playwright/product assertion ran or failed; the authored GH-31 journeys remain fixture-gated and unverified.
+
 ## GH-32 Route-Level Loading Skeletons and Navigation Pending Feedback
 
 - [x] Segment-level loading file for each of the six authenticated destinations, each reproducing its route's own `<main id="main-content" tabIndex={-1}>` wrapper, padding, and container width — component coverage passes; desktop/mobile Playwright runnable
