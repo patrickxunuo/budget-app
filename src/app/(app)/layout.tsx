@@ -56,7 +56,10 @@ export default async function ApplicationLayout({
             padding sits here rather than on the <header> so it cannot collide
             with that element's own px/py utilities. */}
         <div className="safe-x border-line bg-surface sticky top-0 z-20 border-b">
-          <header className="flex min-h-15 items-center justify-end gap-3 px-5 py-2 sm:justify-between sm:px-8">
+          <header
+            data-testid="workspace-header"
+            className="flex min-h-15 items-center justify-end gap-3 px-5 py-2 sm:justify-between sm:px-8"
+          >
             <div className="hidden min-w-0 sm:block">
               <p className="font-utility text-muted text-[.62rem] tracking-[.12em] uppercase">
                 Private workspace
