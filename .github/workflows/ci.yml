@@ -85,7 +85,11 @@ jobs:
           # than the development server used by the deterministic Plaid cases.
           E2E_SERVER_MODE: start
           E2E_REQUIRED_FIXTURES: auth-owner
-        run: pnpm exec playwright test e2e/route-loading.spec.ts
+          # The server, rather than Playwright routing, holds page data after
+          # loading.tsx has streamed. The hook is guarded by CI + loopback + the
+          # deterministic provider and is inert in every deployed environment.
+          E2E_ROUTE_LOADING_DELAY_MS: "4000"
+        run: pnpm exec playwright test e2e/route-loading.spec.ts --retries=0
 
       - name: Run end-to-end tests
         env:

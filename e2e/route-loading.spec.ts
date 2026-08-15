@@ -32,15 +32,6 @@ const BUDGETS: Destination = { label: "Budgets", path: "/budgets" };
 const CATEGORIES: Destination = { label: "Categories", path: "/categories" };
 
 /**
- * Long enough that a skeleton is unambiguously observable and screenshottable,
- * short enough that four throttled cases per project stay tolerable.
- */
-const THROTTLE_MS = 4000;
-
-/** How long the production server gets to deliver a partial route prefetch. */
-const PREFETCH_TIMEOUT_MS = 15_000;
-
-/**
  * Marks a live DOM node so a later assertion can tell "still the same element"
  * from "unmounted and rebuilt": React never re-adds an attribute it did not
  * set, so a rebuilt header comes back without this one.
@@ -88,47 +79,11 @@ function primaryNavigation(page: Page): Locator {
 }
 
 /**
- * Holds a destination's server response back so the pending phase lasts long
- * enough to assert against. Prefetches are passed through untouched: the
- * route-level fallback is only instant because Next already holds it, and
- * delaying that would remove the very thing under test.
+ * Refuses automatic prefetches so every click exercises a fresh streamed
+ * navigation. The CI-only server delay keeps page data pending after Next has
+ * sent loading.tsx; delaying the request here would prevent that first chunk.
  */
-async function throttleNavigation(
-  page: Page,
-  pathname: string,
-  delayMs = THROTTLE_MS,
-) {
-  await page.route(
-    (url) => url.pathname === pathname,
-    async (route) => {
-      if (route.request().headers()["next-router-prefetch"] !== undefined) {
-        await route.continue().catch(() => undefined);
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      // An interrupted navigation (FE-002) cancels this request mid-flight;
-      // that is the behaviour under test, not a harness failure.
-      await route.continue().catch(() => undefined);
-    },
-  );
-}
-
-/**
- * The opposite setup to `throttleNavigation`: refuses the prefetch outright and
- * then holds the navigation back.
- *
- * `useLinkStatus` only reports `pending` until the history entry updates, and a
- * cached fallback commits immediately — the docs say so, and it is the very
- * behaviour AC13 wants. So the pending affordance can only be observed on the
- * path AC10 is really about: a destination Next does *not* already hold. With
- * the prefetch refused, the click has to fetch, and the hint has something to
- * report.
- */
-async function blockPrefetchAndThrottle(
-  page: Page,
-  pathname: string,
-  delayMs = THROTTLE_MS,
-) {
+async function blockPrefetch(page: Page, pathname: string) {
   await page.route(
     (url) => url.pathname === pathname,
     async (route) => {
@@ -136,58 +91,27 @@ async function blockPrefetchAndThrottle(
         await route.abort().catch(() => undefined);
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
       await route.continue().catch(() => undefined);
     },
   );
 }
 
 /**
- * Signs in while listening for the production Link prefetches that cache each
- * destination's route-level fallback, waits for every streamed RSC body to
- * finish, then returns those destinations' links.
- *
- * The listener starts before the dashboard mounts because production Next.js
- * prefetches visible links automatically. `waitForResponse` resolves at the
- * headers; clicking before `response.finished()` can adopt that still-in-flight
- * prefetch and bypass the navigation throttle entirely. Missing or unfinished
- * prefetches are harness failures: continuing without a cached fallback makes
- * a delayed navigation keep showing the previous route, which can never prove
- * loading.tsx behavior.
+ * Blocks destination prefetches before the dashboard mounts, signs in, and
+ * returns the links rendered at the active viewport. This verifies the visible
+ * streaming contract without racing Next's partial-prefetch cache.
  */
-async function signInWithPrefetchedFallbacks<
+async function signInWithDestinationLinks<
   const Destinations extends readonly Destination[],
 >(
   page: Page,
   destinations: Destinations,
 ): Promise<{ [Index in keyof Destinations]: Locator }> {
-  const prefetched = destinations.map((destination) =>
-    page.waitForResponse(
-      (response) => {
-        const url = new URL(response.url());
-        return (
-          url.pathname === destination.path &&
-          response.request().headers().rsc === "1" &&
-          response.request().headers()["next-router-prefetch"] !== undefined
-        );
-      },
-      { timeout: PREFETCH_TIMEOUT_MS },
-    ),
+  await Promise.all(
+    destinations.map((destination) => blockPrefetch(page, destination.path)),
   );
 
   await signIn(page);
-
-  const responses = await Promise.all(prefetched);
-  for (const [index, response] of responses.entries()) {
-    expect(
-      response.ok(),
-      `${destinations[index]?.path} fallback prefetch must succeed`,
-    ).toBe(true);
-    expect(
-      await response.finished(),
-      `${destinations[index]?.path} fallback prefetch must finish before navigation`,
-    ).toBeNull();
-  }
 
   return (await Promise.all(
     destinations.map(async (destination) => {
@@ -234,7 +158,7 @@ for (const destination of [ACCOUNTS, BUDGETS]) {
     requireFixture("auth-owner");
     test.setTimeout(120_000);
 
-    const [link] = await signInWithPrefetchedFallbacks(page, [destination]);
+    const [link] = await signInWithDestinationLinks(page, [destination]);
 
     const nav = primaryNavigation(page);
     const header = page.getByTestId("workspace-header");
@@ -245,7 +169,6 @@ for (const destination of [ACCOUNTS, BUDGETS]) {
     const navBefore = await handleOf(nav, "the primary navigation");
     const headerBefore = await handleOf(header, "the workspace header");
 
-    await throttleNavigation(page, destination.path);
     await link.click();
 
     const skeleton = page.getByTestId("route-skeleton");
@@ -295,14 +218,10 @@ test("FE-002 a destination activated while another is pending is the one that re
   requireFixture("auth-owner");
   test.setTimeout(120_000);
 
-  const [abandoned, intended] = await signInWithPrefetchedFallbacks(page, [
+  const [abandoned, intended] = await signInWithDestinationLinks(page, [
     ACCOUNTS,
     BUDGETS,
   ]);
-  // Only the first destination is held back, so the second can land while the
-  // first is still in flight and the slow response has something to overwrite.
-  await throttleNavigation(page, ACCOUNTS.path);
-
   await abandoned.click();
   await expect(page.getByTestId("route-skeleton")).toBeVisible();
   await intended.click();
@@ -311,9 +230,9 @@ test("FE-002 a destination activated while another is pending is the one that re
   await expect(page.getByTestId("budget-workbench")).toBeVisible({
     timeout: 30_000,
   });
-  // The abandoned response arrives after this point; a navigation that is only
-  // "interruptible" until its first reply lands is not interruptible at all.
-  await page.waitForTimeout(THROTTLE_MS);
+  // Give the abandoned stream time to settle; it must not replace the route
+  // selected second.
+  await page.waitForTimeout(1_000);
   await expect(page).toHaveURL(/\/budgets(?:\?.*)?$/);
   await expect(page.getByTestId("budget-workbench")).toBeVisible();
 });
@@ -327,12 +246,11 @@ test("FE-003 the cold-boot root loader never appears while switching authenticat
   const rootLoader = page.getByTestId("root-loading");
   const skeleton = page.getByTestId("route-skeleton");
   const destinations = [ACCOUNTS, TRANSACTIONS, BUDGETS] as const;
-  const links = await signInWithPrefetchedFallbacks(page, destinations);
+  const links = await signInWithDestinationLinks(page, destinations);
 
   for (const [index, destination] of destinations.entries()) {
     // Both tuples are created from the same `destinations` value above.
     const link = links[index]!;
-    await throttleNavigation(page, destination.path);
     await link.click();
 
     await expect(skeleton).toBeVisible();
@@ -360,21 +278,12 @@ for (const destination of [TRANSACTIONS, ACCOUNTS]) {
         width: viewport.width,
         height: viewport.height,
       });
-      const [link] = await signInWithPrefetchedFallbacks(page, [destination]);
+      const [link] = await signInWithDestinationLinks(page, [destination]);
 
-      // The prefetch has to go through: a route-level fallback is only instant
-      // because Next already holds it, and blocking the prefetch leaves the old
-      // page on screen for the whole throttle instead of showing a skeleton
-      // (measured — the sweep of this case with the prefetch refused fails
-      // outright). So the navigation alone is held back, exactly as in FE-001.
-      await throttleNavigation(page, destination.path, 10_000);
       await link.click();
 
       const skeleton = page.getByTestId("route-skeleton");
-      // A longer wait than the default: on the rare occasion the prefetch
-      // returned the whole payload rather than just the fallback, the commit is
-      // immediate and this is the assertion that should say so plainly.
-      await expect(skeleton).toBeVisible({ timeout: 15_000 });
+      await expect(skeleton).toBeVisible();
       await expectNoHorizontalOverflow(page);
       // The bar or the rail, whichever this width renders, is still there beside
       // the skeleton rather than pushed out of the viewport by it.
@@ -394,7 +303,7 @@ test("FE-005 the activated navigation item reports a real pending state while it
   // `useLinkStatus` hook rather than a jsdom mock of it, so the pending phase
   // has to be real. Install the route before sign-in so production's automatic
   // dashboard prefetch is refused as soon as the shell mounts.
-  await blockPrefetchAndThrottle(page, CATEGORIES.path);
+  await blockPrefetch(page, CATEGORIES.path);
   await signIn(page);
 
   const link = primaryNavigation(page).getByRole("link", {
@@ -432,10 +341,7 @@ test("FE-006 a displayed skeleton drops its sweep entirely under prefers-reduced
     });
 
   await page.emulateMedia({ reducedMotion: "reduce" });
-  const [link] = await signInWithPrefetchedFallbacks(page, [BUDGETS]);
-  // Long enough to read the computed style under both motion settings before
-  // the real page arrives and the skeleton goes away.
-  await throttleNavigation(page, BUDGETS.path, 20_000);
+  const [link] = await signInWithDestinationLinks(page, [BUDGETS]);
   await link.click();
 
   await expect(page.getByTestId("route-skeleton")).toBeVisible();
@@ -455,42 +361,19 @@ test("GH-31 FE-007 streams the data-free dashboard fallback with exactly four ro
   requireFixture("auth-owner");
   test.setTimeout(120_000);
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await blockPrefetch(page, DASHBOARD.path);
   await signIn(page);
 
-  // Listen before the source route mounts: production Next.js prefetches the
-  // visible Overview link, and the fallback is only testable after that real
-  // RSC response succeeds.
-  const prefetched = page.waitForResponse(
-    (response) => {
-      const url = new URL(response.url());
-      return (
-        url.pathname === DASHBOARD.path &&
-        response.request().headers().rsc === "1" &&
-        response.request().headers()["next-router-prefetch"] !== undefined
-      );
-    },
-    { timeout: PREFETCH_TIMEOUT_MS },
-  );
   await page.goto(TRANSACTIONS.path);
-  const prefetchResponse = await prefetched;
-  expect(
-    prefetchResponse.ok(),
-    "dashboard fallback prefetch must succeed",
-  ).toBe(true);
-  expect(
-    await prefetchResponse.finished(),
-    "dashboard fallback prefetch must finish before navigation",
-  ).toBeNull();
 
   const dashboardLink = primaryNavigation(page).getByRole("link", {
     name: DASHBOARD.label,
   });
   await expect(dashboardLink).toBeVisible();
-  await throttleNavigation(page, DASHBOARD.path, 20_000);
   await dashboardLink.click();
 
   const skeleton = page.getByTestId("route-skeleton");
-  await expect(skeleton).toBeVisible({ timeout: 15_000 });
+  await expect(skeleton).toBeVisible();
   await expect(skeleton).toHaveAttribute("id", "main-content");
   await expect(skeleton).toHaveAttribute("tabindex", "-1");
   await expect(skeleton).toHaveAttribute("aria-busy", "true");

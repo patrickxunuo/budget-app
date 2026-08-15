@@ -13,6 +13,7 @@ import {
   listManualEntries,
 } from "@/lib/manual-entries/service";
 import { formatLocalDate } from "@/lib/transactions/accounting";
+import { delayRouteForE2E } from "@/lib/testing/route-loading-delay";
 import {
   parseExplorerFilters,
   toExplorerSearchParams,
@@ -31,6 +32,7 @@ export default async function TransactionsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await delayRouteForE2E();
   const today = formatLocalDate(new Date(), "America/Toronto");
   const filters = parseExplorerFilters(await searchParams, today);
   const scope = filters.scope;

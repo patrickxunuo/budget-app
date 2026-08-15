@@ -6,6 +6,7 @@ import { PlaidSyncStatus } from "@/components/plaid/plaid-sync-status";
 import { requireActiveMembership } from "@/lib/auth/dal";
 import { getPlaidConnections } from "@/lib/plaid/connection-management";
 import { getPlaidSyncStatuses } from "@/lib/plaid/sync-service";
+import { delayRouteForE2E } from "@/lib/testing/route-loading-delay";
 
 export const metadata: Metadata = {
   title: "Accounts",
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AccountsPage() {
+  await delayRouteForE2E();
   const { user, membership } = await requireActiveMembership();
   const actor = {
     userId: user.id,

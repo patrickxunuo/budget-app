@@ -4,11 +4,13 @@ import {
   getApiContext,
   listCategoriesAndRules,
 } from "@/lib/categories/service";
+import { delayRouteForE2E } from "@/lib/testing/route-loading-delay";
 export const metadata: Metadata = {
   title: "Categories",
   description: "Manage private and shared ledger categories.",
 };
 export default async function CategoriesPage() {
+  await delayRouteForE2E();
   const data = await listCategoriesAndRules(await getApiContext());
   return (
     <main

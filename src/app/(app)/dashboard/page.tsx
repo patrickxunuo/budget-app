@@ -4,6 +4,7 @@ import {
   getDashboardOverviewApiContext,
   readDashboardOverview,
 } from "@/lib/dashboard/overview-service";
+import { delayRouteForE2E } from "@/lib/testing/route-loading-delay";
 
 export const metadata: Metadata = {
   title: "Month-to-date overview",
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardPage() {
+  await delayRouteForE2E();
   const context = await getDashboardOverviewApiContext();
   const initialModel = await readDashboardOverview(
     context,
