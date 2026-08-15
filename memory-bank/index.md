@@ -16,4 +16,4 @@ Project memory. Read this file first to find what you need.
 
 ## Last Updated
 
-2026-08-14 — through GH-14 on `main`; GH-15 deployment and operations documentation is ready for PR with its documentation contract, production screenshots, and full verification green. GH-26 remains open.
+2026-08-14 — through GH-15 on `main`, deployed to production and verified end to end against Plaid Sandbox. GH-30 (transaction exploration and CSV export on `/transactions`, PR #49) and GH-32 (route-level loading skeletons, PR #48) are in review; GH-30 blocks #31. #26, #31, #33, #35, and #44 remain open.
