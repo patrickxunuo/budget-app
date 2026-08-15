@@ -83,7 +83,7 @@ pnpm seed:e2e
 
 ### What CI runs
 
-CI seeds an owner after `pnpm test:db` and sets `E2E_REQUIRED_FIXTURES=plaid,auth-owner,categories,budgets-service-cleanup` — the four families it genuinely provisions. It also sets `E2E_SERVER_MODE=dev`, because the deterministic Plaid journeys are unreachable against a production build: the client guard in `src/components/plaid/plaid-link-flow.tsx` is a compile-time `NODE_ENV !== "production"` check, and `next start` is production. That is a harness choice and weakens no product control — `pnpm build` still proves the production build compiles, and `getPlaidProvider()` still requires Sandbox on a loopback origin off Vercel.
+CI seeds an owner after `pnpm test:db`, then runs Playwright twice. `e2e/route-loading.spec.ts` runs first against the already-built `next start` server with `E2E_REQUIRED_FIXTURES=auth-owner`, because its contract depends on production-only automatic Link prefetching. The remaining suite runs with `E2E_EXCLUDE_ROUTE_LOADING=1`, `E2E_REQUIRED_FIXTURES=plaid,auth-owner,categories,budgets-service-cleanup`, and `E2E_SERVER_MODE=dev`. Development mode is required because the deterministic Plaid journeys are unreachable against a production build: the client guard in `src/components/plaid/plaid-link-flow.tsx` is a compile-time `NODE_ENV !== "production"` check. This split weakens no product control — `pnpm build` proves the production build compiles, and `getPlaidProvider()` still requires Sandbox on a loopback origin off Vercel.
 
 Note that `PLAID_E2E_PROVIDER` and `PLAID_ENV` must reach the **Playwright process**, not just the Next server. Next loads `.env.local` for the server, but the test runner does not, so a local run needs them exported before the fixture gate will see them.
 

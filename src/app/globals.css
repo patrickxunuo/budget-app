@@ -205,6 +205,131 @@ a {
   }
 }
 
+/* Route-loading placeholders and the navigation pending affordance.
+
+   These sit in `@layer base` for the same reason the focus ring above does:
+   an unlayered declaration outranks every Tailwind utility, so a bare
+   `.skeleton` rule would silently override the `rounded-*`, `h-*`, and `w-*`
+   classes that give each individual shape its size.
+
+   The fill is `--line-soft`, the one token the contrast gate deliberately
+   excludes. A placeholder states nothing and bounds no control, so holding it
+   to a text ratio would only make an empty page shout. */
+@layer base {
+  .skeleton {
+    background-color: var(--line-soft);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .skeleton::after {
+    animation-duration: 1.7s;
+    animation-iteration-count: infinite;
+    animation-name: skeleton-sweep;
+    animation-timing-function: ease-in-out;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--surface) 70%, transparent),
+      transparent
+    );
+    content: "";
+    inset: 0;
+    position: absolute;
+    transform: translateX(-100%);
+  }
+
+  /* The global reduced-motion block at the end of this file only clamps
+     animation-duration, which parks a translating sweep on a frame instead of
+     removing it — a lopsided static gradient, not a placeholder. Dropping the
+     pseudo-element is what actually leaves a flat block behind. */
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton::after {
+      content: none;
+    }
+  }
+
+  /* Always rendered, in both states, at a fixed size: mounting the hint on
+     activation would resize the item under the pointer mid-click. Space is
+     reserved with opacity and visibility, never by conditional mounting. */
+  .nav-pending {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.1875rem;
+    height: 0.5rem;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    width: 1.125rem;
+  }
+
+  /* currentColor rather than a token of its own, so the cluster inherits
+     whichever ink the surrounding navigation item is already using. */
+  .nav-pending-dot {
+    background-color: currentColor;
+    border-radius: 9999px;
+    display: block;
+    height: 0.25rem;
+    width: 0.25rem;
+  }
+
+  /* A prefetched destination commits almost immediately, so the fade only
+     begins after 100ms: an effectively instant transition finishes before
+     anything has been drawn, and never flashes. */
+  .nav-pending[data-pending="true"] {
+    animation-delay: 100ms;
+    animation-duration: 180ms;
+    animation-fill-mode: forwards;
+    animation-name: nav-pending-in;
+    animation-timing-function: ease-out;
+    visibility: visible;
+  }
+
+  .nav-pending[data-pending="true"] .nav-pending-dot {
+    animation-delay: 100ms;
+    animation-duration: 900ms;
+    animation-iteration-count: infinite;
+    animation-name: nav-pending-dot;
+    animation-timing-function: ease-in-out;
+  }
+
+  /* Staggered so the cluster reads as travelling, which is the second half of
+     telling it apart from the solid `aria-current` bar without using colour. */
+  .nav-pending[data-pending="true"] .nav-pending-dot:nth-child(2) {
+    animation-delay: 250ms;
+  }
+
+  .nav-pending[data-pending="true"] .nav-pending-dot:nth-child(3) {
+    animation-delay: 400ms;
+  }
+}
+
+@keyframes skeleton-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes nav-pending-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes nav-pending-dot {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-1.5px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { NavigationPendingIndicator } from "@/components/app-shell/navigation-pending-indicator";
 
 export type NavigationItem = {
   href: string;
@@ -35,7 +36,12 @@ export function isActivePath(pathname: string | null, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** A small filled bar so the active state survives a colour-blind reading. */
+/**
+ * A small filled bar so the active state survives a colour-blind reading. It
+ * is a solid shape on purpose: the pending affordance beside it is a moving
+ * three-dot cluster, so "where I am" and "where I am going" differ in form and
+ * not only in colour.
+ */
 function ActiveIndicator({ className }: { className: string }) {
   return (
     <span
@@ -66,8 +72,13 @@ export function NavigationRail() {
               {active ? <ActiveIndicator className="h-4 w-1 shrink-0" /> : null}
               <span className="truncate">{item.label}</span>
             </span>
-            <span className="font-utility text-brand shrink-0 text-[.62rem]">
-              {item.index}
+            {/* The hint and the index share one shrink-0 group so the link
+                keeps its two-ended `justify-between` rhythm. */}
+            <span className="flex shrink-0 items-center gap-2.5">
+              <NavigationPendingIndicator />
+              <span className="font-utility text-brand text-[.62rem]">
+                {item.index}
+              </span>
             </span>
           </Link>
         );
@@ -110,8 +121,14 @@ export function BottomNavigation() {
                 >
                   {item.label}
                 </span>
-                <span className="font-utility text-muted text-[.6rem] leading-3 tracking-[.12em]">
-                  {item.index}
+                {/* The hint rides the index line rather than the bar above it,
+                    so the active bar and the pending cluster never occupy the
+                    same slot and can be read at the same time. */}
+                <span className="flex items-center gap-1.5">
+                  <NavigationPendingIndicator />
+                  <span className="font-utility text-muted text-[.6rem] leading-3 tracking-[.12em]">
+                    {item.index}
+                  </span>
                 </span>
               </Link>
             </li>
