@@ -207,6 +207,56 @@ test.describe("GH-30 transaction exploration regression", () => {
 });
 
 test.describe("GH-31 read-only month-to-date dashboard", () => {
+  test("FE-003 renders exact seeded month-to-date budget figures, balances, and freshness from the real backend", async ({
+    page,
+  }, testInfo) => {
+    requireDashboardFixture();
+    await openDashboard(page);
+
+    await expect(page.getByTestId("dashboard-budget-health")).toBeVisible();
+    await expect(page.getByTestId("dashboard-budget-spent")).toHaveText(
+      /\$250\.00/,
+    );
+    await expect(page.getByTestId("dashboard-budget-target")).toHaveText(
+      /\$1,000\.00/,
+    );
+    await expect(page.getByTestId("dashboard-budget-remaining")).toHaveText(
+      /\$750\.00/,
+    );
+
+    const accounts = page.getByTestId("dashboard-account-list");
+    const availableAccount = accounts
+      .locator("article")
+      .filter({ hasText: "E2E Family Chequing" });
+    await expect(availableAccount).toHaveCount(1);
+    await expect(availableAccount).toContainText(/Available\s*\$2,456\.78/);
+    await expect(availableAccount).toContainText(/Current\s*\$2,500\.00/);
+    await expect(availableAccount).toContainText(/Updated\s+/);
+    await expect(availableAccount).not.toContainText(/Freshness unavailable/i);
+
+    await expect(page.getByTestId("dashboard-baseline-note")).toContainText(
+      /history is unavailable/i,
+    );
+    await capture(page, testInfo, "dashboard-seeded-month-to-date");
+  });
+
+  test("FE-004 renders the seeded null-balance account as Unavailable, never zero", async ({
+    page,
+  }, testInfo) => {
+    requireDashboardFixture();
+    await openDashboard(page);
+
+    const unavailableAccount = page
+      .getByTestId("dashboard-account-list")
+      .locator("article")
+      .filter({ hasText: "E2E Family Unavailable" });
+    await expect(unavailableAccount).toHaveCount(1);
+    await expect(unavailableAccount).toContainText(/Available\s*Unavailable/i);
+    await expect(unavailableAccount).toContainText(/Current\s*Unavailable/i);
+    await expect(unavailableAccount).toContainText(/Freshness unavailable/i);
+    await expect(unavailableAccount).not.toContainText(/\$0\.00/);
+    await capture(page, testInfo, "dashboard-null-balance-unavailable");
+  });
   test("FE-006 is overflow-safe at 390, 768, and 1280px with visible mobile budget health, 44px scope targets, reduced motion, and a real scope refresh", async ({
     page,
   }, testInfo) => {

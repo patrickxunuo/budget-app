@@ -10,10 +10,10 @@
 // still reported green. That silent skip is what GH-14 exists to end.
 //
 // This creates one active owner and prints the environment assignments that
-// provision the fixture families depending on it. It is deliberately narrow: it
-// seeds an identity, not financial data. Journeys that additionally need an
-// activated Plaid Item or a disposable destructive workspace stay gated, and
-// the end-of-run fixture inventory continues to say so.
+// provision the identity-backed fixture families depending on it, including the
+// scoped Manual/Cash journeys. It is deliberately narrow: it seeds an identity,
+// not financial data. Run `pnpm seed:e2e:financial` afterward for the dashboard;
+// other linked-Item or destructive families stay gated and visible as absent.
 //
 // Refuses to run against anything but a loopback Supabase URL, so it can never
 // mint an owner in a hosted project.
@@ -52,7 +52,7 @@ const env = readEnv();
 const SUPABASE_URL = env("NEXT_PUBLIC_SUPABASE_URL");
 const SERVICE_ROLE_KEY = env("SUPABASE_SERVICE_ROLE_KEY");
 const EMAIL = env("E2E_SEED_EMAIL") ?? "e2e-owner@budget.local";
-const PASSWORD = env("E2E_SEED_PASSWORD") ?? "E2eOwner!2026-seed";
+const PASSWORD = env("E2E_SEED_PASSWORD");
 const DISPLAY_NAME = "E2E Owner";
 const WORKSPACE_NAME = "E2E Family";
 
@@ -71,6 +71,11 @@ const hostname = new URL(SUPABASE_URL).hostname;
 if (!["localhost", "127.0.0.1", "::1"].includes(hostname)) {
   fail(
     `refusing to seed a non-loopback Supabase project (${hostname}). This script is for local and CI databases only.`,
+  );
+}
+if (!PASSWORD) {
+  fail(
+    "E2E_SEED_PASSWORD must be set to a disposable local value. Keep it in the process environment or untracked .env.local; never commit it.",
   );
 }
 
@@ -150,6 +155,8 @@ const assignments = [
   `E2E_PLAID_MEMBER_PASSWORD=${PASSWORD}`,
   `E2E_AUTH_OWNER_EMAIL=${email}`,
   `E2E_AUTH_OWNER_PASSWORD=${PASSWORD}`,
+  `E2E_MANUAL_ENTRY_MEMBER_EMAIL=${email}`,
+  `E2E_MANUAL_ENTRY_MEMBER_PASSWORD=${PASSWORD}`,
 ];
 
 if (process.env.GITHUB_ENV) {

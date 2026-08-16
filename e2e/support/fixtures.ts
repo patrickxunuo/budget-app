@@ -202,17 +202,12 @@ const FIXTURES: Readonly<Record<FixtureFamily, FixtureDefinition>> = {
       },
     ],
   },
-  // No fallback to E2E_PLAID_MEMBER_*, deliberately. These journeys assert on
-  // balances, freshness, trend rows, and budget progress, so a bare identity is
-  // not enough: `scripts/seed-e2e-fixtures.mjs` seeds an owner, not financial
-  // data. With the fallback in place, seeding silently marked this family
-  // "provisioned" and the journeys then ran and failed on absent data — a
-  // family claiming to be provisioned when its specs cannot pass is the same
-  // false confidence as a silent skip, just louder. Name the dedicated
-  // variables once a member with dashboard data exists.
+  // Dashboard credentials are emitted only by the financial seed. The identity
+  // seed cannot provision this family because these journeys assert real Family
+  // balances, freshness, current-month spending, and budget progress.
   dashboard: {
     summary:
-      "Requires an active member with Family and Personal dashboard fixtures (accounts, transactions, and budget progress) via E2E_DASHBOARD_MEMBER_* credentials.",
+      "Requires the deterministic Family accounts, transaction, and current-month budget created by pnpm seed:e2e:financial, plus E2E_DASHBOARD_MEMBER_* credentials.",
     slots: [
       { name: "email", candidates: ["E2E_DASHBOARD_MEMBER_EMAIL"] },
       { name: "password", candidates: ["E2E_DASHBOARD_MEMBER_PASSWORD"] },
@@ -222,17 +217,8 @@ const FIXTURES: Readonly<Record<FixtureFamily, FixtureDefinition>> = {
     summary:
       "Requires an active member with budget categories, progress thresholds, and Family/Personal fixtures via E2E_BUDGET_MEMBER_* credentials.",
     slots: [
-      {
-        name: "email",
-        candidates: ["E2E_BUDGET_MEMBER_EMAIL", "E2E_DASHBOARD_MEMBER_EMAIL"],
-      },
-      {
-        name: "password",
-        candidates: [
-          "E2E_BUDGET_MEMBER_PASSWORD",
-          "E2E_DASHBOARD_MEMBER_PASSWORD",
-        ],
-      },
+      { name: "email", candidates: ["E2E_BUDGET_MEMBER_EMAIL"] },
+      { name: "password", candidates: ["E2E_BUDGET_MEMBER_PASSWORD"] },
     ],
   },
   "budgets-service-cleanup": {
@@ -243,15 +229,11 @@ const FIXTURES: Readonly<Record<FixtureFamily, FixtureDefinition>> = {
       { name: "serviceRoleKey", candidates: ["SUPABASE_SERVICE_ROLE_KEY"] },
     ],
   },
-  // Also no fallback, for a different reason: FE-001 creates one Personal and
-  // two Family entries and then asserts all three rows on one page. The ledger
-  // is URL-scoped (`/transactions?scope=…`) and there is deliberately no
-  // combined view, so that assertion cannot hold against the product as built.
-  // The spec needs restructuring per scope before it can be provisioned by a
-  // seeded identity; until then it must not claim to be runnable.
+  // The identity seed provisions this family. Its journeys create and clean up
+  // uniquely named rows in each explicit URL ledger scope against real APIs.
   "manual-entries": {
     summary:
-      "Requires an active member via E2E_MANUAL_ENTRY_MEMBER_* credentials. Note: FE-001 currently asserts Personal and Family rows on a single page, which the scoped ledger cannot satisfy.",
+      "Requires the active owner created by pnpm seed:e2e via E2E_MANUAL_ENTRY_MEMBER_* credentials; each journey owns its scoped categories and entries.",
     slots: [
       { name: "email", candidates: ["E2E_MANUAL_ENTRY_MEMBER_EMAIL"] },
       { name: "password", candidates: ["E2E_MANUAL_ENTRY_MEMBER_PASSWORD"] },
