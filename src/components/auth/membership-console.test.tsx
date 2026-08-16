@@ -123,3 +123,25 @@ describe("GH-12 membership danger zone", () => {
     expect(screen.queryByTestId("delete-workspace")).not.toBeInTheDocument();
   });
 });
+describe("GH-26 invitation expiry select", () => {
+  it("FE-009 uses the themed trigger while preserving the expiresInHours action payload", async () => {
+    render(<MembershipConsole {...props} />);
+
+    const expiry = screen.getByTestId("invitation-expiry");
+    expect(expiry).toHaveAccessibleName(/expires in/i);
+    expect(expiry).toHaveAttribute("data-value", "72");
+    fireEvent.click(expiry);
+    fireEvent.click(screen.getByRole("option", { name: "7 days" }));
+    expect(expiry).toHaveAttribute("data-value", "168");
+
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "member@example.com" },
+    });
+    fireEvent.submit(screen.getByTestId("invitation-create-form"));
+
+    await waitFor(() => expect(actions.createInvitation).toHaveBeenCalled());
+    const formData = actions.createInvitation.mock.calls.at(-1)?.at(-1);
+    expect(formData).toBeInstanceOf(FormData);
+    expect((formData as FormData).get("expiresInHours")).toBe("168");
+  });
+});

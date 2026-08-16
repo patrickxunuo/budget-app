@@ -1,10 +1,11 @@
-﻿import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import {
   fixtureCredentials,
   fixtureEnv,
   requireFixture,
 } from "./support/fixtures";
+import { chooseFirstSelectOption } from "./support/select";
 
 const credentials = fixtureCredentials("budgets");
 const { supabaseUrl, serviceRoleKey } = fixtureEnv("budgets-service-cleanup");
@@ -111,12 +112,7 @@ test.describe("GH-10 monthly category budgets", () => {
     try {
       await page.getByTestId("budget-create").click();
       const category = page.getByTestId("budget-category");
-      const categoryValue = await category
-        .locator("option[value]:not([value=''])")
-        .first()
-        .getAttribute("value");
-      test.skip(!categoryValue, "Requires an available active category.");
-      await category.selectOption(categoryValue!);
+      await chooseFirstSelectOption(category);
       await page.getByTestId("budget-amount").fill("237.41");
       const effectiveMonth = await page
         .getByTestId("budget-effective-month")
@@ -160,12 +156,7 @@ test.describe("GH-10 monthly category budgets", () => {
     try {
       await page.getByTestId("budget-create").click();
       const category = page.getByTestId("budget-category");
-      const categoryValue = await category
-        .locator("option[value]:not([value=''])")
-        .first()
-        .getAttribute("value");
-      test.skip(!categoryValue, "Requires an available active category.");
-      await category.selectOption(categoryValue!);
+      await chooseFirstSelectOption(category);
       await page.getByTestId("budget-amount").fill("345.67");
       const currentEffective = await page
         .getByTestId("budget-effective-month")
@@ -279,12 +270,7 @@ test.describe("GH-10 monthly category budgets", () => {
     const original = await page.getByTestId("budget-target-list").textContent();
     await page.getByTestId("budget-create").click();
     const category = page.getByTestId("budget-category");
-    const categoryValue = await category
-      .locator("option[value]:not([value=''])")
-      .first()
-      .getAttribute("value");
-    test.skip(!categoryValue, "Requires an available active category.");
-    await category.selectOption(categoryValue!);
+    const { value: categoryValue } = await chooseFirstSelectOption(category);
     await page.getByTestId("budget-amount").fill("444.44");
     await page.context().setOffline(true);
     await page.getByTestId("budget-save").click();
@@ -294,8 +280,9 @@ test.describe("GH-10 monthly category budgets", () => {
     expect(await page.getByTestId("budget-target-list").textContent()).toBe(
       original,
     );
-    await expect(page.getByTestId("budget-category")).toHaveValue(
-      categoryValue!,
+    await expect(page.getByTestId("budget-category")).toHaveAttribute(
+      "data-value",
+      categoryValue,
     );
     await expect(page.getByTestId("budget-amount")).toHaveValue("444.44");
     await page.context().setOffline(false);

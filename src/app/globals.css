@@ -401,3 +401,31 @@ a {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Shared field-report dropdown surface. The portal is positioned by the
+   component; this layer owns only the entrance treatment so collision maths
+   and motion preferences stay independent. */
+@layer base {
+  .piggy-select-menu {
+    animation: piggy-select-reveal 120ms ease-out both;
+    transform-origin: top center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .piggy-select-menu {
+      animation: none;
+    }
+  }
+}
+
+@keyframes piggy-select-reveal {
+  from {
+    opacity: 0;
+    transform: scale(0.985) translateY(-0.2rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

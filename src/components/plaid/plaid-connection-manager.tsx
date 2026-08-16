@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePlaidLink } from "react-plaid-link";
 import { PendingButton } from "@/components/pending-button";
+import { Select } from "@/components/select";
 import { usePendingAction } from "@/hooks/use-pending-action";
 import type {
   AccountScope,
@@ -125,18 +126,21 @@ function UpdateControl({
       <label className="sr-only" htmlFor={`plaid-reason-${itemId}`}>
         Update reason
       </label>
-      <select
+      <Select
         id={`plaid-reason-${itemId}`}
+        data-testid={`plaid-reason-${itemId}`}
         value={reason}
         disabled={pending}
-        onChange={(event) => setReason(event.target.value as PlaidUpdateReason)}
-        className="border-line bg-background text-ink rounded-sm border px-3 py-2 text-sm"
-      >
-        <option value="login_repair">Repair sign-in</option>
-        <option value="consent">Renew consent</option>
-        <option value="permissions">Repair permissions</option>
-        <option value="account_selection">Change selected accounts</option>
-      </select>
+        onValueChange={(value) => setReason(value as PlaidUpdateReason)}
+        options={[
+          { value: "login_repair", label: "Repair sign-in" },
+          { value: "consent", label: "Renew consent" },
+          { value: "permissions", label: "Repair permissions" },
+          { value: "account_selection", label: "Change selected accounts" },
+        ]}
+        variant="compact"
+        className="bg-background rounded-sm"
+      />
       <PendingButton
         data-testid={`plaid-update-${itemId}`}
         type="button"
@@ -401,27 +405,31 @@ export function PlaidConnectionManager({
                           >
                             Visibility
                           </label>
-                          <select
+                          <Select
                             data-testid={`plaid-visibility-${account.accountId}`}
                             id={`scope-${account.accountId}`}
                             value={account.scope}
                             disabled={pending}
-                            onChange={(event) => {
+                            onValueChange={(value) => {
                               setWarnings((current) => ({
                                 ...current,
-                                [account.accountId]: event.target
-                                  .value as AccountScope,
+                                [account.accountId]: value as AccountScope,
                               }));
                               setVisibilityAcknowledged((current) => ({
                                 ...current,
                                 [account.accountId]: false,
                               }));
                             }}
-                            className="border-line bg-surface mt-1 w-full rounded-sm border px-3 py-2 text-sm"
-                          >
-                            <option value="personal">Personal · only me</option>
-                            <option value="family">Family · shared</option>
-                          </select>
+                            options={[
+                              {
+                                value: "personal",
+                                label: "Personal · only me",
+                              },
+                              { value: "family", label: "Family · shared" },
+                            ]}
+                            variant="compact"
+                            className="mt-1 rounded-sm"
+                          />
                           {warnings[account.accountId] &&
                           warnings[account.accountId] !== account.scope ? (
                             <div
@@ -554,26 +562,30 @@ export function PlaidConnectionManager({
                     <div className="bg-panel grid gap-3 p-4">
                       <label className="grid gap-2 text-sm font-semibold">
                         Disconnect consequence
-                        <select
+                        <Select
                           data-testid={`plaid-disconnect-mode-${connection.itemId}`}
                           value={modes[connection.itemId] ?? "keep_history"}
                           disabled={pending}
-                          onChange={(event) =>
+                          onValueChange={(value) =>
                             setModes((current) => ({
                               ...current,
-                              [connection.itemId]: event.target
-                                .value as PlaidDisconnectMode,
+                              [connection.itemId]: value as PlaidDisconnectMode,
                             }))
                           }
-                          className="border-line bg-surface text-ink rounded-sm border px-3 py-3 text-sm"
-                        >
-                          <option value="keep_history">
-                            Keep history · retain read-only records
-                          </option>
-                          <option value="delete_data">
-                            Delete data · permanently remove local records
-                          </option>
-                        </select>
+                          options={[
+                            {
+                              value: "keep_history",
+                              label: "Keep history",
+                              description: "Retain read-only records",
+                            },
+                            {
+                              value: "delete_data",
+                              label: "Delete data",
+                              description: "Permanently remove local records",
+                            },
+                          ]}
+                          className="rounded-sm"
+                        />
                       </label>
                       <p className="text-muted text-xs leading-5">
                         Both modes revoke Plaid access for every account in this

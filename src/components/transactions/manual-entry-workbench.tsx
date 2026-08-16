@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { PendingButton } from "@/components/pending-button";
+import { SearchableSelect, Select } from "@/components/select";
 import { usePendingAction } from "@/hooks/use-pending-action";
 import type { Category } from "@/lib/categories/types";
 import type {
@@ -203,34 +204,34 @@ export function ManualEntryWorkbench({
           <div className="grid grid-cols-2 gap-3">
             <label className="text-sm font-semibold">
               Privacy
-              <select
+              <Select
                 data-testid="manual-entry-scope"
                 value={form.scope}
                 disabled={Boolean(editingId)}
-                onChange={(event) => {
-                  set("scope", event.target.value as Scope);
+                onValueChange={(value) => {
+                  set("scope", value as Scope);
                   set("categoryId", "");
                 }}
-                className="border-line bg-surface mt-1.5 min-h-11 w-full rounded-xl border px-3 disabled:opacity-60"
-              >
-                <option value="personal">Personal</option>
-                <option value="family">Family</option>
-              </select>
+                options={[
+                  { value: "personal", label: "Personal" },
+                  { value: "family", label: "Family" },
+                ]}
+                className="mt-1.5"
+              />
             </label>
             <label className="text-sm font-semibold">
               Entry kind
-              <select
+              <Select
                 data-testid="manual-entry-kind"
                 value={form.kind}
-                onChange={(event) =>
-                  set("kind", event.target.value as ManualEntryKind)
-                }
-                className="border-line bg-surface mt-1.5 min-h-11 w-full rounded-xl border px-3"
-              >
-                <option value="spending">Spending</option>
-                <option value="income">Income</option>
-                <option value="refund">Refund</option>
-              </select>
+                onValueChange={(value) => set("kind", value as ManualEntryKind)}
+                options={[
+                  { value: "spending", label: "Spending" },
+                  { value: "income", label: "Income" },
+                  { value: "refund", label: "Refund" },
+                ]}
+                className="mt-1.5"
+              />
             </label>
           </div>
           <div className="grid grid-cols-[1fr_9.5rem] gap-3">
@@ -273,20 +274,27 @@ export function ManualEntryWorkbench({
           </label>
           <label className="text-sm font-semibold">
             Category
-            <select
+            <SearchableSelect
               data-testid="manual-entry-category"
               value={form.categoryId}
-              onChange={(event) => set("categoryId", event.target.value)}
+              onValueChange={(value) => set("categoryId", value)}
               required
-              className="border-line bg-surface mt-1.5 min-h-11 w-full rounded-xl border px-3"
-            >
-              <option value="">Choose a {form.scope} category</option>
-              {availableCategories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
+              placeholder={`Choose a ${form.scope} category`}
+              searchPlaceholder="Search categories"
+              emptyMessage="No categories match"
+              options={[
+                {
+                  value: "",
+                  label: `Choose a ${form.scope} category`,
+                },
+                ...availableCategories.map((category) => ({
+                  value: category.id,
+                  label: category.name,
+                  keywords: [category.scope],
+                })),
+              ]}
+              className="mt-1.5"
+            />
           </label>
           <label className="text-sm font-semibold">
             Notes <span className="text-muted font-normal">optional</span>

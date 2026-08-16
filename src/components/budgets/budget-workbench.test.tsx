@@ -105,6 +105,10 @@ function fullModelWith(target: typeof baseTarget, spentCents = 0) {
   };
 }
 
+function chooseCategory(label: string) {
+  fireEvent.click(screen.getByTestId("budget-category"));
+  fireEvent.click(screen.getByRole("option", { name: new RegExp(label, "i") }));
+}
 beforeEach(() => vi.restoreAllMocks());
 
 describe("GH-10 monthly budget workbench acceptance", () => {
@@ -173,9 +177,7 @@ describe("GH-10 monthly budget workbench acceptance", () => {
 
     fireEvent.click(screen.getByTestId("budget-create"));
     expect(screen.getByTestId("budget-form")).toBeVisible();
-    fireEvent.change(screen.getByTestId("budget-category"), {
-      target: { value: ids.dining },
-    });
+    chooseCategory("Dining");
     fireEvent.change(screen.getByTestId("budget-amount"), {
       target: { value: "250.00" },
     });
@@ -408,9 +410,7 @@ describe("GH-10 monthly budget workbench acceptance", () => {
     );
     render(<BudgetWorkbench initialModel={initialModel} />);
     fireEvent.click(screen.getByTestId("budget-create"));
-    fireEvent.change(screen.getByTestId("budget-category"), {
-      target: { value: ids.dining },
-    });
+    chooseCategory("Dining");
     fireEvent.change(screen.getByTestId("budget-amount"), {
       target: { value: "321.45" },
     });
@@ -426,7 +426,10 @@ describe("GH-10 monthly budget workbench acceptance", () => {
       /groceries/i,
     );
     expect(screen.getByTestId("budget-amount")).toHaveValue("321.45");
-    expect(screen.getByTestId("budget-category")).toHaveValue(ids.dining);
+    expect(screen.getByTestId("budget-category")).toHaveAttribute(
+      "data-value",
+      ids.dining,
+    );
     expect(screen.getByTestId("budget-effective-month")).toHaveValue(
       "2026-09-01",
     );
@@ -449,9 +452,7 @@ describe("GH-10 monthly budget workbench acceptance", () => {
 
     render(<BudgetWorkbench initialModel={initialModel} />);
     fireEvent.click(screen.getByTestId("budget-create"));
-    fireEvent.change(screen.getByTestId("budget-category"), {
-      target: { value: ids.dining },
-    });
+    chooseCategory("Dining");
     fireEvent.change(screen.getByTestId("budget-amount"), {
       target: { value: "432.10" },
     });
@@ -561,9 +562,7 @@ describe("GH-33 budget workbench pending controls", () => {
     expect(nextMonth).toHaveAttribute("data-pending", "false");
 
     fireEvent.click(screen.getByTestId("budget-create"));
-    fireEvent.change(screen.getByTestId("budget-category"), {
-      target: { value: ids.dining },
-    });
+    chooseCategory("Dining");
     fireEvent.change(screen.getByTestId("budget-amount"), {
       target: { value: "321.45" },
     });

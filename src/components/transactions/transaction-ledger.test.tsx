@@ -76,6 +76,10 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function chooseOption(trigger: HTMLElement, label: RegExp) {
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole("option", { name: label }));
+}
 beforeEach(() => {
   vi.restoreAllMocks();
 });
@@ -113,9 +117,9 @@ describe("GH-7 transaction ledger acceptance", () => {
       within(row).getByTestId(`effective-category-${transactionId}`),
     ).toHaveTextContent(/groceries/i);
 
-    fireEvent.change(
+    chooseOption(
       within(row).getByTestId(`category-select-${transactionId}`),
-      { target: { value: categories[1]!.id } },
+      /Dining out/i,
     );
     fireEvent.click(within(row).getByTestId(`category-save-${transactionId}`));
 
@@ -185,11 +189,9 @@ describe("GH-7 transaction ledger acceptance", () => {
     );
 
     const row = screen.getByTestId(`transaction-row-${transactionId}`);
-    fireEvent.change(
+    chooseOption(
       within(row).getByTestId(`category-select-${transactionId}`),
-      {
-        target: { value: categories[0]!.id },
-      },
+      /Dining out/i,
     );
     fireEvent.click(within(row).getByTestId(`rule-create-${transactionId}`));
 
@@ -246,9 +248,9 @@ describe("GH-33 transaction ledger pending controls", () => {
     );
 
     const firstRow = screen.getByTestId(`transaction-row-${transactionId}`);
-    fireEvent.change(
+    chooseOption(
       within(firstRow).getByTestId(`category-select-${transactionId}`),
-      { target: { value: categories[1]!.id } },
+      /Dining out/i,
     );
     const save = within(firstRow).getByTestId(`category-save-${transactionId}`);
     act(() => {

@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 
@@ -96,6 +96,10 @@ function form() {
   };
 }
 
+function choose(testId: string, label: string) {
+  fireEvent.click(screen.getByTestId(testId));
+  fireEvent.click(screen.getByRole("option", { name: new RegExp(label, "i") }));
+}
 function fillEntry(input: {
   scope: "family" | "personal";
   kind: "income" | "spending" | "refund";
@@ -105,16 +109,17 @@ function fillEntry(input: {
   notes?: string;
 }) {
   const controls = form();
-  fireEvent.change(controls.scope, { target: { value: input.scope } });
-  fireEvent.change(controls.kind, { target: { value: input.kind } });
+  choose("manual-entry-scope", input.scope);
+  choose("manual-entry-kind", input.kind);
   fireEvent.change(controls.amount, { target: { value: input.amount } });
   fireEvent.change(controls.date, { target: { value: "2026-08-12" } });
   fireEvent.change(controls.description, {
     target: { value: input.description },
   });
-  fireEvent.change(controls.category, {
-    target: { value: input.categoryId },
-  });
+  choose(
+    "manual-entry-category",
+    categories.find((category) => category.id === input.categoryId)!.name,
+  );
   fireEvent.change(controls.notes, {
     target: { value: input.notes ?? "" },
   });
@@ -242,8 +247,8 @@ describe("GH-8 manual/cash ledger acceptance", () => {
     );
 
     fireEvent.click(screen.getByTestId(`manual-entry-edit-${familyEntry.id}`));
-    expect(form().scope).toHaveValue("family");
-    expect(form().kind).toHaveValue("spending");
+    expect(form().scope).toHaveAttribute("data-value", "family");
+    expect(form().kind).toHaveAttribute("data-value", "spending");
     expect(form().amount).toHaveValue(-42.75);
     expect(form().description).toHaveValue("Neighbourhood market");
     expect(form().notes).toHaveValue("Bread and fruit");
@@ -428,15 +433,13 @@ describe("GH-33 manual/cash pending controls", () => {
       />,
     );
 
-    fireEvent.change(form().kind, { target: { value: "income" } });
+    choose("manual-entry-kind", "income");
     fireEvent.change(form().amount, { target: { value: "1250.00" } });
     fireEvent.change(form().date, { target: { value: "2026-08-12" } });
     fireEvent.change(form().description, {
       target: { value: "Cash tutoring retry" },
     });
-    fireEvent.change(form().category, {
-      target: { value: categories[1]!.id },
-    });
+    choose("manual-entry-category", "Cash income");
     const submit = form().submit;
     act(() => {
       submit.click();

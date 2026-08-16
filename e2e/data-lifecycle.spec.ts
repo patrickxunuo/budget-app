@@ -4,6 +4,7 @@ import {
   fixtureEnv,
   requireFixture,
 } from "./support/fixtures";
+import { chooseSelectOption } from "./support/select";
 
 const member = fixtureCredentials("data-lifecycle");
 const owner = fixtureCredentials("data-lifecycle-owner");
@@ -57,8 +58,16 @@ test.describe("GH-12 data portability and lifecycle", () => {
       "aria-pressed",
       "true",
     );
-    await page.getByTestId("transactions-status-filter").selectOption("all");
-    await page.getByTestId("transactions-inclusion-filter").selectOption("all");
+    await chooseSelectOption(
+      page.getByTestId("transactions-status-filter"),
+      "All statuses",
+      "all",
+    );
+    await chooseSelectOption(
+      page.getByTestId("transactions-inclusion-filter"),
+      "All lines",
+      "all",
+    );
     await page.getByTestId("transactions-search").fill("a");
     await page.getByTestId("transactions-search").press("Enter");
 
@@ -214,8 +223,16 @@ test.describe("GH-30 transactions exploration and export", () => {
     await signIn(page, member?.email, member?.password);
     await page.goto("/transactions");
 
-    await page.getByTestId("transactions-status-filter").selectOption("posted");
-    await page.getByTestId("transactions-inclusion-filter").selectOption("all");
+    await chooseSelectOption(
+      page.getByTestId("transactions-status-filter"),
+      "Posted",
+      "posted",
+    );
+    await chooseSelectOption(
+      page.getByTestId("transactions-inclusion-filter"),
+      "All lines",
+      "all",
+    );
     await page.getByTestId("transactions-search").fill("a");
     await page.getByTestId("transactions-search").press("Enter");
 
@@ -235,12 +252,12 @@ test.describe("GH-30 transactions exploration and export", () => {
     const rowCount = await rowsOf(page).count();
 
     await page.reload();
-    await expect(page.getByTestId("transactions-status-filter")).toHaveValue(
-      "posted",
-    );
-    await expect(page.getByTestId("transactions-inclusion-filter")).toHaveValue(
-      "all",
-    );
+    await expect(
+      page.getByTestId("transactions-status-filter"),
+    ).toHaveAttribute("data-value", "posted");
+    await expect(
+      page.getByTestId("transactions-inclusion-filter"),
+    ).toHaveAttribute("data-value", "all");
     await expect(page.getByTestId("transactions-search")).toHaveValue("a");
     await expect(page.getByTestId("transactions-summary-spending")).toHaveText(
       spending ?? "",
@@ -256,10 +273,10 @@ test.describe("GH-30 transactions exploration and export", () => {
     await sharedPage.goto(shared);
     await expect(
       sharedPage.getByTestId("transactions-status-filter"),
-    ).toHaveValue("posted");
+    ).toHaveAttribute("data-value", "posted");
     await expect(
       sharedPage.getByTestId("transactions-inclusion-filter"),
-    ).toHaveValue("all");
+    ).toHaveAttribute("data-value", "all");
     await expect(sharedPage.getByTestId("transactions-search")).toHaveValue(
       "a",
     );
