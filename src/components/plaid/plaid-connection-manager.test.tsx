@@ -14,7 +14,7 @@ const plaid = vi.hoisted(() => ({
   config: undefined as
     | {
         token?: string | null;
-        onSuccess?: (publicToken: string, metadata: unknown) => void;
+        onSuccess?: (publicToken: string | null, metadata: unknown) => void;
         onExit?: (error: unknown, metadata: unknown) => void;
       }
     | undefined,

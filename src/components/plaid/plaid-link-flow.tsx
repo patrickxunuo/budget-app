@@ -120,6 +120,18 @@ export function PlaidLinkFlow() {
 
   const onSuccess = useCallback<PlaidLinkOnSuccess>(
     (publicToken, metadata) => {
+      if (publicToken === null) {
+        sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+        setLinkToken(null);
+        setShouldOpen(false);
+        setReview(null);
+        setStage("error");
+        setStatus(
+          "The secure bank window could not finish. Your accounts were not changed; request a fresh connection and try again.",
+        );
+        return;
+      }
+
       void exchange(publicToken, {
         id: metadata.institution?.institution_id ?? "unknown-institution",
         name: metadata.institution?.name ?? "Connected institution",

@@ -21,13 +21,6 @@ updates:
       - dependency-name: "@types/node"
         update-types:
           - version-update:semver-major
-      # react-plaid-link 5 widened PlaidLinkOnSuccess's publicToken to
-      # `string | null`, which is a behaviour change the application has to
-      # handle rather than cast away. Tracked separately; unignore when that
-      # lands.
-      - dependency-name: "react-plaid-link"
-        update-types:
-          - version-update:semver-major
     groups:
       # One pull request per ecosystem-sized concern keeps the review surface
       # small; security updates stay ungrouped so they can land on their own.

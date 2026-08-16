@@ -6,6 +6,10 @@ Every issue through GH-30 is closed and on `main`. The application is deployed t
 
 ## Log
 
+- 2026-08-15T19:34Z [READY] GH-44 upgrades `react-plaid-link` to 5.0.0 and contains its nullable success token at the client callback boundary: no exchange request, cleared pending Link state, sanitized retry, unchanged string-token metadata/fallbacks, and the Dependabot major pin removed. The regression was captured red then green; 894 Vitest checks, lint, typecheck, build, formatting, and independent review are green. Live Sandbox and Playwright were environmentally unavailable and are recorded in `testBaseline.md` without being represented as passing.
+
+- 2026-08-15T19:13Z [PLANNED] GH-44 will upgrade `react-plaid-link` to 5.x, reject a nullable success token before the exchange boundary, clear pending Link state, preserve string-token institution fallbacks, remove the Dependabot pin, and capture callback-level red-to-green regression coverage. The remaining v5 migration items will be explicitly audited as applicable or not applicable.
+
 - 2026-08-15T08:12Z [READY] GH-31 replaces the dashboard with a request-current, privacy-scoped Toronto month-to-date overview: aggregate budget health and pace, normalized cumulative spending against the available prior three months, account balances, and a one-to-one route skeleton. The existing transaction explorer read model remains isolated and unchanged. All 880 Vitest checks, lint, typecheck, production build, formatting, and independent review are green; the configured browser command was attempted once but Playwright did not start because the local Volta npm launcher is missing `npm-prefix.js`.
   - Review caught a day-one chart edge case: a one-point SVG path contains only a move command and paints no line. The chart now renders explicit current and baseline point markers, with component coverage for the single-point model.
 

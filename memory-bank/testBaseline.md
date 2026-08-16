@@ -10,6 +10,12 @@
 - Previous run: 98 passed, 70 fixture-dependent scenarios skipped, 0 failed (168 desktop/mobile cases). GH-14 raised the runnable count from 36 to 98 by seeding an owner with `pnpm seed:e2e` and adding the fixtureless security-hardening spec; GH-13 had raised it from 14 to 36.
 - Running the suite needs roughly 2 GB of headroom. On a loaded workstation `next dev` is killed by the OS with `FATAL ERROR: Zone Allocation failed`, and every case then fails with `ERR_CONNECTION_REFUSED` from a dead web server rather than from a real defect. Run `CI=1 pnpm exec playwright test --workers=1` in that situation: `CI=1` switches the `webServer` to the production `pnpm start`, which is far lighter than the dev server.
 
+## GH-44 React Plaid Link 5 Nullable Success Token
+
+- [x] `src/components/plaid/plaid-link-flow.test.tsx` drives the captured real `usePlaidLink` callback and guards the null-token recovery boundary: no exchange request, cleared pending token/review state, sanitized error, and usable retry. It was confirmed red on the unguarded callback (one exchange request) and green after the fix (3/3 checks), including the unchanged institution metadata and fallback paths.
+- No new Playwright scenario was authored: the nullable SDK callback is not surfaceable through the real deterministic browser adapter without adding a synthetic product path. Existing `e2e/plaid-link.spec.ts` remains the surrounding flow coverage.
+- The configured `npm run test:e2e` was attempted once with `E2E_SERVER_MODE=dev` and `E2E_REQUIRED_FIXTURES=plaid`, but Playwright did not start because the local Volta npm launcher is missing `npm-prefix.js`; `PLAID_E2E_PROVIDER`, Sandbox mode, and Plaid member credentials are also unset. Browser acceptance remains environmentally unverified, not passed. The runner-provided `tests/e2e/` directory also disagrees with Playwright's actual `./e2e` `testDir`; no files were authored into the stale path.
+
 ## GH-31 Read-Only Month-to-Date Dashboard
 
 - [x] Request-current Toronto month, aggregate budget health/pace, no-budget fallback, normalized prior-month cumulative baseline, nullable account balances, and strict Family/Personal scope — 22 new domain/service/route/component checks pass; full Vitest is 880/880.
