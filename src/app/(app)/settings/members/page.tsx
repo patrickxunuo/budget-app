@@ -1,8 +1,8 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { MembershipConsole } from "@/components/auth/membership-console";
 import { requireActiveMembership } from "@/lib/auth/dal";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-export const metadata: Metadata = { title: "Household members" };
+export const metadata: Metadata = { title: "Family members" };
 type MemberRow = {
   id: string;
   profile_id: string;
@@ -48,21 +48,9 @@ export default async function MembersPage() {
     <main
       id="main-content"
       tabIndex={-1}
-      className="px-5 py-10 sm:px-8 lg:px-12"
+      className="min-w-0 overflow-x-hidden px-4 py-5 sm:px-8 sm:py-7 lg:px-12"
     >
       <div className="mx-auto max-w-5xl">
-        <header className="border-line mb-10 border-b pb-8">
-          <p className="font-utility text-brand text-[.68rem] font-semibold tracking-[.15em] uppercase">
-            Settings / membership register
-          </p>
-          <h1 className="font-display text-ink mt-3 text-5xl font-semibold tracking-[-.06em] sm:text-6xl">
-            The household roll.
-          </h1>
-          <p className="text-muted mt-4 max-w-2xl leading-7">
-            Invite, transfer, or leave with a clear record of who can enter the
-            family ledger.
-          </p>
-        </header>
         <MembershipConsole
           isOwner={membership.role === "owner"}
           members={members}

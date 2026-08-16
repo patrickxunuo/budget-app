@@ -364,3 +364,121 @@ describe("GH-31 read-only month-to-date financial dashboard", () => {
     expect(surface).not.toContain("â€”");
   });
 });
+
+describe("GH-51 compact Overview acceptance", () => {
+  it("FE-003 leads with month and scope, then exposes every Budget fact under direct section names", () => {
+    render(<FinancialDashboard initialModel={familyModel} />);
+
+    const context = screen.getByTestId("dashboard-heading");
+    const budget = screen.getByTestId("dashboard-budget-health");
+    expect(context).toHaveTextContent(/August 2026/i);
+    expect(context).toHaveTextContent(/Family/i);
+    expect(context.querySelector("h1")).toBeNull();
+    expect(
+      context.compareDocumentPosition(budget) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    expect(
+      within(budget).getByRole("heading", { name: "Budget" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("dashboard-budget-spent")).toHaveTextContent(
+      /150\.00/,
+    );
+    expect(screen.getByTestId("dashboard-budget-target")).toHaveTextContent(
+      /700\.00/,
+    );
+    expect(screen.getByTestId("dashboard-budget-remaining")).toHaveTextContent(
+      /550\.00/,
+    );
+    expect(screen.getByTestId("dashboard-budget-pace")).toHaveTextContent(
+      /under|below/i,
+    );
+    expect(screen.getByTestId("dashboard-budget-days")).toHaveTextContent(
+      /12.*31|31.*12/,
+    );
+
+    expect(
+      within(screen.getByTestId("dashboard-account-list")).getByRole(
+        "heading",
+        {
+          name: "Accounts",
+        },
+      ),
+    ).toBeVisible();
+    expect(
+      within(screen.getByTestId("dashboard-comparison-chart")).getByRole(
+        "heading",
+        { name: "Spending history" },
+      ),
+    ).toBeVisible();
+
+    expect(document.body).not.toHaveTextContent(
+      /Financial field note|at a glance|working margin|Cumulative field trace|Balance observations/i,
+    );
+  });
+
+  it("FE-004 keeps narrow Budget, Accounts, Spending history DOM order and declares the reversed wide two-column order", () => {
+    render(<FinancialDashboard initialModel={familyModel} />);
+
+    const budget = screen.getByTestId("dashboard-budget-health");
+    const accounts = screen.getByTestId("dashboard-account-list");
+    const spending = screen.getByTestId("dashboard-comparison-chart");
+    expect(
+      budget.compareDocumentPosition(accounts) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      accounts.compareDocumentPosition(spending) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    const lowerGrid = accounts.parentElement;
+    expect(lowerGrid).toBe(spending.parentElement);
+    expect(lowerGrid?.className).toMatch(/lg:grid-cols/);
+    expect(spending.className).toMatch(
+      /lg:(?:order-first|order-1|col-start-1)/,
+    );
+    expect(accounts.className).toMatch(/lg:(?:order-last|order-2|col-start-2)/);
+  });
+
+  it("FE-005 keeps the chart visible and uses one native daily-values disclosure with a complete semantic table", () => {
+    render(<FinancialDashboard initialModel={familyModel} />);
+
+    expect(screen.getByTestId("dashboard-comparison-chart")).toBeVisible();
+    const disclosure = screen.getByTestId(
+      "dashboard-daily-values-disclosure",
+    ) as HTMLDetailsElement;
+    expect(disclosure.tagName).toBe("DETAILS");
+    const summary = within(disclosure).getByText("View daily values", {
+      selector: "summary",
+    });
+    expect(disclosure.open).toBe(false);
+    fireEvent.click(summary);
+    expect(disclosure.open).toBe(true);
+    fireEvent.click(summary);
+    expect(disclosure.open).toBe(false);
+    fireEvent.click(summary);
+    expect(disclosure.open).toBe(true);
+
+    const tables = screen.getAllByTestId("dashboard-comparison-table");
+    expect(tables).toHaveLength(1);
+    const table = within(tables[0]!);
+    expect(
+      table.getByText(/daily current cumulative spending/i, {
+        selector: "caption",
+      }),
+    ).toBeInTheDocument();
+    expect(table.getByRole("columnheader", { name: "Day" })).toBeVisible();
+    expect(table.getByRole("columnheader", { name: "Current" })).toBeVisible();
+    expect(table.getByRole("columnheader", { name: "Baseline" })).toBeVisible();
+    expect(table.getAllByRole("rowheader")).toHaveLength(
+      familyModel.comparison.points.length,
+    );
+    expect(table.getAllByRole("row")).toHaveLength(
+      familyModel.comparison.points.length + 1,
+    );
+    expect(tables[0]).toHaveTextContent(/50\.00/);
+    expect(tables[0]).toHaveTextContent(/60\.00/);
+  });
+});

@@ -61,24 +61,9 @@ export default async function TransactionsPage({
     <main
       id="main-content"
       tabIndex={-1}
-      className="px-5 py-9 sm:px-8 lg:px-12 lg:py-14"
+      className="min-w-0 overflow-x-hidden px-4 py-5 sm:px-8 sm:py-7 lg:px-12"
     >
       <div className="mx-auto max-w-7xl">
-        <header className="mb-9 grid gap-5 lg:grid-cols-[1fr_22rem] lg:items-end">
-          <div>
-            <p className="font-utility text-mineral text-xs font-semibold tracking-[.15em] uppercase">
-              Ledger / connected & in hand
-            </p>
-            <h1 className="font-display mt-3 text-5xl leading-[.94] font-semibold tracking-[-.055em] sm:text-6xl">
-              Every dollar has a margin.
-            </h1>
-          </div>
-          <p className="border-line text-muted border-l pl-5 text-sm leading-6">
-            Plaid facts remain read-only. Cash and off-bank activity lives in a
-            separate, auditable register with the same category language.
-          </p>
-        </header>
-
         {/* Keyed on the whole applied query, not just scope. The explorer seeds
             `useState` from these props and ignores later changes to them, so a
             navigation whose applied query differs from the last render's — a

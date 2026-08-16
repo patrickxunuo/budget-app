@@ -1,4 +1,10 @@
-﻿import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 
@@ -631,5 +637,25 @@ describe("GH-33 budget workbench pending controls", () => {
     expect(archive).toHaveAttribute("data-pending", "false");
     expect(archive).toBeEnabled();
     expect(screen.getByTestId(`budget-edit-${ids.budget}`)).toBeEnabled();
+  });
+});
+
+describe("GH-51 compact Budgets route surface", () => {
+  it("FE-002 removes the editorial masthead so month controls and budget work begin immediately", () => {
+    render(<BudgetWorkbench initialModel={initialModel} />);
+
+    const workbench = screen.getByTestId("budget-workbench");
+    expect(within(workbench).queryByRole("heading", { level: 1 })).toBeNull();
+    expect(workbench).not.toHaveTextContent(
+      /Monthly allocation ledger|Set the line\. Watch the month answer\.|Targets recur without rewriting history/i,
+    );
+
+    const month = screen.getByTestId("budget-month");
+    const summary = screen.getByRole("region", { name: /budget summary/i });
+    expect(month).toBeVisible();
+    expect(
+      month.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByTestId("budget-target-list")).toBeInTheDocument();
   });
 });

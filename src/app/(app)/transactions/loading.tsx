@@ -13,7 +13,7 @@ const MANUAL_ENTRIES = [0, 1, 2];
 const LEDGER_ROWS = [0, 1, 2, 3];
 
 /**
- * Mirrors the ledger: masthead, the exploration console, the Manual/Cash desk
+ * Mirrors the compact ledger: the exploration console, the Manual/Cash desk
  * beside its register, and the Plaid rows.
  *
  * GH-30 moved the scope pair and the scoped summary inside the console and put
@@ -26,24 +26,9 @@ export default function Loading() {
   return (
     <RouteSkeleton
       label="Loading the ledger"
-      mainClassName="px-5 py-9 sm:px-8 lg:px-12 lg:py-14"
+      mainClassName="min-w-0 overflow-x-hidden px-4 py-5 sm:px-8 sm:py-7 lg:px-12"
       containerClassName="mx-auto max-w-7xl"
     >
-      <div className="mb-9 grid gap-5 lg:grid-cols-[1fr_22rem] lg:items-end">
-        <div>
-          <SkeletonShape className="h-3 w-60 max-w-full rounded-full" />
-          <div className="mt-4 grid max-w-3xl gap-3">
-            <SkeletonShape className="h-10 rounded-lg sm:h-12" />
-            <SkeletonShape className="h-10 w-2/3 rounded-lg sm:h-12" />
-          </div>
-        </div>
-        <div className="border-line grid gap-2.5 border-l pl-5">
-          <SkeletonShape className="h-2.5 rounded-full" />
-          <SkeletonShape className="h-2.5 rounded-full" />
-          <SkeletonShape className="h-2.5 w-3/4 rounded-full" />
-        </div>
-      </div>
-
       <div className="mb-14 grid min-w-0 gap-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="grid min-w-0 gap-2.5">

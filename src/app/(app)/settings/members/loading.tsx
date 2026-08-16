@@ -9,28 +9,16 @@ const ROSTER_ROWS = [0, 1, 2];
 const INVITATION_ROWS = [0, 1];
 
 /**
- * Mirrors the membership register: masthead, the roster with its per-member
+ * Mirrors the compact family-member route: the roster with its per-member
  * actions, the invitation block, and the guarded-action band beneath them.
  */
 export default function Loading() {
   return (
     <RouteSkeleton
       label="Loading the household roster"
-      mainClassName="px-5 py-10 sm:px-8 lg:px-12"
+      mainClassName="min-w-0 overflow-x-hidden px-4 py-5 sm:px-8 sm:py-7 lg:px-12"
       containerClassName="mx-auto max-w-5xl"
     >
-      <div className="border-line mb-10 border-b pb-8">
-        <SkeletonShape className="h-3 w-64 max-w-full rounded-full" />
-        <div className="mt-4 grid max-w-2xl gap-3">
-          <SkeletonShape className="h-10 rounded-lg sm:h-12" />
-          <SkeletonShape className="h-10 w-2/5 rounded-lg sm:h-12" />
-        </div>
-        <div className="mt-5 grid max-w-2xl gap-2.5">
-          <SkeletonShape className="h-2.5 rounded-full" />
-          <SkeletonShape className="h-2.5 w-3/4 rounded-full" />
-        </div>
-      </div>
-
       <div className="space-y-10">
         <div>
           <div className="flex items-end justify-between gap-4">

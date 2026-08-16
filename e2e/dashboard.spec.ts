@@ -305,7 +305,12 @@ test.describe("GH-31 read-only month-to-date dashboard", () => {
     }
     await expectNoHorizontalOverflow(page);
     await expect(page.getByTestId("dashboard-comparison-chart")).toBeVisible();
-    await expect(page.getByTestId("dashboard-comparison-table")).toBeVisible();
+    await expect(
+      page.getByTestId("dashboard-daily-values-disclosure"),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("dashboard-comparison-table"),
+    ).not.toBeVisible();
     await capture(page, testInfo, "dashboard-family-390-reduced-motion");
 
     const response = await waitForOverviewResponse(page, () =>
@@ -331,9 +336,16 @@ test.describe("GH-31 read-only month-to-date dashboard", () => {
       await expect(
         page.getByTestId("dashboard-comparison-chart"),
       ).toBeVisible();
+      const disclosure = page.getByTestId("dashboard-daily-values-disclosure");
       const table = page.getByTestId("dashboard-comparison-table");
-      await expect(table).toBeVisible();
-      await expect(table.getByRole("row").first()).toContainText(/day|date/i);
+      if (viewport.width >= 1024) {
+        await expect(disclosure.locator("summary")).not.toBeVisible();
+        await expect(table).toBeVisible();
+        await expect(table.getByRole("row").first()).toContainText(/day|date/i);
+      } else {
+        await expect(disclosure).toBeVisible();
+        await expect(table).not.toBeVisible();
+      }
       await capture(
         page,
         testInfo,

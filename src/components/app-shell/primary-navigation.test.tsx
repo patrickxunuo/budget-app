@@ -34,7 +34,7 @@ const PRIMARY = [
   { label: "Categories", href: "/categories" },
 ];
 
-const SECONDARY = [{ label: "Household", href: "/settings/members" }];
+const SECONDARY = [{ label: "Family members", href: "/settings/members" }];
 
 function currentLinks(scope: HTMLElement) {
   return within(scope)
@@ -272,4 +272,32 @@ describe("GH-32 pending is not the active state wearing a different colour (AC12
       }
     },
   );
+});
+
+describe("GH-51 route-name coverage remains aligned with authenticated navigation", () => {
+  it.each([
+    [BottomNavigation, PRIMARY.length],
+    [NavigationRail, PRIMARY.length + SECONDARY.length],
+  ] as const)(
+    "FE-001 keeps every rendered authenticated destination named and touch-sized",
+    (Navigation, expectedLinks) => {
+      usePathname.mockReturnValue("/dashboard");
+      render(<Navigation />);
+
+      const links = within(screen.getByRole("navigation")).getAllByRole("link");
+      expect(links).toHaveLength(expectedLinks);
+      for (const link of links) {
+        expect(link).toHaveAccessibleName();
+        expect(link.className).toMatch(/(?:min-h-(?:11|14)|min-w-11|h-11)/);
+      }
+    },
+  );
+
+  it("FE-001 keeps Family members reachable through the owning settings route", () => {
+    expect(SECONDARY_NAVIGATION).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ href: "/settings/members" }),
+      ]),
+    );
+  });
 });
