@@ -52,7 +52,7 @@
     "jsdom": "^30.0.1",
     "prettier": "^3.9.6",
     "prettier-plugin-tailwindcss": "^0.8.1",
-    "supabase": "2.113.0",
+    "supabase": "2.114.0",
     "tailwindcss": "^4",
     "typescript": "^6",
     "vitest": "^4.1.10"
