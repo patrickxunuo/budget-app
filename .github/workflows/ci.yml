@@ -46,6 +46,9 @@ jobs:
           pnpm db:start
           pnpm test:db
           eval "$(pnpm exec supabase status -o env)"
+          # A password-shaped fixture default would trigger secret scanners in
+          # this public repository. Generate one per isolated CI job instead.
+          export E2E_SEED_PASSWORD="$(openssl rand -hex 24)Aa1!"
           {
             echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
             echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY"
@@ -59,17 +62,21 @@ jobs:
             echo "PLAID_WEBHOOK_URL=http://127.0.0.1:3100/api/plaid/webhook"
             echo "PLAID_E2E_PROVIDER=deterministic"
           } >> "$GITHUB_ENV"
-          # `pnpm test:db` ends with `supabase db reset`, so the database now
-          # holds no Auth users and the application is invite-only. Without a
-          # seeded owner every authenticated journey skips and the run reports
-          # green on coverage it never executed — the exact failure GH-14 exists
-          # to end. The script is idempotent, refuses any non-loopback Supabase,
-          # and appends the fixture credentials it provisions to $GITHUB_ENV
-          # itself. It is read from the shell variables above rather than
-          # $GITHUB_ENV, which only takes effect in later steps.
+          # Both seeders are idempotent, refuse non-loopback Supabase URLs, and
+          # append their fixture credentials to $GITHUB_ENV. Keep the values on
+          # these commands because $GITHUB_ENV takes effect only in later steps.
           NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
           SUPABASE_SERVICE_ROLE_KEY="$SECRET_KEY" \
             pnpm seed:e2e
+          NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
+          SUPABASE_SERVICE_ROLE_KEY="$SECRET_KEY" \
+            pnpm seed:e2e:financial
+          # CLI-002: a second run must reconcile the same stable rows without
+          # duplicates or constraint failures. Exact dashboard totals below
+          # make duplicate financial rows observable to the browser suite.
+          NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
+          SUPABASE_SERVICE_ROLE_KEY="$SECRET_KEY" \
+            pnpm seed:e2e:financial
 
       - name: Build
         run: pnpm build
@@ -104,19 +111,10 @@ jobs:
           # compiles, and getPlaidProvider() still refuses anything that is not
           # Sandbox on a loopback origin off Vercel.
           E2E_SERVER_MODE: dev
-          # Only the families this job genuinely provisions. A name here that is
-          # not provisioned fails the run instead of skipping, which is the
-          # point of GH-14 F1. Everything else stays optional and is printed as
-          # ABSENT by the end-of-run inventory, so a reader can see what did not
-          # execute. Notably excluded, because the seed creates an identity and
-          # not financial data:
-          #
-          #   dashboard          needs accounts, transactions, budget progress
-          #   plaid-connection   needs an activated multi-account Item
-          #   manual-entries     see the note in e2e/support/fixtures.ts; FE-001
-          #                      asserts Personal and Family rows on one page,
-          #                      which the scoped ledger cannot satisfy
-          E2E_REQUIRED_FIXTURES: plaid,auth-owner,categories,budgets-service-cleanup
+          # Require every family these two seed contracts genuinely provision.
+          # Unseeded linked-Item, Personal-budget, and destructive families stay
+          # optional and remain visible as ABSENT in the fixture inventory.
+          E2E_REQUIRED_FIXTURES: plaid,auth-owner,categories,budgets-service-cleanup,manual-entries,dashboard
           # The route-loading cases ran above against the production behavior
           # they specify. Do not repeat them against `next dev`, where automatic
           # Link prefetching is disabled by Next itself.

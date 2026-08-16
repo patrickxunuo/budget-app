@@ -69,27 +69,31 @@ Playwright starts the Next application on port 3100 through its `webServer` conf
 
 ### Fixtures and `E2E_REQUIRED_FIXTURES`
 
-Every `E2E_*` gate resolves through `e2e/support/fixtures.ts`; no spec reads the environment directly. Each fixture family declares the variables it needs and any precondition. Most historical fallback chains are preserved there — `categories`, for example, still falls back to `E2E_PLAID_MEMBER_PASSWORD` — but `dashboard`, `manual-entries`, and `plaid-connection` deliberately no longer fall back. They need financial data or a linked Item that a seeded identity does not supply, and with the fallback in place a seeded run marked them "provisioned" and then failed. A family claiming to be provisioned when its specs cannot pass is the same false confidence as a silent skip.
+Every `E2E_*` gate resolves through `e2e/support/fixtures.ts`; no spec reads the environment directly. An unprovisioned family skips by default. `E2E_REQUIRED_FIXTURES` makes named families mandatory, and global teardown prints the full provisioned/absent inventory so optional gaps remain visible.
 
-An unprovisioned family skips by default, which is why a green run is not by itself evidence of coverage. `E2E_REQUIRED_FIXTURES` is the opt-in that makes absence loud: list families comma-separated (or `all`), and any listed family that is not provisioned **fails** the run naming the exact missing variables, instead of skipping. The end-of-run `globalTeardown` prints the full inventory — family, provisioned, required — and re-asserts the requirement so a family swallowed by an outer gate still fails.
+The two local seed contracts are intentionally separate. `manual-entries` is identity-backed and is provisioned by `pnpm seed:e2e`. `dashboard` is provisioned only by `pnpm seed:e2e:financial`, because it requires real Family account, balance, transaction, and current-month budget rows. `budgets`, `plaid-connection`, and destructive families keep dedicated variables and remain absent unless their full contracts are supplied.
 
-### Seeding an owner
+### Seeding real-backend fixtures
 
 ```powershell
+$env:E2E_SEED_PASSWORD = "$(New-Guid)-Aa1!"
 pnpm seed:e2e
+pnpm seed:e2e:financial
 ```
 
-`pnpm db:reset` and `pnpm test:db` both end with a database holding no `auth.users` rows, and the application is invite-only, so no browser journey can sign in until an owner exists. `pnpm seed:e2e` creates one active owner and prints (or, under CI, exports to `$GITHUB_ENV`) the credentials that provision the `plaid`, `auth-owner`, and `categories` families. It reads the process environment first and falls back to `.env.local`, is idempotent, and refuses any non-loopback Supabase URL so it can never mint an owner in a hosted project. It seeds an identity, not financial data.
+Run the commands in that order after `pnpm db:reset` or `pnpm test:db`. Both read `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, required `E2E_SEED_PASSWORD`, and optional `E2E_SEED_EMAIL` from the process first, then `.env.local`. Keep that disposable password out of tracked files; CI generates a new one per job. Both commands are idempotent, fail on a non-loopback Supabase URL, and never print privileged keys.
+
+`pnpm seed:e2e` creates or reuses the active owner and exports the existing identity-backed credentials plus `E2E_MANUAL_ENTRY_MEMBER_EMAIL` / `E2E_MANUAL_ENTRY_MEMBER_PASSWORD`. `pnpm seed:e2e:financial` requires that owner and active membership, then reconciles stable fixture-only provider rows: a pending, non-syncable Item container; a Family chequing account (`CA$2,456.78` available, `CA$2,500.00` current); a null-balance Family savings account; and a current-Toronto-month `CA$250.00` grocery purchase against a `CA$1,000.00` target. The pending container keeps its placeholder token out of Plaid sync journeys while the dashboard reads the live account rows directly. The command exports `E2E_DASHBOARD_MEMBER_EMAIL` / `E2E_DASHBOARD_MEMBER_PASSWORD`. When `GITHUB_ENV` is set, each command appends its assignments there; otherwise copy the printed assignments into the Playwright process environment.
 
 ### What CI runs
 
-CI seeds an owner after `pnpm test:db`, then runs Playwright twice. `e2e/route-loading.spec.ts` runs first against the already-built `next start` server with `E2E_REQUIRED_FIXTURES=auth-owner`, because its contract depends on production-only automatic Link prefetching. The remaining suite runs with `E2E_EXCLUDE_ROUTE_LOADING=1`, `E2E_REQUIRED_FIXTURES=plaid,auth-owner,categories,budgets-service-cleanup`, and `E2E_SERVER_MODE=dev`. Development mode is required because the deterministic Plaid journeys are unreachable against a production build: the client guard in `src/components/plaid/plaid-link-flow.tsx` is a compile-time `NODE_ENV !== "production"` check. This split weakens no product control — `pnpm build` proves the production build compiles, and `getPlaidProvider()` still requires Sandbox on a loopback origin off Vercel.
+CI runs the identity seed once and the financial seed twice immediately after `pnpm test:db`; the deliberate rerun proves its stable upserts reconcile without duplicate financial rows. CI then runs Playwright twice. `e2e/route-loading.spec.ts` runs first against the already-built `next start` server with `E2E_REQUIRED_FIXTURES=auth-owner`, because its contract depends on production-only automatic Link prefetching. The remaining suite runs with `E2E_EXCLUDE_ROUTE_LOADING=1`, `E2E_REQUIRED_FIXTURES=plaid,auth-owner,categories,budgets-service-cleanup,manual-entries,dashboard`, and `E2E_SERVER_MODE=dev`. Development mode is required because the deterministic Plaid journeys are unreachable against a production build: the client guard in `src/components/plaid/plaid-link-flow.tsx` is a compile-time `NODE_ENV !== "production"` check. This split weakens no product control — `pnpm build` proves the production build compiles, and `getPlaidProvider()` still requires Sandbox on a loopback origin off Vercel.
 
 Note that `PLAID_E2E_PROVIDER` and `PLAID_ENV` must reach the **Playwright process**, not just the Next server. Next loads `.env.local` for the server, but the test runner does not, so a local run needs them exported before the fixture gate will see them.
 
 ### Last verified
 
-2026-08-11 — Windows/PowerShell, Docker 29.6, local Supabase migration replay, Next production build, and Playwright desktop/mobile app startup verified.
+2026-08-16 — Windows/PowerShell, Docker 29.7.2, 487 local Supabase pgTAP assertions, idempotent identity/financial seeds, Next production build, and 20 real-backend GH-35 Playwright desktop/mobile cases verified.
 
 ## Deploying a Change
 
