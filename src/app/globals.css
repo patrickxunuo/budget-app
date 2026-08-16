@@ -303,6 +303,54 @@ a {
   .nav-pending[data-pending="true"] .nav-pending-dot:nth-child(3) {
     animation-delay: 400ms;
   }
+
+  .pending-button-content {
+    align-items: center;
+    display: inline-grid;
+    justify-items: center;
+  }
+
+  .pending-button-label {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.5rem;
+    grid-area: 1 / 1;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  .pending-button-label[data-visible="false"] {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .pending-button-dots {
+    display: inline-flex;
+    gap: 0.1875rem;
+  }
+
+  .pending-button-dots i {
+    animation: pending-button-dot 900ms ease-in-out infinite;
+    background: currentColor;
+    border-radius: 9999px;
+    display: block;
+    height: 0.25rem;
+    width: 0.25rem;
+  }
+
+  .pending-button-dots i:nth-child(2) {
+    animation-delay: 150ms;
+  }
+
+  .pending-button-dots i:nth-child(3) {
+    animation-delay: 300ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pending-button-dots i {
+      animation: none;
+    }
+  }
 }
 
 @keyframes skeleton-sweep {
@@ -327,6 +375,19 @@ a {
   50% {
     opacity: 1;
     transform: translateY(-1.5px);
+  }
+}
+
+@keyframes pending-button-dot {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: translateY(0);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-0.125rem);
   }
 }
 

@@ -1,5 +1,6 @@
 ﻿import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
 
 import { BudgetWorkbench } from "./budget-workbench";
 
@@ -62,6 +63,13 @@ function response(body: unknown, status = 200) {
       headers: { "content-type": "application/json" },
     }),
   );
+}
+function deferredResponse() {
+  let resolve!: (response: Response) => void;
+  const promise = new Promise<Response>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
 }
 function fullModelWith(target: typeof baseTarget, spentCents = 0) {
   const remainingCents = Math.max(target.amountCents - spentCents, 0);
@@ -135,7 +143,9 @@ describe("GH-10 monthly budget workbench acceptance", () => {
     ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("budget-scope-personal"));
-    expect(screen.getByTestId("budget-loading")).toHaveAttribute("aria-live");
+    expect(screen.getByTestId("budget-loading")).not.toHaveAttribute(
+      "aria-live",
+    );
     await waitFor(() =>
       expect(screen.getByTestId("budget-scope-personal")).toHaveAttribute(
         "aria-pressed",
@@ -492,5 +502,134 @@ describe("GH-10 monthly budget workbench acceptance", () => {
     expect(screen.getByTestId("budget-workbench").className).toMatch(
       /overflow(?:-x)?-hidden|max-w-full|w-full/,
     );
+  });
+});
+
+describe("GH-33 budget workbench pending controls", () => {
+  it("FE-005 labels refresh, save, and archive; disables the whole workbench; ignores repeats; and recovers from failure", async () => {
+    const refreshRequest = deferredResponse();
+    const saveRequest = deferredResponse();
+    const archiveRequest = deferredResponse();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => refreshRequest.promise)
+      .mockImplementationOnce(() => saveRequest.promise)
+      .mockImplementationOnce(() => archiveRequest.promise);
+    render(<BudgetWorkbench initialModel={initialModel} />);
+
+    const nextMonth = screen.getByTestId("budget-next-month");
+    act(() => {
+      nextMonth.click();
+      nextMonth.click();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(nextMonth).toHaveTextContent("Updating…");
+    expect(nextMonth).toHaveAttribute("data-pending", "true");
+    for (const id of [
+      "budget-scope-family",
+      "budget-scope-personal",
+      "budget-previous-month",
+      "budget-next-month",
+      "budget-create",
+      `budget-edit-${ids.budget}`,
+      `budget-archive-${ids.budget}`,
+    ]) {
+      expect(screen.getByTestId(id)).toBeDisabled();
+    }
+
+    await act(async () => {
+      refreshRequest.resolve(
+        new Response(
+          JSON.stringify({ error: "Budget ledger could not be refreshed." }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        ),
+      );
+      await refreshRequest.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("budget-error")).toHaveTextContent(
+        "Budget ledger could not be refreshed.",
+      ),
+    );
+    expect(nextMonth).toBeEnabled();
+    expect(nextMonth).toHaveAttribute("data-pending", "false");
+
+    fireEvent.click(screen.getByTestId("budget-create"));
+    fireEvent.change(screen.getByTestId("budget-category"), {
+      target: { value: ids.dining },
+    });
+    fireEvent.change(screen.getByTestId("budget-amount"), {
+      target: { value: "321.45" },
+    });
+    const save = screen.getByTestId("budget-save");
+    act(() => {
+      save.click();
+      save.click();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(save).toHaveTextContent("Saving…");
+    expect(save).toHaveAttribute("data-pending", "true");
+    expect(save).toBeDisabled();
+    for (const id of [
+      "budget-scope-family",
+      "budget-scope-personal",
+      "budget-previous-month",
+      "budget-next-month",
+      "budget-create",
+      `budget-edit-${ids.budget}`,
+      `budget-archive-${ids.budget}`,
+    ]) {
+      expect(screen.getByTestId(id)).toBeDisabled();
+    }
+
+    await act(async () => {
+      saveRequest.resolve(
+        new Response(
+          JSON.stringify({ error: "Budget save failed. Try again." }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        ),
+      );
+      await saveRequest.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("budget-error")).toHaveTextContent(
+        "Budget save failed. Try again.",
+      ),
+    );
+    expect(save).toHaveTextContent("Save");
+    expect(save).toHaveAttribute("data-pending", "false");
+    expect(save).toBeEnabled();
+
+    fireEvent.click(screen.getByTestId("budget-cancel"));
+    const archive = screen.getByTestId(`budget-archive-${ids.budget}`);
+    act(() => {
+      archive.click();
+      archive.click();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(archive).toHaveTextContent("Archiving…");
+    expect(archive).toHaveAttribute("data-pending", "true");
+    expect(archive).toBeDisabled();
+    expect(screen.getByTestId(`budget-edit-${ids.budget}`)).toBeDisabled();
+    expect(screen.getByTestId("budget-create")).toBeDisabled();
+
+    await act(async () => {
+      archiveRequest.resolve(
+        new Response(JSON.stringify({ error: "Archive failed. Try again." }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      await archiveRequest.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("budget-error")).toHaveTextContent(
+        "Archive failed. Try again.",
+      ),
+    );
+    expect(archive).toHaveTextContent("Archive");
+    expect(archive).toHaveAttribute("data-pending", "false");
+    expect(archive).toBeEnabled();
+    expect(screen.getByTestId(`budget-edit-${ids.budget}`)).toBeEnabled();
   });
 });

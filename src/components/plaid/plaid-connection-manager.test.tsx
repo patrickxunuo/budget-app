@@ -6,6 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
 
 const plaid = vi.hoisted(() => ({
   open: vi.fn(),
@@ -99,6 +100,14 @@ function response(body: unknown, status = 200) {
       headers: { "content-type": "application/json" },
     }),
   );
+}
+
+function deferredResponse() {
+  let resolve!: (response: Response) => void;
+  const promise = new Promise<Response>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
 }
 
 beforeEach(() => {
@@ -216,10 +225,12 @@ describe("GH-11 PlaidConnectionManager", () => {
         screen.getByTestId(`plaid-account-${personalId}`),
       ).toHaveTextContent(/family/i),
     );
-    expect(screen.getByTestId("plaid-operation-status")).toHaveAttribute(
+    expect(screen.getByTestId("plaid-operation-status")).not.toHaveAttribute(
       "aria-live",
-      "polite",
     );
+    expect(
+      screen.getByTestId("plaid-operation-announcement"),
+    ).toHaveTextContent(/visibility changed/i);
   });
 
   it("FE-003 opens Plaid update mode, reconciles the real Item result, and offers scoped deselected deletion", async () => {
@@ -415,5 +426,184 @@ describe("GH-11 PlaidConnectionManager", () => {
     expect(
       screen.getByTestId(`plaid-health-${itemId}`).textContent?.trim(),
     ).not.toBe("");
+  });
+});
+
+describe("GH-33 Plaid connection pending controls", () => {
+  it("FE-004 identifies update-token preparation and reconciliation while blocking repeat work", async () => {
+    const updateRequest = deferredResponse();
+    const reconcileRequest = deferredResponse();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => updateRequest.promise)
+      .mockImplementationOnce(() => reconcileRequest.promise);
+    render(<PlaidConnectionManager initialConnections={[initialConnection]} />);
+
+    const update = screen.getByTestId(`plaid-update-${itemId}`);
+    act(() => {
+      update.click();
+      update.click();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(update).toHaveTextContent("Preparing update…");
+    expect(update).toHaveAttribute("data-pending", "true");
+    expect(update).toBeDisabled();
+    expect(screen.getByTestId(`plaid-reconcile-${itemId}`)).toBeDisabled();
+    expect(screen.getByTestId(`plaid-disconnect-${itemId}`)).toBeDisabled();
+
+    await act(async () => {
+      updateRequest.resolve(
+        new Response(
+          JSON.stringify({ message: "Update token unavailable. Try again." }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        ),
+      );
+      await updateRequest.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("plaid-operation-status")).toHaveTextContent(
+        "Update token unavailable. Try again.",
+      ),
+    );
+    expect(update).toHaveTextContent("Open secure update");
+    expect(update).toHaveAttribute("data-pending", "false");
+    expect(update).toBeEnabled();
+
+    const reconcile = screen.getByTestId(`plaid-reconcile-${itemId}`);
+    act(() => {
+      reconcile.click();
+      reconcile.click();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(reconcile).toHaveTextContent("Reconciling…");
+    expect(reconcile).toHaveAttribute("data-pending", "true");
+    expect(reconcile).toBeDisabled();
+    expect(update).toBeDisabled();
+    expect(screen.getByTestId(`plaid-disconnect-${itemId}`)).toBeDisabled();
+
+    await act(async () => {
+      reconcileRequest.resolve(
+        new Response(
+          JSON.stringify({ message: "Reconciliation failed. Try again." }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        ),
+      );
+      await reconcileRequest.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("plaid-operation-status")).toHaveTextContent(
+        "Reconciliation failed. Try again.",
+      ),
+    );
+    expect(reconcile).toHaveTextContent("Reconcile fresh account set");
+    expect(reconcile).toHaveAttribute("data-pending", "false");
+    expect(reconcile).toBeEnabled();
+    expect(update).toBeEnabled();
+  });
+
+  it("FE-004 labels visibility and disconnect, disables the whole surface, ignores double disconnect, and restores sanitized failure copy", async () => {
+    const visibilityRequest = deferredResponse();
+    const disconnectRequest = deferredResponse();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => visibilityRequest.promise)
+      .mockImplementationOnce(() => disconnectRequest.promise);
+    render(<PlaidConnectionManager initialConnections={[initialConnection]} />);
+
+    fireEvent.change(screen.getByTestId(`plaid-visibility-${personalId}`), {
+      target: { value: "family" },
+    });
+    const warning = screen.getByTestId(
+      `plaid-visibility-warning-${personalId}`,
+    );
+    fireEvent.click(
+      within(warning).getByRole("checkbox", {
+        name: /acknowledge|irreversible|historical/i,
+      }),
+    );
+    const applyVisibility = within(warning).getByRole("button", {
+      name: /confirm and apply visibility/i,
+    });
+    act(() => {
+      applyVisibility.click();
+      applyVisibility.click();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(applyVisibility).toHaveTextContent("Applying visibility…");
+    expect(applyVisibility).toHaveAttribute("data-pending", "true");
+    for (const id of [
+      `plaid-update-${itemId}`,
+      `plaid-reconcile-${itemId}`,
+      `plaid-disconnect-${itemId}`,
+    ]) {
+      expect(screen.getByTestId(id)).toBeDisabled();
+    }
+    expect(applyVisibility).toBeDisabled();
+
+    await act(async () => {
+      visibilityRequest.resolve(
+        new Response(
+          JSON.stringify({
+            message: "Visibility could not be changed. Try again.",
+          }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        ),
+      );
+      await visibilityRequest.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("plaid-operation-status")).toHaveTextContent(
+        "Visibility could not be changed. Try again.",
+      ),
+    );
+    expect(applyVisibility).toHaveTextContent("Confirm and apply visibility");
+    expect(applyVisibility).toHaveAttribute("data-pending", "false");
+    expect(applyVisibility).toBeEnabled();
+    expect(screen.getByTestId(`plaid-update-${itemId}`)).toBeEnabled();
+    expect(screen.getByTestId(`plaid-reconcile-${itemId}`)).toBeEnabled();
+
+    fireEvent.click(screen.getByTestId(`plaid-disconnect-${itemId}`));
+    const confirmation = screen.getByTestId(
+      `plaid-disconnect-confirm-${itemId}`,
+    );
+    const confirmDisconnect = within(confirmation).getByRole("button", {
+      name: /confirm disconnect/i,
+    });
+    act(() => {
+      confirmDisconnect.click();
+      confirmDisconnect.click();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(confirmDisconnect).toHaveTextContent("Disconnecting…");
+    expect(confirmDisconnect).toHaveAttribute("data-pending", "true");
+    expect(confirmDisconnect).toBeDisabled();
+    expect(applyVisibility).toBeDisabled();
+    expect(screen.getByTestId(`plaid-update-${itemId}`)).toBeDisabled();
+    expect(screen.getByTestId(`plaid-reconcile-${itemId}`)).toBeDisabled();
+
+    await act(async () => {
+      disconnectRequest.resolve(
+        new Response(
+          JSON.stringify({
+            message: "Disconnect could not finish. Try again.",
+          }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        ),
+      );
+      await disconnectRequest.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("plaid-operation-status")).toHaveTextContent(
+        "Disconnect could not finish. Try again.",
+      ),
+    );
+    expect(confirmDisconnect).toHaveTextContent("Confirm disconnect");
+    expect(confirmDisconnect).toHaveAttribute("data-pending", "false");
+    expect(confirmDisconnect).toBeEnabled();
+    expect(applyVisibility).toBeEnabled();
+    expect(screen.getByTestId(`plaid-update-${itemId}`)).toBeEnabled();
+    expect(screen.getByTestId(`plaid-reconcile-${itemId}`)).toBeEnabled();
   });
 });

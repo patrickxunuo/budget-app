@@ -4,6 +4,7 @@ import {
   isFixtureProvisioned,
   requireFixture,
 } from "./support/fixtures";
+import { activateAndObservePending } from "./support/pending";
 
 const credentials = fixtureCredentials("categories");
 const runSeed = Date.now().toString(36);
@@ -63,7 +64,8 @@ async function createCategory(
       candidate.url().endsWith("/api/categories") &&
       candidate.request().method() === "POST",
   );
-  await page.getByTestId("category-submit").click();
+  const submit = page.getByTestId("category-submit");
+  await activateAndObservePending(submit, () => submit.click());
   expect((await response).status()).toBe(201);
   await expect(page.getByText(name, { exact: true })).toBeVisible();
 }
@@ -136,7 +138,8 @@ test.describe("GH-7 scoped categories and merchant rules", () => {
           .endsWith(`/api/transactions/${transactionId}/category`) &&
         candidate.request().method() === "PATCH",
     );
-    await row.getByTestId(`category-save-${transactionId}`).click();
+    const save = row.getByTestId(`category-save-${transactionId}`);
+    await activateAndObservePending(save, () => save.click());
     expect((await mutation).status()).toBe(200);
     await expect(effective).toContainText(
       target!.label.split(" · ")[0] ?? target!.label,
@@ -216,7 +219,8 @@ test.describe("GH-7 scoped categories and merchant rules", () => {
         candidate.url().endsWith("/api/merchant-rules/preview") &&
         candidate.request().method() === "POST",
     );
-    await row.getByTestId(`rule-create-${transactionId}`).click();
+    const previewRule = row.getByTestId(`rule-create-${transactionId}`);
+    await activateAndObservePending(previewRule, () => previewRule.click());
     expect((await previewResponse).status()).toBe(200);
     const preview = page.getByTestId("rule-preview-count");
     await expect(preview).toContainText(/\d+/);
@@ -227,7 +231,8 @@ test.describe("GH-7 scoped categories and merchant rules", () => {
         candidate.url().endsWith("/api/merchant-rules") &&
         candidate.request().method() === "POST",
     );
-    await page.getByTestId("rule-confirm").click();
+    const confirmRule = page.getByTestId("rule-confirm");
+    await activateAndObservePending(confirmRule, () => confirmRule.click());
     expect((await createResponse).status()).toBe(201);
     // Scoped to <main>: the shell mounts always-present connectivity and
     // service-worker live regions outside it, and the last one on the page is

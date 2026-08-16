@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePlaidLink } from "react-plaid-link";
+import { PendingButton } from "@/components/pending-button";
+import { usePendingAction } from "@/hooks/use-pending-action";
 import type {
   AccountScope,
   PlaidConnection,
@@ -42,14 +44,25 @@ function date(value: string | null) {
     : "Not yet synced";
 }
 
+type RunMutation = (
+  action: string,
+  work: () => Promise<void>,
+) => Promise<void | undefined>;
+
 function UpdateControl({
   itemId,
   onReconcile,
   announce,
+  pending,
+  pendingAction,
+  runMutation,
 }: {
   itemId: string;
   onReconcile: () => Promise<void>;
   announce: (text: string) => void;
+  pending: boolean;
+  pendingAction: string;
+  runMutation: RunMutation;
 }) {
   const [reason, setReason] = useState<PlaidUpdateReason>("login_repair");
   const [token, setToken] = useState<string | null>(null);
@@ -57,8 +70,8 @@ function UpdateControl({
   const onSuccess = useCallback(() => {
     setShouldOpen(false);
     setToken(null);
-    void onReconcile();
-  }, [onReconcile]);
+    void runMutation(`reconcile:${itemId}`, onReconcile);
+  }, [itemId, onReconcile, runMutation]);
   const plaid = usePlaidLink({
     token,
     onSuccess,
@@ -80,30 +93,32 @@ function UpdateControl({
     return () => window.clearTimeout(timeout);
   }, [openPlaid, plaidReady, shouldOpen, token]);
   async function open() {
-    announce("Preparing Plaid update mode for every account in this Item…");
-    try {
-      const result = await request<{ linkToken: string }>(
-        `/api/plaid/connections/${itemId}/update-token`,
-        "POST",
-        { reason },
-      );
-      if (
-        process.env.NODE_ENV !== "production" &&
-        result.linkToken.startsWith("e2e-deterministic-")
-      ) {
-        setToken(null);
-        await onReconcile();
-      } else {
-        setToken(result.linkToken);
-        setShouldOpen(true);
+    await runMutation(`update:${itemId}`, async () => {
+      announce("Preparing Plaid update mode for every account in this Item…");
+      try {
+        const result = await request<{ linkToken: string }>(
+          `/api/plaid/connections/${itemId}/update-token`,
+          "POST",
+          { reason },
+        );
+        if (
+          process.env.NODE_ENV !== "production" &&
+          result.linkToken.startsWith("e2e-deterministic-")
+        ) {
+          setToken(null);
+          await onReconcile();
+        } else {
+          setToken(result.linkToken);
+          setShouldOpen(true);
+        }
+      } catch (error) {
+        announce(
+          error instanceof Error
+            ? error.message
+            : "Plaid update mode could not start.",
+        );
       }
-    } catch (error) {
-      announce(
-        error instanceof Error
-          ? error.message
-          : "Plaid update mode could not start.",
-      );
-    }
+    });
   }
   return (
     <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
@@ -113,6 +128,7 @@ function UpdateControl({
       <select
         id={`plaid-reason-${itemId}`}
         value={reason}
+        disabled={pending}
         onChange={(event) => setReason(event.target.value as PlaidUpdateReason)}
         className="border-line bg-background text-ink rounded-sm border px-3 py-2 text-sm"
       >
@@ -121,15 +137,17 @@ function UpdateControl({
         <option value="permissions">Repair permissions</option>
         <option value="account_selection">Change selected accounts</option>
       </select>
-      <button
+      <PendingButton
         data-testid={`plaid-update-${itemId}`}
         type="button"
         onClick={() => void open()}
-        disabled={!plaidReady && token !== null}
+        disabled={pending || (!plaidReady && token !== null)}
+        pending={pending && pendingAction === `update:${itemId}`}
+        pendingLabel="Preparing update…"
         className="bg-ink text-surface focus-visible:outline-brand rounded-sm px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
       >
         Open secure update
-      </button>
+      </PendingButton>
     </div>
   );
 }
@@ -149,6 +167,16 @@ export function PlaidConnectionManager({
   >({});
   const [modes, setModes] = useState<Record<string, PlaidDisconnectMode>>({});
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState("");
+  const { pending, run } = usePendingAction();
+  const runMutation = useCallback<RunMutation>(
+    (action, work) =>
+      run(async () => {
+        setPendingAction(action);
+        await work();
+      }),
+    [run],
+  );
   const refresh = useCallback(async () => {
     const response = await fetch("/api/plaid/connections", {
       cache: "no-store",
@@ -194,53 +222,59 @@ export function PlaidConnectionManager({
     accountId: string,
     scope: AccountScope,
   ) {
-    setStatus("Applying the privacy boundary and recalculating history…");
-    try {
-      const result = await request<{ connection: PlaidConnection }>(
-        `/api/plaid/connections/${itemId}/visibility`,
-        "PATCH",
-        { accountId, scope, acknowledgeRetroactiveImpact: true },
-      );
-      setConnections((current) =>
-        current.map((connection) =>
-          connection.itemId === itemId ? result.connection : connection,
-        ),
-      );
-      setWarnings((current) => ({ ...current, [accountId]: undefined }));
-      setVisibilityAcknowledged((current) => ({
-        ...current,
-        [accountId]: false,
-      }));
-      setStatus(
-        "Visibility changed. Dashboards and budgets now use the new scope retroactively.",
-      );
-    } catch (error) {
-      setStatus(
-        error instanceof Error
-          ? error.message
-          : "Visibility could not be changed.",
-      );
-    }
+    await runMutation(`visibility:${accountId}`, async () => {
+      setStatus("Applying the privacy boundary and recalculating history…");
+      try {
+        const result = await request<{ connection: PlaidConnection }>(
+          `/api/plaid/connections/${itemId}/visibility`,
+          "PATCH",
+          { accountId, scope, acknowledgeRetroactiveImpact: true },
+        );
+        setConnections((current) =>
+          current.map((connection) =>
+            connection.itemId === itemId ? result.connection : connection,
+          ),
+        );
+        setWarnings((current) => ({ ...current, [accountId]: undefined }));
+        setVisibilityAcknowledged((current) => ({
+          ...current,
+          [accountId]: false,
+        }));
+        setStatus(
+          "Visibility changed. Dashboards and budgets now use the new scope retroactively.",
+        );
+      } catch (error) {
+        setStatus(
+          error instanceof Error
+            ? error.message
+            : "Visibility could not be changed.",
+        );
+      }
+    });
   }
   async function disconnect(itemId: string) {
     const mode = modes[itemId] ?? "keep_history";
-    setStatus("Revoking provider access and securing local history…");
-    try {
-      await request(`/api/plaid/connections/${itemId}/disconnect`, "POST", {
-        mode,
-      });
-      await refresh();
-      setConfirming(null);
-      setStatus(
-        mode === "keep_history"
-          ? "Disconnected. Existing history is retained read-only."
-          : "Disconnected. This Item’s local account data was deleted.",
-      );
-    } catch (error) {
-      setStatus(
-        error instanceof Error ? error.message : "Disconnect could not finish.",
-      );
-    }
+    await runMutation(`disconnect:${itemId}`, async () => {
+      setStatus("Revoking provider access and securing local history…");
+      try {
+        await request(`/api/plaid/connections/${itemId}/disconnect`, "POST", {
+          mode,
+        });
+        await refresh();
+        setConfirming(null);
+        setStatus(
+          mode === "keep_history"
+            ? "Disconnected. Existing history is retained read-only."
+            : "Disconnected. This Item’s local account data was deleted.",
+        );
+      } catch (error) {
+        setStatus(
+          error instanceof Error
+            ? error.message
+            : "Disconnect could not finish.",
+        );
+      }
+    });
   }
   return (
     <section
@@ -371,6 +405,7 @@ export function PlaidConnectionManager({
                             data-testid={`plaid-visibility-${account.accountId}`}
                             id={`scope-${account.accountId}`}
                             value={account.scope}
+                            disabled={pending}
                             onChange={(event) => {
                               setWarnings((current) => ({
                                 ...current,
@@ -400,6 +435,7 @@ export function PlaidConnectionManager({
                               <label className="mt-2 flex items-start gap-2">
                                 <input
                                   type="checkbox"
+                                  disabled={pending}
                                   checked={
                                     visibilityAcknowledged[account.accountId] ??
                                     false
@@ -416,11 +452,18 @@ export function PlaidConnectionManager({
                                   impact.
                                 </span>
                               </label>
-                              <button
+                              <PendingButton
                                 type="button"
                                 disabled={
+                                  pending ||
                                   !visibilityAcknowledged[account.accountId]
                                 }
+                                pending={
+                                  pending &&
+                                  pendingAction ===
+                                    `visibility:${account.accountId}`
+                                }
+                                pendingLabel="Applying visibility…"
                                 onClick={() =>
                                   void visibility(
                                     connection.itemId,
@@ -431,7 +474,7 @@ export function PlaidConnectionManager({
                                 className="bg-alert text-surface mt-2 block w-full rounded-sm px-3 py-2 font-bold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
                               >
                                 Confirm and apply visibility
-                              </button>
+                              </PendingButton>
                             </div>
                           ) : null}
                         </div>
@@ -446,18 +489,29 @@ export function PlaidConnectionManager({
                               <p className="text-muted mt-1">
                                 History is frozen read-only.
                               </p>
-                              <button
+                              <PendingButton
                                 data-testid={`plaid-delete-deselected-${account.accountId}`}
                                 type="button"
+                                disabled={pending}
+                                pending={
+                                  pending &&
+                                  pendingAction ===
+                                    `reconcile:${connection.itemId}`
+                                }
+                                pendingLabel="Reconciling…"
                                 onClick={() =>
-                                  void reconcile(connection.itemId, [
-                                    account.accountId,
-                                  ])
+                                  void runMutation(
+                                    `reconcile:${connection.itemId}`,
+                                    () =>
+                                      reconcile(connection.itemId, [
+                                        account.accountId,
+                                      ]),
+                                  )
                                 }
                                 className="text-alert mt-2 underline underline-offset-4"
                               >
                                 Delete this account’s local data
-                              </button>
+                              </PendingButton>
                             </div>
                           ) : (
                             <span className="text-muted text-xs">
@@ -475,21 +529,35 @@ export function PlaidConnectionManager({
                       itemId={connection.itemId}
                       onReconcile={() => reconcile(connection.itemId)}
                       announce={setStatus}
+                      pending={pending}
+                      pendingAction={pendingAction}
+                      runMutation={runMutation}
                     />
-                    <button
+                    <PendingButton
                       data-testid={`plaid-reconcile-${connection.itemId}`}
                       type="button"
-                      onClick={() => void reconcile(connection.itemId)}
+                      disabled={pending}
+                      pending={
+                        pending &&
+                        pendingAction === `reconcile:${connection.itemId}`
+                      }
+                      pendingLabel="Reconciling…"
+                      onClick={() =>
+                        void runMutation(`reconcile:${connection.itemId}`, () =>
+                          reconcile(connection.itemId),
+                        )
+                      }
                       className="border-line hover:border-brand focus-visible:outline-brand rounded-sm border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
                     >
                       Reconcile fresh account set
-                    </button>
+                    </PendingButton>
                     <div className="bg-panel grid gap-3 p-4">
                       <label className="grid gap-2 text-sm font-semibold">
                         Disconnect consequence
                         <select
                           data-testid={`plaid-disconnect-mode-${connection.itemId}`}
                           value={modes[connection.itemId] ?? "keep_history"}
+                          disabled={pending}
                           onChange={(event) =>
                             setModes((current) => ({
                               ...current,
@@ -530,15 +598,23 @@ export function PlaidConnectionManager({
                             irreversible provider disconnect.
                           </p>
                           <div className="mt-3 flex gap-2">
-                            <button
+                            <PendingButton
                               type="button"
+                              disabled={pending}
+                              pending={
+                                pending &&
+                                pendingAction ===
+                                  `disconnect:${connection.itemId}`
+                              }
+                              pendingLabel="Disconnecting…"
                               onClick={() => void disconnect(connection.itemId)}
                               className="bg-alert text-surface rounded-sm px-3 py-2 font-semibold disabled:opacity-50"
                             >
                               Confirm disconnect
-                            </button>
+                            </PendingButton>
                             <button
                               type="button"
+                              disabled={pending}
                               onClick={() => {
                                 setConfirming(null);
                               }}
@@ -552,6 +628,7 @@ export function PlaidConnectionManager({
                         <button
                           data-testid={`plaid-disconnect-${connection.itemId}`}
                           type="button"
+                          disabled={pending}
                           onClick={() => {
                             setConfirming(connection.itemId);
                           }}
@@ -570,12 +647,18 @@ export function PlaidConnectionManager({
       </div>
       <p
         data-testid="plaid-operation-status"
-        role="status"
-        aria-live="polite"
         className="border-line bg-ink text-surface sticky bottom-4 z-10 mx-auto mt-6 max-w-2xl border px-4 py-3 text-center text-sm shadow-xl"
       >
         {status}
       </p>
+      <span
+        data-testid="plaid-operation-announcement"
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+      >
+        {pending || status === "Connection management is ready." ? "" : status}
+      </span>
     </section>
   );
 }

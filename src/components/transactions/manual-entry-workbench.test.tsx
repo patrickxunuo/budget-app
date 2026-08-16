@@ -1,5 +1,6 @@
 ﻿import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
 
 import { ManualEntryWorkbench } from "./manual-entry-workbench";
 
@@ -72,6 +73,14 @@ function jsonResponse(body: unknown, status = 200) {
       headers: { "content-type": "application/json" },
     }),
   );
+}
+
+function deferredResponse() {
+  let resolve!: (response: Response) => void;
+  const promise = new Promise<Response>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
 }
 
 function form() {
@@ -399,5 +408,158 @@ describe("GH-8 manual/cash ledger acceptance", () => {
       );
       expect(exportControl).toHaveAttribute("download");
     }
+  });
+});
+
+describe("GH-33 manual/cash pending controls", () => {
+  it("FE-006 labels create, edit, and removal; disables all row mutations; ignores repeats; and retains form/error behavior", async () => {
+    const createRequest = deferredResponse();
+    const editRequest = deferredResponse();
+    const removeRequest = deferredResponse();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => createRequest.promise)
+      .mockImplementationOnce(() => editRequest.promise)
+      .mockImplementationOnce(() => removeRequest.promise);
+    render(
+      <ManualEntryWorkbench
+        initialEntries={[familyEntry, personalEntry]}
+        categories={categories}
+      />,
+    );
+
+    fireEvent.change(form().kind, { target: { value: "income" } });
+    fireEvent.change(form().amount, { target: { value: "1250.00" } });
+    fireEvent.change(form().date, { target: { value: "2026-08-12" } });
+    fireEvent.change(form().description, {
+      target: { value: "Cash tutoring retry" },
+    });
+    fireEvent.change(form().category, {
+      target: { value: categories[1]!.id },
+    });
+    const submit = form().submit;
+    act(() => {
+      submit.click();
+      submit.click();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(submit).toHaveTextContent("Recording…");
+    expect(submit).toHaveAttribute("data-pending", "true");
+    expect(submit).toBeDisabled();
+    for (const control of screen.getAllByTestId(
+      /^manual-entry-(edit|delete)-/,
+    )) {
+      expect(control).toBeDisabled();
+    }
+
+    await act(async () => {
+      createRequest.resolve(
+        new Response(
+          JSON.stringify({
+            error: { message: "The entry could not be saved. Try again." },
+          }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        ),
+      );
+      await createRequest.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("manual-entry-error")).toHaveTextContent(
+        "The entry could not be saved. Try again.",
+      ),
+    );
+    expect(submit).toHaveTextContent("Record entry");
+    expect(submit).toHaveAttribute("data-pending", "false");
+    expect(submit).toBeEnabled();
+    expect(form().description).toHaveValue("Cash tutoring retry");
+
+    fireEvent.click(screen.getByTestId(`manual-entry-edit-${familyEntry.id}`));
+    fireEvent.change(form().description, {
+      target: { value: "Preserve failed revision" },
+    });
+    act(() => {
+      form().submit.click();
+      form().submit.click();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(form().submit).toHaveTextContent("Recording…");
+    expect(form().submit).toHaveAttribute("data-pending", "true");
+    for (const control of screen.getAllByTestId(
+      /^manual-entry-(edit|delete)-/,
+    )) {
+      expect(control).toBeDisabled();
+    }
+
+    await act(async () => {
+      editRequest.resolve(
+        new Response(
+          JSON.stringify({
+            error: { message: "The entry could not be saved. Try again." },
+          }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        ),
+      );
+      await editRequest.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("manual-entry-error")).toHaveTextContent(
+        "The entry could not be saved. Try again.",
+      ),
+    );
+    expect(form().description).toHaveValue("Preserve failed revision");
+    expect(form().submit).toHaveTextContent("Save revision");
+    expect(form().submit).toHaveAttribute("data-pending", "false");
+    expect(form().submit).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(
+      screen.getByTestId(`manual-entry-delete-${familyEntry.id}`),
+    );
+    const confirm = screen.getByTestId(
+      `manual-entry-delete-confirm-${familyEntry.id}`,
+    );
+    act(() => {
+      confirm.click();
+      confirm.click();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(confirm).toHaveTextContent("Removing…");
+    expect(confirm).toHaveAttribute("data-pending", "true");
+    expect(confirm).toBeDisabled();
+    expect(form().submit).toBeDisabled();
+    expect(
+      screen.getByTestId(`manual-entry-edit-${personalEntry.id}`),
+    ).toBeDisabled();
+    expect(
+      screen.getByTestId(`manual-entry-delete-${personalEntry.id}`),
+    ).toBeDisabled();
+
+    await act(async () => {
+      removeRequest.resolve(
+        new Response(
+          JSON.stringify({
+            error: { message: "The entry could not be deleted. Try again." },
+          }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        ),
+      );
+      await removeRequest.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("manual-entry-error")).toHaveTextContent(
+        "The entry could not be deleted. Try again.",
+      ),
+    );
+    expect(confirm).toHaveTextContent("Confirm removal");
+    expect(confirm).toHaveAttribute("data-pending", "false");
+    expect(confirm).toBeEnabled();
+    expect(form().submit).toBeEnabled();
+    expect(
+      screen.getByTestId(`manual-entry-edit-${personalEntry.id}`),
+    ).toBeEnabled();
+    expect(
+      screen.getByTestId(`manual-entry-delete-${personalEntry.id}`),
+    ).toBeEnabled();
   });
 });

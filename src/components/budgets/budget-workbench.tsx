@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import { PendingButton } from "@/components/pending-button";
+import { usePendingAction } from "@/hooks/use-pending-action";
 import { moveMonth } from "@/lib/budgets/domain";
 import type {
   BudgetMonthReadModel,
@@ -37,8 +39,10 @@ export function BudgetWorkbench({
     [categoryId, setCategoryId] = useState(""),
     [amount, setAmount] = useState(""),
     [effectiveMonth, setEffectiveMonth] = useState(initialModel.month),
-    [loading, setLoading] = useState(false),
+    [pendingAction, setPendingAction] = useState(""),
     [error, setError] = useState("");
+  const { pending, run } = usePendingAction();
+  const loading = pending;
   async function fetchModel(nextScope: BudgetScope, nextMonth: string) {
     const response = await fetch(
       `/api/budgets?scope=${nextScope}&month=${nextMonth}`,
@@ -54,23 +58,23 @@ export function BudgetWorkbench({
     return body as BudgetMonthReadModel;
   }
   async function changeView(nextScope: BudgetScope, nextMonth: string) {
-    setLoading(true);
-    setError("");
-    try {
-      const next = await fetchModel(nextScope, nextMonth);
-      setModel(next);
-      setScope(nextScope);
-      setMonth(nextMonth);
-      setMode(null);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Budget ledger could not be refreshed.",
-      );
-    } finally {
-      setLoading(false);
-    }
+    await run(async () => {
+      setPendingAction(`view:${nextScope}:${nextMonth}`);
+      setError("");
+      try {
+        const next = await fetchModel(nextScope, nextMonth);
+        setModel(next);
+        setScope(nextScope);
+        setMonth(nextMonth);
+        setMode(null);
+      } catch (cause) {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Budget ledger could not be refreshed.",
+        );
+      }
+    });
   }
   function openCreate() {
     setMode({ kind: "create" });
@@ -86,51 +90,56 @@ export function BudgetWorkbench({
     setEffectiveMonth(month);
     setError("");
   }
-  async function mutate(path: string, method: "POST" | "PATCH", body: unknown) {
-    setLoading(true);
-    setError("");
-    try {
-      const response = await fetch(path, {
-        method,
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) {
-        let message = "Budget target could not be saved.";
-        try {
-          const payload = await response.json();
-          if (typeof payload.error === "string") message = payload.error;
-        } catch {
-          // The status code still proves the mutation failed.
-        }
-        throw new Error(message);
-      }
-
-      // The mutation is committed. Close and clear the form before refreshing
-      // so a read outage cannot invite an unsafe duplicate submission.
-      setMode(null);
-      setCategoryId("");
-      setAmount("");
-      setEffectiveMonth(month);
+  async function mutate(
+    path: string,
+    method: "POST" | "PATCH",
+    body: unknown,
+    action: string,
+  ) {
+    await run(async () => {
+      setPendingAction(action);
+      setError("");
       try {
-        setModel(await fetchModel(scope, month));
-      } catch {
+        const response = await fetch(path, {
+          method,
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+        if (!response.ok) {
+          let message = "Budget target could not be saved.";
+          try {
+            const payload = await response.json();
+            if (typeof payload.error === "string") message = payload.error;
+          } catch {
+            // The status code still proves the mutation failed.
+          }
+          throw new Error(message);
+        }
+
+        // The mutation is committed. Close and clear the form before refreshing
+        // so a read outage cannot invite an unsafe duplicate submission.
+        setMode(null);
+        setCategoryId("");
+        setAmount("");
+        setEffectiveMonth(month);
+        try {
+          setModel(await fetchModel(scope, month));
+        } catch {
+          setError(
+            "Target was saved, but the refreshed ledger could not be loaded. Showing the previous monthly view; refresh before making another change.",
+          );
+        }
+      } catch (cause) {
         setError(
-          "Target was saved, but the refreshed ledger could not be loaded. Showing the previous monthly view; refresh before making another change.",
+          cause instanceof Error
+            ? cause.message
+            : "Budget target could not be saved.",
         );
       }
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Budget target could not be saved.",
-      );
-    } finally {
-      setLoading(false);
-    }
+    });
   }
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -148,23 +157,27 @@ export function BudgetWorkbench({
       return;
     }
     if (mode?.kind === "edit")
-      await mutate(`/api/budgets/${mode.budget.id}`, "PATCH", {
-        amountCents,
-        effectiveMonth,
-      });
+      await mutate(
+        `/api/budgets/${mode.budget.id}`,
+        "PATCH",
+        { amountCents, effectiveMonth },
+        "save",
+      );
     else
-      await mutate("/api/budgets", "POST", {
-        scope,
-        categoryId,
-        amountCents,
-        effectiveMonth,
-      });
+      await mutate(
+        "/api/budgets",
+        "POST",
+        { scope, categoryId, amountCents, effectiveMonth },
+        "save",
+      );
   }
   async function archive(budget: BudgetProgress) {
-    await mutate(`/api/budgets/${budget.id}`, "PATCH", {
-      archived: true,
-      effectiveMonth: month,
-    });
+    await mutate(
+      `/api/budgets/${budget.id}`,
+      "PATCH",
+      { archived: true, effectiveMonth: month },
+      `archive:${budget.id}`,
+    );
   }
   return (
     <section data-testid="budget-workbench" className="min-w-0 overflow-hidden">
@@ -186,48 +199,57 @@ export function BudgetWorkbench({
           aria-label="Budget privacy scope"
         >
           {(["family", "personal"] as const).map((value) => (
-            <button
+            <PendingButton
               key={value}
               data-testid={`budget-scope-${value}`}
               aria-pressed={scope === value}
               disabled={loading}
+              pending={pending && pendingAction === `view:${value}:${month}`}
+              pendingLabel="Updating…"
               onClick={() => changeView(value, month)}
               className={`focus-visible:outline-brand rounded-full px-5 py-2 text-sm font-semibold capitalize focus-visible:outline-2 focus-visible:outline-offset-2 ${scope === value ? "bg-brand text-surface" : "text-muted"}`}
             >
               {value}
-            </button>
+            </PendingButton>
           ))}
         </div>
       </header>
       <div className="border-line bg-surface mt-6 flex flex-wrap items-center gap-3 rounded-2xl border p-3 sm:p-4">
-        <button
+        <PendingButton
           data-testid="budget-previous-month"
           aria-label="Previous month"
           onClick={() => changeView(scope, moveMonth(month, -1))}
           disabled={loading}
+          pending={
+            pendingAction === `view:${scope}:${moveMonth(month, -1)}` && pending
+          }
+          pendingLabel="Updating…"
           className="border-line focus-visible:outline-brand min-h-11 rounded-full border px-4 focus-visible:outline-2"
         >
           &larr; Previous
-        </button>
+        </PendingButton>
         <p
           data-testid="budget-month"
           className="font-display order-first w-full flex-1 text-center text-2xl font-semibold sm:order-none sm:w-auto"
         >
           {monthLabel(month)}
         </p>
-        <button
+        <PendingButton
           data-testid="budget-next-month"
           aria-label="Next month"
           onClick={() => changeView(scope, moveMonth(month, 1))}
           disabled={loading}
+          pending={
+            pendingAction === `view:${scope}:${moveMonth(month, 1)}` && pending
+          }
+          pendingLabel="Updating…"
           className="border-line focus-visible:outline-brand min-h-11 rounded-full border px-4 focus-visible:outline-2"
         >
           Next &rarr;
-        </button>
+        </PendingButton>
       </div>
       <div
         data-testid="budget-loading"
-        aria-live="polite"
         className="text-mineral min-h-7 py-2 text-sm"
       >
         {loading ? "Updating the monthly ledger..." : ""}
@@ -339,13 +361,15 @@ export function BudgetWorkbench({
             />
           </label>
           <div className="flex gap-2">
-            <button
+            <PendingButton
               data-testid="budget-save"
               disabled={loading || !categoryId}
+              pending={pending && pendingAction === "save"}
+              pendingLabel="Saving…"
               className="bg-brand text-surface min-h-11 rounded-full px-5 font-semibold"
             >
               Save
-            </button>
+            </PendingButton>
             <button
               data-testid="budget-cancel"
               type="button"
@@ -372,6 +396,8 @@ export function BudgetWorkbench({
               key={budget.id}
               budget={budget}
               disabled={loading}
+              pending={pending}
+              pendingAction={pendingAction}
               onEdit={() => openEdit(budget)}
               onArchive={() => archive(budget)}
             />
@@ -388,11 +414,15 @@ export function BudgetWorkbench({
 function BudgetLine({
   budget,
   disabled,
+  pending,
+  pendingAction,
   onEdit,
   onArchive,
 }: {
   budget: BudgetProgress;
   disabled: boolean;
+  pending: boolean;
+  pendingAction: string;
   onEdit: () => void;
   onArchive: () => void;
 }) {
@@ -471,14 +501,16 @@ function BudgetLine({
         >
           Edit
         </button>
-        <button
+        <PendingButton
           data-testid={`budget-archive-${budget.id}`}
           onClick={onArchive}
           disabled={disabled}
+          pending={pending && pendingAction === `archive:${budget.id}`}
+          pendingLabel="Archiving…"
           className="text-alert focus-visible:outline-alert min-h-9 rounded-full px-3 text-xs font-semibold focus-visible:outline-2"
         >
           Archive
-        </button>
+        </PendingButton>
       </div>
     </article>
   );

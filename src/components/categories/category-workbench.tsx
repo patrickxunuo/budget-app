@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import { PendingButton } from "@/components/pending-button";
+import { usePendingAction } from "@/hooks/use-pending-action";
 import type { Category, MerchantRule } from "@/lib/categories/types";
 export type CategoryWorkbenchProps = {
   initialCategories: Category[];
@@ -11,63 +13,65 @@ export function CategoryWorkbench({
 }: CategoryWorkbenchProps) {
   const [categories, setCategories] = useState(initialCategories);
   const [status, setStatus] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState("");
+  const { pending, run } = usePendingAction();
   async function create(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setBusy(true);
     const form = new FormData(e.currentTarget);
-    try {
-      const response = await fetch("/api/categories", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: form.get("name"),
-          color: form.get("color"),
-          scope: form.get("scope"),
-        }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
-      setCategories((c) => [...c, body.category]);
-      e.currentTarget.reset();
-      setStatus(
-        `${body.category.name} added to ${body.category.scope} categories.`,
-      );
-    } catch (error) {
-      setStatus(
-        error instanceof Error ? error.message : "Category could not be saved.",
-      );
-    } finally {
-      setBusy(false);
-    }
+    await run(async () => {
+      setPendingAction("create");
+      try {
+        const response = await fetch("/api/categories", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: form.get("name"),
+            color: form.get("color"),
+            scope: form.get("scope"),
+          }),
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error);
+        setCategories((c) => [...c, body.category]);
+        e.currentTarget.reset();
+        setStatus(
+          `${body.category.name} added to ${body.category.scope} categories.`,
+        );
+      } catch (error) {
+        setStatus(
+          error instanceof Error
+            ? error.message
+            : "Category could not be saved.",
+        );
+      }
+    });
   }
   async function archive(category: Category) {
-    setArchivingId(category.id);
-    try {
-      const response = await fetch(`/api/categories/${category.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ archived: true }),
-      });
-      const body = await response.json();
-      if (!response.ok)
-        throw new Error(
-          typeof body.error === "string" ? body.error : "Archive failed.",
+    await run(async () => {
+      setPendingAction(`archive:${category.id}`);
+      try {
+        const response = await fetch(`/api/categories/${category.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ archived: true }),
+        });
+        const body = await response.json();
+        if (!response.ok)
+          throw new Error(
+            typeof body.error === "string" ? body.error : "Archive failed.",
+          );
+        setCategories((c) =>
+          c.map((x) => (x.id === category.id ? body.category : x)),
         );
-      setCategories((c) =>
-        c.map((x) => (x.id === category.id ? body.category : x)),
-      );
-      setStatus(`${category.name} archived. Historical labels are retained.`);
-    } catch (error) {
-      setStatus(
-        error instanceof Error
-          ? error.message
-          : "Category could not be archived.",
-      );
-    } finally {
-      setArchivingId(null);
-    }
+        setStatus(`${category.name} archived. Historical labels are retained.`);
+      } catch (error) {
+        setStatus(
+          error instanceof Error
+            ? error.message
+            : "Category could not be archived.",
+        );
+      }
+    });
   }
   return (
     <section
@@ -84,6 +88,7 @@ export function CategoryWorkbench({
             <input
               data-testid="category-name"
               name="name"
+              disabled={pending}
               required
               maxLength={80}
               className="border-line bg-surface mt-2 min-h-11 w-full rounded-lg border px-3 font-normal"
@@ -95,6 +100,7 @@ export function CategoryWorkbench({
               data-testid="category-color"
               name="color"
               type="color"
+              disabled={pending}
               defaultValue="#176044"
               className="border-line bg-surface mt-2 h-11 w-full rounded-lg border p-1"
             />
@@ -104,19 +110,22 @@ export function CategoryWorkbench({
             <select
               data-testid="category-scope"
               name="scope"
+              disabled={pending}
               className="border-line bg-surface mt-2 min-h-11 w-full rounded-lg border px-3"
             >
               <option value="family">Family</option>
               <option value="personal">Personal</option>
             </select>
           </label>
-          <button
+          <PendingButton
             data-testid="category-submit"
-            disabled={busy}
+            disabled={pending}
+            pending={pending && pendingAction === "create"}
+            pendingLabel="Saving…"
             className="bg-brand text-surface min-h-11 rounded-full px-5 font-bold"
           >
-            {busy ? "Saving…" : "Add category"}
-          </button>
+            Add category
+          </PendingButton>
         </form>
         {(["family", "personal"] as const).map((scope) => (
           <section key={scope} aria-labelledby={`${scope}-title`}>
@@ -164,13 +173,15 @@ export function CategoryWorkbench({
                       </p>
                     </div>
                     {!c.systemKey && !c.archivedAt && (
-                      <button
-                        disabled={archivingId === c.id}
+                      <PendingButton
+                        disabled={pending}
+                        pending={pending && pendingAction === `archive:${c.id}`}
+                        pendingLabel="Archiving…"
                         onClick={() => void archive(c)}
                         className="text-alert focus-visible:outline-brand rounded px-3 py-2 text-sm font-semibold"
                       >
-                        {archivingId === c.id ? "Archiving…" : "Archive"}
-                      </button>
+                        Archive
+                      </PendingButton>
                     )}
                   </article>
                 ))}

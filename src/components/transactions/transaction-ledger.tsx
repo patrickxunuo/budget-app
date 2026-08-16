@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import { PendingButton } from "@/components/pending-button";
+import { usePendingAction } from "@/hooks/use-pending-action";
 import type { Category, TransactionCategoryView } from "@/lib/categories/types";
 export type TransactionLedgerProps = {
   initialTransactions: TransactionCategoryView[];
@@ -18,24 +20,36 @@ export function TransactionLedger({
     count: number;
   } | null>(null);
   const [status, setStatus] = useState("");
+  const [pendingAction, setPendingAction] = useState("");
+  const { pending, run } = usePendingAction();
+  function execute(action: string, work: () => Promise<void>) {
+    return run(async () => {
+      setPendingAction(action);
+      await work();
+    });
+  }
   async function save(id: string) {
     const categoryId = chosen[id];
     if (!categoryId) return;
-    const response = await fetch(`/api/transactions/${id}/category`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ categoryId }),
+    await execute(`save:${id}`, async () => {
+      const response = await fetch(`/api/transactions/${id}/category`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ categoryId }),
+      });
+      const body = await response.json();
+      if (response.ok) {
+        setRows((r) => r.map((x) => (x.id === id ? body.transaction : x)));
+        setStatus(
+          "One-off category saved. Plaid source details remain unchanged.",
+        );
+      } else
+        setStatus(
+          typeof body.error === "string"
+            ? body.error
+            : "Category update failed.",
+        );
     });
-    const body = await response.json();
-    if (response.ok) {
-      setRows((r) => r.map((x) => (x.id === id ? body.transaction : x)));
-      setStatus(
-        "One-off category saved. Plaid source details remain unchanged.",
-      );
-    } else
-      setStatus(
-        typeof body.error === "string" ? body.error : "Category update failed.",
-      );
   }
   async function preview(id: string) {
     const categoryId = chosen[id];
@@ -44,50 +58,54 @@ export function TransactionLedger({
       setStatus("Choose a category before creating a rule.");
       return;
     }
-    const response = await fetch("/api/merchant-rules/preview", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        transactionId: id,
-        categoryId: category.id,
-        scope: category.scope,
-      }),
-    });
-    const body = await response.json();
-    if (response.ok)
-      setRule({
-        id,
-        categoryId: category.id,
-        scope: category.scope,
-        count: body.matchCount,
+    await execute(`preview:${id}`, async () => {
+      const response = await fetch("/api/merchant-rules/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          transactionId: id,
+          categoryId: category.id,
+          scope: category.scope,
+        }),
       });
-    else
-      setStatus(
-        typeof body.error === "string" ? body.error : "Rule preview failed.",
-      );
+      const body = await response.json();
+      if (response.ok)
+        setRule({
+          id,
+          categoryId: category.id,
+          scope: category.scope,
+          count: body.matchCount,
+        });
+      else
+        setStatus(
+          typeof body.error === "string" ? body.error : "Rule preview failed.",
+        );
+    });
   }
   async function confirm() {
     if (!rule) return;
-    const response = await fetch("/api/merchant-rules", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        transactionId: rule.id,
-        categoryId: rule.categoryId,
-        scope: rule.scope,
-        applyExisting: true,
-      }),
+    await execute("confirm", async () => {
+      const response = await fetch("/api/merchant-rules", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          transactionId: rule.id,
+          categoryId: rule.categoryId,
+          scope: rule.scope,
+          applyExisting: true,
+        }),
+      });
+      const body = await response.json();
+      if (response.ok) {
+        setStatus(
+          `Rule created and applied to ${body.updatedCount} transaction${body.updatedCount === 1 ? "" : "s"}.`,
+        );
+        setRule(null);
+      } else
+        setStatus(
+          typeof body.error === "string" ? body.error : "Rule creation failed.",
+        );
     });
-    const body = await response.json();
-    if (response.ok) {
-      setStatus(
-        `Rule created and applied to ${body.updatedCount} transaction${body.updatedCount === 1 ? "" : "s"}.`,
-      );
-      setRule(null);
-    } else
-      setStatus(
-        typeof body.error === "string" ? body.error : "Rule creation failed.",
-      );
   }
   return (
     <section data-testid="transaction-ledger">
@@ -107,6 +125,8 @@ export function TransactionLedger({
             setValue={(v) => setChosen((c) => ({ ...c, [row.id]: v }))}
             save={save}
             preview={preview}
+            pending={pending}
+            pendingAction={pendingAction}
           />
         ))}
       </div>
@@ -128,14 +148,18 @@ export function TransactionLedger({
             eligible existing transactions. Manual choices are excluded.
           </p>
           <div className="mt-4 flex gap-3">
-            <button
+            <PendingButton
               data-testid="rule-confirm"
               onClick={() => void confirm()}
+              disabled={pending}
+              pending={pending && pendingAction === "confirm"}
+              pendingLabel="Creating rule…"
               className="bg-brand text-surface rounded-full px-5 py-2 font-bold"
             >
               Create and apply
-            </button>
+            </PendingButton>
             <button
+              disabled={pending}
               onClick={() => setRule(null)}
               className="border-line rounded-full border px-5 py-2"
             >
@@ -161,6 +185,8 @@ function TransactionRow({
   setValue,
   save,
   preview,
+  pending,
+  pendingAction,
 }: {
   row: TransactionCategoryView;
   categories: Category[];
@@ -168,6 +194,8 @@ function TransactionRow({
   setValue: (v: string) => void;
   save: (id: string) => Promise<void>;
   preview: (id: string) => Promise<void>;
+  pending: boolean;
+  pendingAction: string;
 }) {
   return (
     <article
@@ -223,20 +251,26 @@ function TransactionRow({
             ))}
         </select>
         <div className="mt-2 flex flex-wrap gap-2">
-          <button
+          <PendingButton
             data-testid={`category-save-${row.id}`}
             onClick={() => void save(row.id)}
+            disabled={pending}
+            pending={pending && pendingAction === `save:${row.id}`}
+            pendingLabel="Saving…"
             className="bg-brand text-surface rounded-full px-4 py-2 text-sm font-bold"
           >
             Save once
-          </button>
-          <button
+          </PendingButton>
+          <PendingButton
             data-testid={`rule-create-${row.id}`}
             onClick={() => void preview(row.id)}
+            disabled={pending}
+            pending={pending && pendingAction === `preview:${row.id}`}
+            pendingLabel="Checking matches…"
             className="border-brand text-brand rounded-full border px-4 py-2 text-sm font-bold"
           >
             Make rule
-          </button>
+          </PendingButton>
         </div>
       </div>
     </article>

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { usePendingAction } from "@/hooks/use-pending-action";
 import { moveReference } from "@/lib/dashboard/domain";
 import type { DashboardReadModel } from "@/lib/dashboard/types";
 import {
@@ -90,9 +91,7 @@ export function TransactionExplorer({
   const [draftTo, setDraftTo] = useState(
     initialFilters.to || initialModel.range.endDate,
   );
-  // TODO(#33): replace this local flag with the shared pending primitive once
-  // that ticket lands; it is deliberately the only refresh pending state here.
-  const [loading, setLoading] = useState(false);
+  const { pending: loading, run } = usePendingAction({ strategy: "latest" });
   const [error, setError] = useState("");
   // The export always describes the query that produced the rows on screen, so
   // it is snapshotted when a response lands rather than read from live controls.
@@ -152,9 +151,17 @@ export function TransactionExplorer({
     // the ref it compares against belongs to the unmounted instance.
     let cancelled = false;
     const settled = () => !cancelled && id === requestId.current;
-    setLoading(true);
-    setError("");
-    const timer = setTimeout(async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let releaseDelay: (() => void) | undefined;
+    void run(async () => {
+      setError("");
+      if (debounceMs.current > 0) {
+        await new Promise<void>((resolve) => {
+          releaseDelay = resolve;
+          timer = setTimeout(resolve, debounceMs.current);
+        });
+      }
+      if (!settled()) return;
       try {
         const response = await fetch(
           `/api/dashboard?${readModelQuery}&limit=${DISPLAY_LIMIT}`,
@@ -192,15 +199,14 @@ export function TransactionExplorer({
         setError(
           `${/try again/i.test(message) ? message : `${message} Try again.`} Showing retained ${displayedScope.current} data.`,
         );
-      } finally {
-        if (settled()) setLoading(false);
       }
-    }, debounceMs.current);
+    });
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
+      releaseDelay?.();
     };
-  }, [readModelQuery, explorerQuery]);
+  }, [readModelQuery, explorerQuery, run]);
 
   function update(patch: Partial<ExplorerFilters>, debounce = false) {
     debounceMs.current = debounce ? SEARCH_DEBOUNCE_MS : 0;
