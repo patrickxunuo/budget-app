@@ -10,7 +10,7 @@ const TARGET_ROWS = [0, 1, 2, 3];
 const TARGET_STATS = [0, 1, 2, 3];
 
 /**
- * Mirrors the budget workbench: masthead and scope switch, the month control
+ * Mirrors the compact budget workbench: scope switch, month control
  * strip, the three-up allocation summary, and the category target rows with
  * their progress meters.
  */
@@ -21,25 +21,13 @@ export default function Loading() {
       mainClassName="min-w-0 overflow-x-hidden px-4 py-8 sm:px-8 lg:px-12 lg:py-14"
       containerClassName="mx-auto max-w-7xl"
     >
-      <div className="border-line grid gap-5 border-b pb-7 lg:grid-cols-[1fr_auto] lg:items-end">
-        <div>
-          <SkeletonShape className="h-3 w-64 max-w-full rounded-full" />
-          <div className="mt-4 grid max-w-3xl gap-3">
-            <SkeletonShape className="h-10 rounded-lg sm:h-12" />
-            <SkeletonShape className="h-10 w-3/4 rounded-lg sm:h-12" />
-          </div>
-          <div className="mt-5 grid max-w-2xl gap-2.5">
-            <SkeletonShape className="h-2.5 rounded-full" />
-            <SkeletonShape className="h-2.5 w-2/3 rounded-full" />
-          </div>
-        </div>
-        <div className="border-line bg-panel flex w-fit gap-1 rounded-full border p-1">
-          <SkeletonShape className="h-9 w-24 rounded-full" />
-          <SkeletonShape className="h-9 w-24 rounded-full" />
+      <div className="flex justify-end">
+        <div className="border-line bg-panel flex gap-1 rounded-full border p-1">
+          <SkeletonShape className="h-11 w-24 rounded-full" />
+          <SkeletonShape className="h-11 w-24 rounded-full" />
         </div>
       </div>
-
-      <div className="border-line bg-surface mt-6 flex flex-wrap items-center gap-3 rounded-2xl border p-3 sm:p-4">
+      <div className="border-line bg-surface mt-3 flex flex-wrap items-center gap-3 rounded-2xl border p-3 sm:p-4">
         <SkeletonShape className="h-11 w-32 rounded-full" />
         <SkeletonShape className="order-first h-7 w-full rounded-lg sm:order-none sm:w-56 sm:flex-1" />
         <SkeletonShape className="h-11 w-28 rounded-full" />

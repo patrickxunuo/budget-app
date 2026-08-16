@@ -181,19 +181,7 @@ export function BudgetWorkbench({
   }
   return (
     <section data-testid="budget-workbench" className="min-w-0 overflow-hidden">
-      <header className="border-line grid gap-5 border-b pb-7 lg:grid-cols-[1fr_auto] lg:items-end">
-        <div>
-          <p className="font-utility text-brand text-xs font-semibold tracking-[.16em] uppercase">
-            Monthly allocation ledger / CAD
-          </p>
-          <h1 className="font-display mt-3 max-w-3xl text-5xl leading-[.92] font-semibold tracking-[-.055em] sm:text-6xl">
-            Set the line. Watch the month answer.
-          </h1>
-          <p className="text-muted mt-4 max-w-2xl text-sm leading-6">
-            Targets recur without rewriting history. Each month stands alone;
-            unused room never rolls forward.
-          </p>
-        </div>
+      <div className="flex justify-end">
         <div
           className="border-line bg-panel flex rounded-full border p-1"
           aria-label="Budget privacy scope"
@@ -207,14 +195,14 @@ export function BudgetWorkbench({
               pending={pending && pendingAction === `view:${value}:${month}`}
               pendingLabel="Updating…"
               onClick={() => changeView(value, month)}
-              className={`focus-visible:outline-brand rounded-full px-5 py-2 text-sm font-semibold capitalize focus-visible:outline-2 focus-visible:outline-offset-2 ${scope === value ? "bg-brand text-surface" : "text-muted"}`}
+              className={`focus-visible:outline-brand min-h-11 rounded-full px-5 py-2 text-sm font-semibold capitalize focus-visible:outline-2 focus-visible:outline-offset-2 ${scope === value ? "bg-brand text-on-accent" : "text-muted"}`}
             >
               {value}
             </PendingButton>
           ))}
         </div>
-      </header>
-      <div className="border-line bg-surface mt-6 flex flex-wrap items-center gap-3 rounded-2xl border p-3 sm:p-4">
+      </div>
+      <div className="border-line bg-surface mt-3 flex flex-wrap items-center gap-3 rounded-2xl border p-3 sm:p-4">
         <PendingButton
           data-testid="budget-previous-month"
           aria-label="Previous month"

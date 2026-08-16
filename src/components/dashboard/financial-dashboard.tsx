@@ -147,6 +147,7 @@ export function FinancialDashboard({
   const [error, setError] = useState("");
   const latestModel = useRef(initialModel);
   const requestId = useRef(0);
+  const dailyValuesDisclosure = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
     if (scope === latestModel.current.scope) return;
@@ -206,6 +207,20 @@ export function FinancialDashboard({
     };
   }, [scope]);
 
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const wideViewport = window.matchMedia("(min-width: 64rem)");
+    const synchronizeDisclosure = () => {
+      if (dailyValuesDisclosure.current) {
+        dailyValuesDisclosure.current.open = wideViewport.matches;
+      }
+    };
+    synchronizeDisclosure();
+    wideViewport.addEventListener?.("change", synchronizeDisclosure);
+    return () =>
+      wideViewport.removeEventListener?.("change", synchronizeDisclosure);
+  }, []);
+
   const health = model.budgetHealth;
   const pace = health.pace ?? "unavailable";
   const chart = chartGeometry(model.comparison.points);
@@ -218,25 +233,17 @@ export function FinancialDashboard({
     <main
       id="main-content"
       tabIndex={-1}
-      className="min-w-0 overflow-x-hidden px-4 py-6 sm:px-8 sm:py-8 lg:px-12"
+      className="min-w-0 overflow-x-hidden px-4 py-4 sm:px-8 sm:py-6 lg:px-12"
     >
       <div className="mx-auto max-w-7xl">
-        <header
+        <section
           data-testid="dashboard-heading"
-          className="border-line grid gap-5 border-b pb-5 sm:grid-cols-[1fr_auto] sm:items-end"
+          aria-label="Overview period and privacy scope"
+          className="flex flex-wrap items-center justify-between gap-3"
         >
-          <div>
-            <p className="font-utility text-brand text-[.65rem] font-semibold tracking-[.18em] uppercase">
-              Financial field note · {model.asOfDate}
-            </p>
-            <h1 className="font-display mt-2 text-3xl leading-none font-semibold tracking-[-.04em] sm:text-4xl">
-              {monthLabel(model.asOfDate)}, at a glance.
-            </h1>
-            <p className="text-muted mt-2 max-w-xl text-sm leading-5">
-              Month-to-date budget health, recent spending cadence, and account
-              balances — kept inside the selected privacy boundary.
-            </p>
-          </div>
+          <p className="font-display text-ink text-lg font-semibold tracking-[-.02em] sm:text-xl">
+            {monthLabel(model.asOfDate)}
+          </p>
           <div
             className="border-line bg-panel grid grid-cols-2 rounded-full border p-1"
             aria-label="Privacy scope"
@@ -255,7 +262,7 @@ export function FinancialDashboard({
                   }
                   setScope(value);
                 }}
-                className={`focus-visible:outline-brand min-h-11 min-w-24 rounded-full px-5 py-2 text-sm font-semibold capitalize focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                className={`focus-visible:outline-brand min-h-11 min-w-20 rounded-full px-4 py-2 text-sm font-semibold capitalize focus-visible:outline-2 focus-visible:outline-offset-2 ${
                   model.scope === value
                     ? "bg-brand text-on-accent"
                     : "text-muted hover:text-ink"
@@ -265,13 +272,13 @@ export function FinancialDashboard({
               </button>
             ))}
           </div>
-        </header>
+        </section>
 
         <div
           data-testid="dashboard-loading"
           role="status"
           aria-live="polite"
-          className="text-mineral min-h-6 py-1 text-xs"
+          className="text-mineral min-h-5 py-0.5 text-xs"
         >
           {loading ? `Refreshing ${scope} overview…` : ""}
         </div>
@@ -279,7 +286,7 @@ export function FinancialDashboard({
           <div
             data-testid="dashboard-error"
             role="alert"
-            className="border-alert text-alert mb-4 border-l-4 py-2 pl-3 text-sm"
+            className="border-alert text-alert mb-3 rounded-lg border px-3 py-2 text-sm"
           >
             {error}
           </div>
@@ -288,128 +295,167 @@ export function FinancialDashboard({
         <section
           data-testid="dashboard-budget-health"
           aria-labelledby="budget-health-title"
-          className="border-line bg-surface relative overflow-hidden rounded-2xl border"
+          className="border-line bg-surface overflow-hidden rounded-2xl border"
         >
-          <div className="grid lg:grid-cols-[1.3fr_.7fr]">
-            <div className="p-5 sm:p-7 lg:p-9">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-utility text-muted text-[.65rem] font-semibold tracking-[.16em] uppercase">
-                    Budget health / {model.scope}
-                  </p>
-                  <h2
-                    id="budget-health-title"
-                    className="font-display mt-1 text-xl font-semibold"
-                  >
-                    The month’s working margin
-                  </h2>
-                </div>
-                <div
-                  data-testid="dashboard-budget-pace"
-                  data-pace={pace}
-                  className="border-line bg-panel flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold"
-                >
-                  <PaceShape pace={health.pace} />
-                  <span>{paceCopy(health.pace)}</span>
-                </div>
-              </div>
-
-              <div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3">
-                <div className="col-span-2 sm:col-span-1">
-                  <p className="text-muted text-xs">
-                    {health.hasBudgets
-                      ? "Spent against plan"
-                      : "Month-to-date spending"}
-                  </p>
-                  <p
-                    data-testid="dashboard-budget-spent"
-                    className="font-display mt-1 text-4xl leading-none font-semibold tracking-[-.045em] tabular-nums sm:text-5xl"
-                  >
-                    {money(health.spentCents)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted text-xs">Target</p>
-                  <p
-                    data-testid="dashboard-budget-target"
-                    className="font-display mt-1 text-xl font-semibold tabular-nums"
-                  >
-                    {health.hasBudgets
-                      ? money(health.targetCents)
-                      : "No budget set"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted text-xs">Remaining</p>
-                  <p
-                    data-testid="dashboard-budget-remaining"
-                    className="font-display mt-1 text-xl font-semibold tabular-nums"
-                  >
-                    {health.hasBudgets
-                      ? money(health.remainingCents)
-                      : "Not available"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6">
-                <div className="bg-panel h-2 overflow-hidden rounded-full">
-                  <span
-                    aria-hidden="true"
-                    className="bg-brand block h-full rounded-full"
-                    style={{ width: `${progressWidth}%` }}
-                  />
-                </div>
-                <div className="text-muted mt-2 flex justify-between gap-4 text-xs tabular-nums">
-                  <span>
-                    {health.hasBudgets
-                      ? `${Math.round(health.progressPercent ?? 0)}% used`
-                      : "No aggregate target for this scope"}
-                  </span>
-                  <span>
-                    {Math.round(health.expectedPercent)}% of month elapsed
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-line bg-panel border-t p-5 sm:p-7 lg:border-t-0 lg:border-l lg:p-9">
-              <p className="font-utility text-muted text-[.65rem] font-semibold tracking-[.16em] uppercase">
-                Calendar position
-              </p>
-              <p
-                data-testid="dashboard-budget-days"
-                className="font-display mt-3 text-3xl font-semibold tabular-nums"
+          <div className="p-4 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2
+                id="budget-health-title"
+                className="font-display text-xl font-semibold sm:text-2xl"
               >
-                Day {health.daysElapsed} of {health.daysInMonth}
-              </p>
-              <p className="text-muted mt-2 text-sm">
-                {health.daysRemaining === 0
-                  ? "Month closes today."
-                  : `${health.daysRemaining} days remain · cumulative values stop at today.`}
-              </p>
+                Budget
+              </h2>
+              <div
+                data-testid="dashboard-budget-pace"
+                data-pace={pace}
+                className="border-line bg-panel flex min-h-9 items-center gap-2 rounded-full border px-3 text-xs font-semibold"
+              >
+                <PaceShape pace={health.pace} />
+                <span>{paceCopy(health.pace)}</span>
+              </div>
             </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-3 sm:gap-6">
+              <div className="min-w-0">
+                <p className="text-muted text-xs">
+                  {health.hasBudgets ? "Spent" : "Spent this month"}
+                </p>
+                <p
+                  data-testid="dashboard-budget-spent"
+                  className="font-display mt-1 text-2xl leading-none font-semibold tracking-[-.035em] tabular-nums sm:text-4xl"
+                >
+                  {money(health.spentCents)}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-muted text-xs">Target</p>
+                <p
+                  data-testid="dashboard-budget-target"
+                  className="font-display mt-1 text-base leading-tight font-semibold tabular-nums sm:text-xl"
+                >
+                  {health.hasBudgets
+                    ? money(health.targetCents)
+                    : "No budget set"}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-muted text-xs">Remaining</p>
+                <p
+                  data-testid="dashboard-budget-remaining"
+                  className="font-display mt-1 text-base leading-tight font-semibold tabular-nums sm:text-xl"
+                >
+                  {health.hasBudgets
+                    ? money(health.remainingCents)
+                    : "Not available"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="bg-panel h-2 overflow-hidden rounded-full">
+                <span
+                  aria-hidden="true"
+                  className="bg-brand block h-full rounded-full"
+                  style={{ width: `${progressWidth}%` }}
+                />
+              </div>
+              <div className="text-muted mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs tabular-nums">
+                <span>
+                  {health.hasBudgets
+                    ? `${Math.round(health.progressPercent ?? 0)}% used`
+                    : "No target for this scope"}
+                </span>
+                <span>
+                  {Math.round(health.expectedPercent)}% of month elapsed
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-line bg-panel flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 sm:px-6">
+            <p
+              data-testid="dashboard-budget-days"
+              className="font-display text-lg font-semibold tabular-nums"
+            >
+              Day {health.daysElapsed} of {health.daysInMonth}
+            </p>
+            <p className="text-muted text-xs">
+              {health.daysRemaining === 0
+                ? "Month closes today."
+                : `${health.daysRemaining} days remain.`}
+            </p>
           </div>
         </section>
 
-        <div className="mt-6 grid min-w-0 gap-6 lg:grid-cols-[1.55fr_.75fr]">
+        <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[1.55fr_.75fr] lg:gap-6">
+          <section
+            data-testid="dashboard-account-list"
+            aria-labelledby="accounts-title"
+            className="border-line bg-panel min-w-0 rounded-2xl border p-4 sm:p-6 lg:order-2"
+          >
+            <h2
+              id="accounts-title"
+              className="font-display text-xl font-semibold sm:text-2xl"
+            >
+              Accounts
+            </h2>
+            {model.accounts.length === 0 ? (
+              <p className="text-muted border-line mt-4 border-t pt-4 text-sm">
+                No accounts are visible in this scope.
+              </p>
+            ) : (
+              <div className="mt-2">
+                {model.accounts.map((account, index) => (
+                  <article
+                    key={account.id}
+                    className={`py-3 ${index === 0 ? "" : "border-line border-t"}`}
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <h3 className="truncate font-semibold">{account.name}</h3>
+                      <span className="text-muted shrink-0 text-xs">
+                        {account.mask ? `•••• ${account.mask}` : "No mask"}
+                      </span>
+                    </div>
+                    <dl className="mt-2 grid grid-cols-2 gap-3">
+                      <div>
+                        <dt className="text-muted text-[.65rem] uppercase">
+                          Available
+                        </dt>
+                        <dd className="font-display mt-1 text-lg font-semibold tabular-nums">
+                          {money(account.availableCents)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted text-[.65rem] uppercase">
+                          Current
+                        </dt>
+                        <dd className="font-display mt-1 text-lg font-semibold tabular-nums">
+                          {money(account.currentCents)}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className="text-muted mt-2 text-xs">
+                      {account.subtype.replace("_", " ")} ·{" "}
+                      {freshness(account.freshnessAt, model.timeZone)}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section
             data-testid="dashboard-comparison-chart"
             aria-labelledby="comparison-title"
-            className="border-line bg-surface min-w-0 rounded-2xl border p-5 sm:p-7"
+            className="border-line bg-surface min-w-0 rounded-2xl border p-4 sm:p-6 lg:order-1"
           >
             <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="font-utility text-brand text-[.65rem] font-semibold tracking-[.16em] uppercase">
-                  Cumulative field trace
-                </p>
-                <h2
-                  id="comparison-title"
-                  className="font-display mt-1 text-2xl font-semibold"
-                >
-                  Spending versus recent history
-                </h2>
-              </div>
+              <h2
+                id="comparison-title"
+                className="font-display text-xl font-semibold sm:text-2xl"
+              >
+                Spending history
+              </h2>
               <div className="text-muted flex gap-4 text-xs">
                 <span className="flex items-center gap-2">
                   <i aria-hidden="true" className="bg-brand h-0.5 w-5" />
@@ -426,7 +472,7 @@ export function FinancialDashboard({
             </div>
             <p
               data-testid="dashboard-baseline-note"
-              className="text-muted mt-2 text-sm"
+              className="text-muted mt-1 text-sm"
             >
               {baselineNote(model.comparison.baselineMonthCount)}
             </p>
@@ -434,7 +480,7 @@ export function FinancialDashboard({
             <svg
               viewBox={`0 0 ${chart.width} ${chart.height}`}
               aria-hidden="true"
-              className="mt-5 block h-auto w-full"
+              className="mt-4 block h-auto w-full"
             >
               {[0.25, 0.5, 0.75].map((fraction) => (
                 <line
@@ -503,102 +549,69 @@ export function FinancialDashboard({
               ) : null}
             </svg>
 
-            <div className="border-line mt-5 border-t pt-4">
-              <table
-                data-testid="dashboard-comparison-table"
-                className="w-full table-fixed text-left text-xs tabular-nums sm:text-sm"
-              >
-                <caption className="sr-only">
-                  Daily current cumulative spending and available-history
-                  baseline in Canadian dollars
-                </caption>
-                <thead>
-                  <tr className="text-muted">
-                    <th className="w-1/4 pb-2 font-medium">Day</th>
-                    <th className="w-3/8 pb-2 text-right font-medium">
-                      Current
-                    </th>
-                    <th className="w-3/8 pb-2 text-right font-medium">
-                      Baseline
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {model.comparison.points.map((point) => (
-                    <tr key={point.date} className="border-line-soft border-t">
-                      <th className="py-1.5 font-medium">{point.day}</th>
-                      <td className="py-1.5 text-right">
-                        {money(point.currentCumulativeCents)}
-                      </td>
-                      <td className="py-1.5 text-right">
-                        {point.baselineAverageCents === null
-                          ? "Unavailable"
-                          : money(point.baselineAverageCents)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section
-            data-testid="dashboard-account-list"
-            aria-labelledby="accounts-title"
-            className="border-line bg-panel min-w-0 rounded-2xl border p-5 sm:p-7"
-          >
-            <p className="font-utility text-muted text-[.65rem] font-semibold tracking-[.16em] uppercase">
-              Account ledger
-            </p>
-            <h2
-              id="accounts-title"
-              className="font-display mt-1 text-2xl font-semibold"
+            <details
+              ref={dailyValuesDisclosure}
+              data-testid="dashboard-daily-values-disclosure"
+              className="group border-line mt-4 border-t pt-3"
             >
-              Balance observations
-            </h2>
-            {model.accounts.length === 0 ? (
-              <p className="text-muted border-line mt-5 border-t pt-4 text-sm">
-                No accounts are visible in this scope.
-              </p>
-            ) : (
-              <div className="mt-3">
-                {model.accounts.map((account, index) => (
-                  <article
-                    key={account.id}
-                    className={`py-4 ${index === 0 ? "" : "border-line border-t"}`}
-                  >
-                    <div className="flex items-baseline justify-between gap-3">
-                      <h3 className="font-semibold">{account.name}</h3>
-                      <span className="text-muted text-xs">
-                        {account.mask ? `•••• ${account.mask}` : "No mask"}
-                      </span>
-                    </div>
-                    <dl className="mt-3 grid grid-cols-2 gap-3">
-                      <div>
-                        <dt className="text-muted text-[.65rem] uppercase">
-                          Available
-                        </dt>
-                        <dd className="font-display mt-1 text-lg font-semibold tabular-nums">
-                          {money(account.availableCents)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted text-[.65rem] uppercase">
-                          Current
-                        </dt>
-                        <dd className="font-display mt-1 text-lg font-semibold tabular-nums">
-                          {money(account.currentCents)}
-                        </dd>
-                      </div>
-                    </dl>
-                    <p className="text-muted mt-3 text-xs">
-                      {account.subtype.replace("_", " ")} ·{" "}
-                      {freshness(account.freshnessAt, model.timeZone)}
-                    </p>
-                  </article>
-                ))}
+              <summary className="text-ink flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold lg:hidden [&::-webkit-details-marker]:hidden">
+                View daily values
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 16 16"
+                  className="size-4 group-open:rotate-180"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m4 6 4 4 4-4" />
+                </svg>
+              </summary>
+              <div className="hidden overflow-x-auto group-open:block lg:block">
+                <table
+                  data-testid="dashboard-comparison-table"
+                  className="w-full table-fixed text-left text-xs tabular-nums sm:text-sm"
+                >
+                  <caption className="sr-only">
+                    Daily current cumulative spending and available-history
+                    baseline in Canadian dollars
+                  </caption>
+                  <thead>
+                    <tr className="text-muted">
+                      <th className="w-1/4 pb-2 font-medium">Day</th>
+                      <th className="w-3/8 pb-2 text-right font-medium">
+                        Current
+                      </th>
+                      <th className="w-3/8 pb-2 text-right font-medium">
+                        Baseline
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {model.comparison.points.map((point) => (
+                      <tr
+                        key={point.date}
+                        className="border-line-soft border-t"
+                      >
+                        <th scope="row" className="py-1.5 font-medium">
+                          {point.day}
+                        </th>
+                        <td className="py-1.5 text-right">
+                          {money(point.currentCumulativeCents)}
+                        </td>
+                        <td className="py-1.5 text-right">
+                          {point.baselineAverageCents === null
+                            ? "Unavailable"
+                            : money(point.baselineAverageCents)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
+            </details>
           </section>
         </div>
       </div>

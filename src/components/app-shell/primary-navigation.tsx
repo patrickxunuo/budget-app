@@ -24,7 +24,7 @@ export const PRIMARY_NAVIGATION: readonly NavigationItem[] = [
 
 /** Administrative destinations: rail only, never in the thumb-reach bar. */
 export const SECONDARY_NAVIGATION: readonly NavigationItem[] = [
-  { href: "/settings/members", label: "Household", index: "06" },
+  { href: "/settings/members", label: "Family members", index: "06" },
 ];
 
 /**

@@ -11,31 +11,16 @@ const CONNECTION_ACCOUNTS = [0, 1];
 const DOSSIER_STEPS = [0, 1, 2];
 
 /**
- * Mirrors the connection dossier: masthead, the data-freshness strip, the
+ * Mirrors the compact accounts route: the data-freshness strip, the
  * linked-institution cards, and the two-column link flow that closes the page.
  */
 export default function Loading() {
   return (
     <RouteSkeleton
-      label="Loading the connection dossier"
-      mainClassName="px-5 py-9 sm:px-8 sm:py-11 lg:px-12 lg:py-14"
+      label="Loading accounts"
+      mainClassName="min-w-0 overflow-x-hidden px-4 py-5 sm:px-8 sm:py-7 lg:px-12"
       containerClassName="mx-auto max-w-6xl"
     >
-      <div className="mb-8 grid gap-5 lg:grid-cols-[1fr_22rem] lg:items-end">
-        <div>
-          <SkeletonShape className="h-3 w-56 max-w-full rounded-full" />
-          <div className="mt-4 grid max-w-3xl gap-3">
-            <SkeletonShape className="h-10 rounded-lg sm:h-12" />
-            <SkeletonShape className="h-10 w-3/5 rounded-lg sm:h-12" />
-          </div>
-        </div>
-        <div className="border-line grid gap-2.5 border-l pl-5">
-          <SkeletonShape className="h-2.5 rounded-full" />
-          <SkeletonShape className="h-2.5 rounded-full" />
-          <SkeletonShape className="h-2.5 w-4/5 rounded-full" />
-        </div>
-      </div>
-
       <div className="border-line bg-panel mb-8 overflow-hidden rounded-[1.75rem] border p-5 shadow-[0_16px_50px_rgba(48,38,27,.06)] sm:p-7">
         <div className="border-line flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div className="grid gap-2.5">
@@ -99,7 +84,7 @@ export default function Loading() {
                   </div>
                 </div>
                 <div className="min-w-0 p-5 sm:p-7">
-                  <div className="border-mineral/40 grid gap-2.5 border-l-4 px-4 py-3">
+                  <div className="border-mineral/40 grid gap-2.5 rounded-xl border px-4 py-3">
                     <SkeletonShape className="h-2.5 rounded-full" />
                     <SkeletonShape className="h-2.5 w-4/5 rounded-full" />
                   </div>

@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 
 import { PlaidConnectionManager } from "@/components/plaid/plaid-connection-manager";
 import { PlaidLinkFlow } from "@/components/plaid/plaid-link-flow";
@@ -30,24 +30,9 @@ export default async function AccountsPage() {
     <main
       id="main-content"
       tabIndex={-1}
-      className="px-5 py-9 sm:px-8 sm:py-11 lg:px-12 lg:py-14"
+      className="min-w-0 overflow-x-hidden px-4 py-5 sm:px-8 sm:py-7 lg:px-12"
     >
       <div className="mx-auto max-w-6xl">
-        <header className="mb-8 grid gap-5 lg:grid-cols-[1fr_22rem] lg:items-end">
-          <div>
-            <p className="font-utility text-brand text-[.68rem] font-semibold tracking-[.15em] uppercase">
-              Accounts / secure custody
-            </p>
-            <h1 className="font-display text-ink mt-3 max-w-3xl text-5xl leading-[.94] font-semibold tracking-[-.06em] sm:text-6xl">
-              Open the connection dossier.
-            </h1>
-          </div>
-          <p className="border-line text-muted border-l pl-5 text-sm leading-6">
-            Plaid brings back account metadata and read-only transactions. You
-            decide which records stay Personal, which join the Family ledger,
-            and when a connection’s custody ends.
-          </p>
-        </header>
         <PlaidSyncStatus
           items={syncStatuses}
           referenceTime={new Date().toISOString()}
