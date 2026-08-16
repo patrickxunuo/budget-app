@@ -10,6 +10,12 @@
 - Previous run: 98 passed, 70 fixture-dependent scenarios skipped, 0 failed (168 desktop/mobile cases). GH-14 raised the runnable count from 36 to 98 by seeding an owner with `pnpm seed:e2e` and adding the fixtureless security-hardening spec; GH-13 had raised it from 14 to 36.
 - Running the suite needs roughly 2 GB of headroom. On a loaded workstation `next dev` is killed by the OS with `FATAL ERROR: Zone Allocation failed`, and every case then fails with `ERR_CONNECTION_REFUSED` from a dead web server rather than from a real defect. Run `CI=1 pnpm exec playwright test --workers=1` in that situation: `CI=1` switches the `webServer` to the production `pnpm start`, which is far lighter than the dev server.
 
+## GH-33 Shared Pending Mutation Controls
+
+- [x] Component acceptance covers the shared exclusive/latest hook, layout-stable accessible button, and transaction ledger, Plaid connections, budgets, categories, Manual/Cash, and transaction explorer migrations: 49 focused checks and the complete 909-check Vitest suite pass.
+- [x] `e2e/support/pending.ts` observes the real DOM before activation, without request interception, so existing category/rule and Plaid visibility/disconnect journeys can prove transient `aria-busy` plus disabled state even when the real backend responds quickly.
+- Browser verification was attempted once with `npm run test:e2e`: GH-33's fixture-backed categories and Plaid cases skipped because their credentials were absent, while 10 unrelated fixtureless/protected cases failed because the worktree lacked required Supabase/server environment values; no product bug was inferred. Review then added and ran the fixtureless `e2e/pending-button.spec.ts` focus case against the app's compiled CSS: 1/1 desktop Chromium passed, proving unchanged computed bounds through an observed pending transition, `pending-button-dot` with motion allowed, `animation-name: none` for all dots under reduced motion, and representative shared-button labels from every adopting mutation surface. The real-backend observer journeys remain authored and fixture-gated.
+
 ## GH-35 Manual-Entry and Dashboard Journey Repairs
 
 - [x] `e2e/manual-entries.spec.ts` creates uniquely scoped Family and Personal categories, proves form privacy is independent from URL ledger scope, and opens the matching ledger before row assertions, edits, deletes, and CSV checks.

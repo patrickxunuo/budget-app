@@ -1,5 +1,6 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { fixtureCredentials, requireFixture } from "./support/fixtures";
+import { activateAndObservePending } from "./support/pending";
 
 const credentials = fixtureCredentials("plaid-connection");
 
@@ -106,7 +107,7 @@ test.describe("GH-11 Plaid connection management", () => {
         new URL(response.url()).pathname.endsWith("/visibility") &&
         response.request().method() === "PATCH",
     );
-    await confirmation.click();
+    await activateAndObservePending(confirmation, () => confirmation.click());
     expect((await patch).status()).toBe(200);
     await expect(page.getByTestId("plaid-operation-status")).toContainText(
       /visibility|updated|recalculated/i,
@@ -182,9 +183,12 @@ test.describe("GH-11 Plaid connection management", () => {
         new URL(response.url()).pathname.endsWith("/disconnect") &&
         response.request().method() === "POST",
     );
-    await confirmation
-      .getByRole("button", { name: /confirm disconnect/i })
-      .click();
+    const confirmDisconnect = confirmation.getByRole("button", {
+      name: /confirm disconnect/i,
+    });
+    await activateAndObservePending(confirmDisconnect, () =>
+      confirmDisconnect.click(),
+    );
     expect((await disconnectResponse).status()).toBe(200);
     await expect(page.getByTestId("plaid-operation-status")).toContainText(
       /disconnected|history.*kept/i,

@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -35,6 +36,14 @@ function jsonResponse(body: unknown, status = 200) {
       headers: { "content-type": "application/json" },
     }),
   );
+}
+
+function deferredResponse() {
+  let resolve!: (response: Response) => void;
+  const promise = new Promise<Response>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
 }
 
 beforeEach(() => {
@@ -143,5 +152,99 @@ describe("GH-7 category workbench acceptance", () => {
         body: JSON.stringify({ archived: true }),
       }),
     );
+  });
+});
+
+describe("GH-33 category workbench pending controls", () => {
+  it("FE-005 shares pending across create and archive, ignores repeats, and restores existing failure copy", async () => {
+    const createRequest = deferredResponse();
+    const archiveRequest = deferredResponse();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => createRequest.promise)
+      .mockImplementationOnce(() => archiveRequest.promise);
+
+    render(
+      <CategoryWorkbench
+        initialCategories={[familyCategory, personalCategory]}
+        initialRules={[]}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("category-name"), {
+      target: { value: "Utilities" },
+    });
+    const submit = screen.getByTestId("category-submit");
+    act(() => {
+      submit.click();
+      submit.click();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(submit).toHaveTextContent("Saving…");
+    expect(submit).toHaveAttribute("data-pending", "true");
+    expect(submit).toBeDisabled();
+    for (const archive of screen.getAllByRole("button", { name: "Archive" })) {
+      expect(archive).toBeDisabled();
+    }
+
+    await act(async () => {
+      createRequest.resolve(
+        new Response(
+          JSON.stringify({ error: "Category could not be saved. Try again." }),
+          {
+            status: 503,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      );
+      await createRequest.promise;
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByText("Category could not be saved. Try again."),
+      ).toBeVisible(),
+    );
+    expect(submit).toHaveTextContent("Add category");
+    expect(submit).toHaveAttribute("data-pending", "false");
+    expect(submit).toBeEnabled();
+
+    const groceryArticle = screen.getByText("Groceries").closest("article");
+    expect(groceryArticle).not.toBeNull();
+    const archive = within(groceryArticle as HTMLElement).getByRole("button", {
+      name: "Archive",
+    });
+    act(() => {
+      archive.click();
+      archive.click();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(archive).toHaveTextContent("Archiving…");
+    expect(archive).toHaveAttribute("data-pending", "true");
+    expect(archive).toBeDisabled();
+    expect(submit).toBeDisabled();
+    for (const otherArchive of screen.getAllByRole("button", {
+      name: "Archive",
+    })) {
+      expect(otherArchive).toBeDisabled();
+    }
+
+    await act(async () => {
+      archiveRequest.resolve(
+        new Response(JSON.stringify({ error: "Archive failed. Try again." }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      await archiveRequest.promise;
+    });
+    await waitFor(() =>
+      expect(screen.getByText("Archive failed. Try again.")).toBeVisible(),
+    );
+    expect(archive).toHaveTextContent("Archive");
+    expect(archive).toHaveAttribute("data-pending", "false");
+    expect(archive).toBeEnabled();
+    expect(submit).toBeEnabled();
   });
 });

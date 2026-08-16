@@ -16,4 +16,6 @@ Project memory. Read this file first to find what you need.
 
 ## Last Updated
 
+2026-08-16 — GH-33's standardized pending-action implementation is ready for PR with 909 Vitest checks, fixtureless computed-style Chromium coverage, and independent review green. See `systemPatterns.md` for the shared exclusive/latest hook, stable pending button, and live-region ownership rules; see `testBaseline.md` for the environment-limited full Playwright result.
+
 2026-08-14 — through GH-30 on `main`, deployed to production and verified end to end against Plaid Sandbox. GH-32 (route-level loading skeletons and navigation pending feedback) is in review in PR #48. #31 is unblocked and owns the dashboard skeleton when it lands. #26, #31, #33, #35, and #44 remain open.

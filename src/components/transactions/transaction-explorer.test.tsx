@@ -577,7 +577,7 @@ describe("GH-30 transaction explorer", () => {
     }
   });
 
-  it("COMP-010 keeps the retained model and announces a failed refresh", async () => {
+  it("GH-33 FE-007 / COMP-010 settles shared pending, keeps the retained model, and announces a failed refresh", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       respondWith({ error: "Transactions refresh failed. Try again." }, 503),
     );
@@ -609,9 +609,10 @@ describe("GH-30 transaction explorer", () => {
       screen.getByTestId("transactions-result-excluded-transfer"),
     ).toBeVisible();
     expect(screen.getByTestId("transactions-scope-family")).toBeEnabled();
+    expect(screen.getByTestId("transactions-loading")).toBeEmptyDOMElement();
   });
 
-  it("COMP-011 lets the newer response win when a slower earlier one resolves last", async () => {
+  it("GH-33 FE-007 / COMP-011 lets the newer response win when a slower earlier one resolves last", async () => {
     const resolvers: Array<(value: Response) => void> = [];
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
       () =>
@@ -768,7 +769,7 @@ describe("GH-30 transaction explorer", () => {
    * on screen. In a product whose whole contract is "the URL reproduces the
    * view", that is the failure worth a dedicated regression.
    */
-  it("COMP-014 does not rewrite the address bar from a response that lands after unmount", async () => {
+  it("GH-33 FE-007 / COMP-014 does not rewrite the address bar from a response that lands after unmount", async () => {
     const replaceStateSpy = vi.spyOn(window.history, "replaceState");
     let landResponse!: (response: Response) => void;
     vi.spyOn(globalThis, "fetch").mockImplementation(

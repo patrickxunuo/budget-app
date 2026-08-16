@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PendingButton } from "@/components/pending-button";
+import { usePendingAction } from "@/hooks/use-pending-action";
 import type { Category } from "@/lib/categories/types";
 import type {
   ManualEntry,
@@ -45,7 +47,8 @@ export function ManualEntryWorkbench({
   );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState("");
+  const { pending, run } = usePendingAction();
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const availableCategories = useMemo(
@@ -84,85 +87,87 @@ export function ManualEntryWorkbench({
   }
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
-    setError("");
-    setStatus("");
-    try {
-      const endpoint = editingId
-        ? `/api/manual-entries/${editingId}`
-        : "/api/manual-entries";
-      const payload = editingId
-        ? {
-            kind: form.kind,
-            amount: form.amount,
-            entryDate: form.entryDate,
-            description: form.description,
-            categoryId: form.categoryId,
-            notes: form.notes,
-          }
-        : form;
-      const response = await fetch(endpoint, {
-        method: editingId ? "PATCH" : "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error?.message ?? "The entry could not be saved.");
-      setEntries((current) =>
-        editingId
-          ? current.map((entry) =>
-              entry.id === editingId ? body.entry : entry,
-            )
-          : viewScope === undefined || body.entry.scope === viewScope
-            ? [body.entry, ...current]
-            : current,
-      );
-      setStatus(
-        editingId
-          ? "Manual entry updated. Edit history has been retained."
-          : "Manual/Cash entry added to the ledger.",
-      );
-      reset();
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "The entry could not be saved.",
-      );
-    } finally {
-      setBusy(false);
-    }
+    await run(async () => {
+      setPendingAction("submit");
+      setError("");
+      setStatus("");
+      try {
+        const endpoint = editingId
+          ? `/api/manual-entries/${editingId}`
+          : "/api/manual-entries";
+        const payload = editingId
+          ? {
+              kind: form.kind,
+              amount: form.amount,
+              entryDate: form.entryDate,
+              description: form.description,
+              categoryId: form.categoryId,
+              notes: form.notes,
+            }
+          : form;
+        const response = await fetch(endpoint, {
+          method: editingId ? "PATCH" : "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await response.json();
+        if (!response.ok)
+          throw new Error(
+            body.error?.message ?? "The entry could not be saved.",
+          );
+        setEntries((current) =>
+          editingId
+            ? current.map((entry) =>
+                entry.id === editingId ? body.entry : entry,
+              )
+            : viewScope === undefined || body.entry.scope === viewScope
+              ? [body.entry, ...current]
+              : current,
+        );
+        setStatus(
+          editingId
+            ? "Manual entry updated. Edit history has been retained."
+            : "Manual/Cash entry added to the ledger.",
+        );
+        reset();
+      } catch (reason) {
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "The entry could not be saved.",
+        );
+      }
+    });
   }
   async function remove(entry: ManualEntry, confirmed: boolean) {
-    setBusy(true);
-    setError("");
-    try {
-      const response = await fetch(`/api/manual-entries/${entry.id}`, {
-        method: "DELETE",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ confirmed }),
-      });
-      const body = await response.json();
-      if (!response.ok)
-        throw new Error(
-          body.error?.message ?? "The entry could not be deleted.",
+    await run(async () => {
+      setPendingAction(`delete:${entry.id}`);
+      setError("");
+      try {
+        const response = await fetch(`/api/manual-entries/${entry.id}`, {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ confirmed }),
+        });
+        const body = await response.json();
+        if (!response.ok)
+          throw new Error(
+            body.error?.message ?? "The entry could not be deleted.",
+          );
+        setEntries((current) => current.filter((item) => item.id !== entry.id));
+        setConfirmingId(null);
+        setStatus(
+          "Entry removed from the active ledger. Its audit history is retained.",
         );
-      setEntries((current) => current.filter((item) => item.id !== entry.id));
-      setConfirmingId(null);
-      setStatus(
-        "Entry removed from the active ledger. Its audit history is retained.",
-      );
-      if (editingId === entry.id) reset();
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "The entry could not be deleted.",
-      );
-    } finally {
-      setBusy(false);
-    }
+        if (editingId === entry.id) reset();
+      } catch (reason) {
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "The entry could not be deleted.",
+        );
+      }
+    });
   }
   function requestDelete(entry: ManualEntry) {
     if (entry.scope === "family") setConfirmingId(entry.id);
@@ -298,20 +303,19 @@ export function ManualEntryWorkbench({
             Spending uses a minus sign. Income and refunds are positive.
           </p>
           <div className="flex flex-wrap gap-2">
-            <button
+            <PendingButton
               data-testid="manual-entry-submit"
-              disabled={busy}
+              disabled={pending}
+              pending={pending && pendingAction === "submit"}
+              pendingLabel="Recording…"
               className="bg-brand text-surface focus-visible:outline-mineral min-h-11 flex-1 rounded-full px-5 font-bold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60"
             >
-              {busy
-                ? "Recording…"
-                : editingId
-                  ? "Save revision"
-                  : "Record entry"}
-            </button>
+              {editingId ? "Save revision" : "Record entry"}
+            </PendingButton>
             {editingId && (
               <button
                 type="button"
+                disabled={pending}
                 onClick={reset}
                 className="border-line min-h-11 rounded-full border px-5 font-semibold"
               >
@@ -395,16 +399,21 @@ export function ManualEntryWorkbench({
               <div className="flex flex-wrap gap-2 md:justify-end">
                 {confirmingId === entry.id ? (
                   <>
-                    <button
+                    <PendingButton
                       data-testid={`manual-entry-delete-confirm-${entry.id}`}
-                      disabled={busy}
+                      disabled={pending}
+                      pending={
+                        pending && pendingAction === `delete:${entry.id}`
+                      }
+                      pendingLabel="Removing…"
                       onClick={() => void remove(entry, true)}
                       className="bg-alert text-surface focus-visible:outline-alert rounded-full px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
                     >
                       Confirm removal
-                    </button>
+                    </PendingButton>
                     <button
                       data-testid={`manual-entry-delete-cancel-${entry.id}`}
+                      disabled={pending}
                       onClick={() => setConfirmingId(null)}
                       className="border-line rounded-full border px-4 py-2 text-sm font-semibold"
                     >
@@ -415,18 +424,24 @@ export function ManualEntryWorkbench({
                   <>
                     <button
                       data-testid={`manual-entry-edit-${entry.id}`}
+                      disabled={pending}
                       onClick={() => beginEdit(entry)}
                       className="border-brand text-brand focus-visible:outline-brand rounded-full border px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
                     >
                       Edit
                     </button>
-                    <button
+                    <PendingButton
                       data-testid={`manual-entry-delete-${entry.id}`}
+                      disabled={pending}
+                      pending={
+                        pending && pendingAction === `delete:${entry.id}`
+                      }
+                      pendingLabel="Removing…"
                       onClick={() => requestDelete(entry)}
                       className="text-alert focus-visible:outline-alert rounded-full px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
                     >
                       Delete
-                    </button>
+                    </PendingButton>
                   </>
                 )}
               </div>
