@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { PendingButton } from "@/components/pending-button";
+import { Select } from "@/components/select";
 import { usePendingAction } from "@/hooks/use-pending-action";
 import type { Category, MerchantRule } from "@/lib/categories/types";
 export type CategoryWorkbenchProps = {
@@ -107,15 +108,17 @@ export function CategoryWorkbench({
           </label>
           <label className="text-sm font-semibold">
             Privacy
-            <select
+            <Select
               data-testid="category-scope"
               name="scope"
+              defaultValue="family"
               disabled={pending}
-              className="border-line bg-surface mt-2 min-h-11 w-full rounded-lg border px-3"
-            >
-              <option value="family">Family</option>
-              <option value="personal">Personal</option>
-            </select>
+              options={[
+                { value: "family", label: "Family" },
+                { value: "personal", label: "Personal" },
+              ]}
+              className="mt-2"
+            />
           </label>
           <PendingButton
             data-testid="category-submit"

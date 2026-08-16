@@ -1,6 +1,7 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { sameOriginHeaders } from "./support/api";
 import { fixtureCredentials, requireFixture } from "./support/fixtures";
+import { chooseSelectOption } from "./support/select";
 
 const credentials = fixtureCredentials("manual-entries");
 const runSeed = Date.now().toString(36);
@@ -76,7 +77,10 @@ async function openManualLedger(page: Page, scope: "family" | "personal") {
   );
   await expect(page.getByTestId("manual-entry-workbench")).toBeVisible();
   await expect(page.getByTestId("manual-entry-form")).toBeVisible();
-  await expect(page.getByTestId("manual-entry-scope")).toHaveValue(scope);
+  await expect(page.getByTestId("manual-entry-scope")).toHaveAttribute(
+    "data-value",
+    scope,
+  );
 }
 
 async function submitEntry(
@@ -90,15 +94,28 @@ async function submitEntry(
     notes?: string;
   },
 ) {
-  await page.getByTestId("manual-entry-scope").selectOption(entry.scope);
-  await expect(page.getByTestId("manual-entry-scope")).toHaveValue(entry.scope);
-  await page.getByTestId("manual-entry-kind").selectOption(entry.kind);
+  await chooseSelectOption(
+    page.getByTestId("manual-entry-scope"),
+    entry.scope === "family" ? /family/i : /personal/i,
+    entry.scope,
+  );
+  await expect(page.getByTestId("manual-entry-scope")).toHaveAttribute(
+    "data-value",
+    entry.scope,
+  );
+  await chooseSelectOption(
+    page.getByTestId("manual-entry-kind"),
+    new RegExp(entry.kind, "i"),
+    entry.kind,
+  );
   await page.getByTestId("manual-entry-amount").fill(entry.amount);
   await page.getByTestId("manual-entry-date").fill(entryDate);
   await page.getByTestId("manual-entry-description").fill(entry.description);
-  await page
-    .getByTestId("manual-entry-category")
-    .selectOption(entry.categoryId);
+  await chooseSelectOption(
+    page.getByTestId("manual-entry-category"),
+    new RegExp(`E2E Manual ${entry.scope} ${runLabel}`, "i"),
+    entry.categoryId,
+  );
   await page.getByTestId("manual-entry-notes").fill(entry.notes ?? "");
   const responsePromise = page.waitForResponse(
     (response) =>
@@ -187,8 +204,14 @@ test.describe("GH-35 Manual/Cash real-backend journeys", () => {
     await openManualLedger(page, "family");
 
     await page.getByTestId(`manual-entry-edit-${familyEntryId}`).click();
-    await expect(page.getByTestId("manual-entry-scope")).toHaveValue("family");
-    await expect(page.getByTestId("manual-entry-kind")).toHaveValue("spending");
+    await expect(page.getByTestId("manual-entry-scope")).toHaveAttribute(
+      "data-value",
+      "family",
+    );
+    await expect(page.getByTestId("manual-entry-kind")).toHaveAttribute(
+      "data-value",
+      "spending",
+    );
     await expect(page.getByTestId("manual-entry-amount")).toHaveValue("-42.75");
     const corrected = `Neighbourhood market corrected ${runLabel}`;
     await page.getByTestId("manual-entry-description").fill(corrected);

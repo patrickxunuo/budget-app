@@ -1,5 +1,6 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { fixtureCredentials, requireFixture } from "./support/fixtures";
+import { chooseFirstSelectOption, chooseSelectOption } from "./support/select";
 
 const credentials = fixtureCredentials("dashboard");
 
@@ -117,24 +118,18 @@ test.describe("GH-30 transaction exploration regression", () => {
     await openTransactions(page);
     const account = page.getByTestId("transactions-account-filter");
     const category = page.getByTestId("transactions-category-filter");
-    const accountValue = await account
-      .locator("option[value]:not([value=''])")
-      .first()
-      .getAttribute("value");
-    const categoryValue = await category
-      .locator("option[value]:not([value=''])")
-      .first()
-      .getAttribute("value");
-    test.skip(
-      !accountValue || !categoryValue,
-      "Requires visible account and category fixtures.",
+    await chooseFirstSelectOption(account);
+    await chooseFirstSelectOption(category);
+    await chooseSelectOption(
+      page.getByTestId("transactions-status-filter"),
+      "Pending",
+      "pending",
     );
-    await account.selectOption(accountValue!);
-    await category.selectOption(categoryValue!);
-    await page
-      .getByTestId("transactions-status-filter")
-      .selectOption("pending");
-    await page.getByTestId("transactions-inclusion-filter").selectOption("all");
+    await chooseSelectOption(
+      page.getByTestId("transactions-inclusion-filter"),
+      "All lines",
+      "all",
+    );
     await waitForTransactionsResponse(page, async () => {
       await page.getByTestId("transactions-search").fill("a");
       await page.getByTestId("transactions-search").press("Enter");
@@ -195,6 +190,24 @@ test.describe("GH-30 transaction exploration regression", () => {
         `${id} must be at least 44 px on its smallest side`,
       ).toBeGreaterThanOrEqual(44);
     }
+    const categoryMenuTrigger = page.getByTestId(
+      "transactions-category-filter",
+    );
+    await categoryMenuTrigger.click();
+    const menu = page.locator(".piggy-select-menu");
+    await expect(menu).toBeVisible();
+    const menuBox = await menu.boundingBox();
+    expect(menuBox).not.toBeNull();
+    expect(menuBox!.x).toBeGreaterThanOrEqual(0);
+    expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(390);
+    expect(
+      await menu.evaluate((element) => ({
+        animationName: getComputedStyle(element).animationName,
+        overflowsHorizontally: element.scrollWidth > element.clientWidth,
+      })),
+    ).toEqual({ animationName: "none", overflowsHorizontally: false });
+    await capture(page, testInfo, "transactions-mobile-category-select-open");
+    await page.keyboard.press("Escape");
     const controls = await page
       .getByTestId("transactions-search")
       .boundingBox();

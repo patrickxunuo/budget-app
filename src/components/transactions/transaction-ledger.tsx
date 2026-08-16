@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { PendingButton } from "@/components/pending-button";
+import { SearchableSelect } from "@/components/select";
 import { usePendingAction } from "@/hooks/use-pending-action";
 import type { Category, TransactionCategoryView } from "@/lib/categories/types";
 export type TransactionLedgerProps = {
@@ -228,28 +229,32 @@ function TransactionRow({
         </small>
       </div>
       <div>
-        <select
+        <SearchableSelect
           aria-label={`Category for ${row.merchantName ?? row.name}`}
           data-testid={`category-select-${row.id}`}
           value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="border-line min-h-11 w-full rounded-lg border bg-transparent px-3"
-        >
-          <option value="">Choose category</option>
-          {categories
-            .filter(
-              (c) =>
-                !c.archivedAt &&
-                c.scope === row.scope &&
-                (row.scope === "family" ||
-                  c.ownerProfileId === row.ownerProfileId),
-            )
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} · {c.scope}
-              </option>
-            ))}
-        </select>
+          onValueChange={setValue}
+          placeholder="Choose category"
+          searchPlaceholder="Search categories"
+          emptyMessage="No categories match"
+          options={[
+            { value: "", label: "Choose category" },
+            ...categories
+              .filter(
+                (category) =>
+                  !category.archivedAt &&
+                  category.scope === row.scope &&
+                  (row.scope === "family" ||
+                    category.ownerProfileId === row.ownerProfileId),
+              )
+              .map((category) => ({
+                value: category.id,
+                label: `${category.name} · ${category.scope}`,
+                keywords: [category.scope],
+              })),
+          ]}
+          className="bg-transparent"
+        />
         <div className="mt-2 flex flex-wrap gap-2">
           <PendingButton
             data-testid={`category-save-${row.id}`}

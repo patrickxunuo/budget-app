@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useActionState, useState } from "react";
+import { Select } from "@/components/select";
 import {
   confirmPassword,
   createInvitation,
@@ -231,15 +232,17 @@ export function MembershipConsole({
             <Field label="Email" name="email" type="email" />
             <label className="text-ink text-sm font-semibold">
               Expires in
-              <select
+              <Select
+                data-testid="invitation-expiry"
                 name="expiresInHours"
                 defaultValue="72"
-                className="border-line bg-surface mt-2 min-h-12 w-full rounded-xl border px-3"
-              >
-                <option value="24">1 day</option>
-                <option value="72">3 days</option>
-                <option value="168">7 days</option>
-              </select>
+                options={[
+                  { value: "24", label: "1 day" },
+                  { value: "72", label: "3 days" },
+                  { value: "168", label: "7 days" },
+                ]}
+                className="mt-2 min-h-12"
+              />
             </label>
             <button
               disabled={invitePending}

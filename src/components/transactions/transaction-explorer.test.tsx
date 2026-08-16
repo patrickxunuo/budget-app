@@ -145,6 +145,10 @@ const initialModel: DashboardReadModel = {
   },
 };
 
+function chooseFilter(testId: string, label: string) {
+  fireEvent.click(screen.getByTestId(testId));
+  fireEvent.click(screen.getByRole("option", { name: label }));
+}
 const initialFilters: ExplorerFilters = {
   scope: "family",
   period: "month",
@@ -303,12 +307,8 @@ describe("GH-30 transaction explorer", () => {
       .mockImplementation(() => respondWith(filteredModel));
     renderExplorer();
 
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "pending" },
-    });
-    fireEvent.change(screen.getByTestId("transactions-inclusion-filter"), {
-      target: { value: "all" },
-    });
+    chooseFilter("transactions-status-filter", "Pending");
+    chooseFilter("transactions-inclusion-filter", "All lines");
 
     await waitFor(() => {
       const url = urlOf(fetchMock.mock.calls.at(-1));
@@ -343,9 +343,7 @@ describe("GH-30 transaction explorer", () => {
       screen.getByTestId("transactions-summary-spending"),
     ).toHaveTextContent(/137\.50/);
 
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "pending" },
-    });
+    chooseFilter("transactions-status-filter", "Pending");
 
     await waitFor(() =>
       expect(
@@ -378,18 +376,10 @@ describe("GH-30 transaction explorer", () => {
       .mockImplementation(() => respondWith(filteredModel));
     renderExplorer();
 
-    fireEvent.change(screen.getByTestId("transactions-account-filter"), {
-      target: { value: ACCOUNT_ID },
-    });
-    fireEvent.change(screen.getByTestId("transactions-category-filter"), {
-      target: { value: CATEGORY_ID },
-    });
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "posted" },
-    });
-    fireEvent.change(screen.getByTestId("transactions-inclusion-filter"), {
-      target: { value: "excluded" },
-    });
+    chooseFilter("transactions-account-filter", "Household Chequing");
+    chooseFilter("transactions-category-filter", "Groceries");
+    chooseFilter("transactions-status-filter", "Posted");
+    chooseFilter("transactions-inclusion-filter", "Excluded");
     fireEvent.change(screen.getByTestId("transactions-search"), {
       target: { value: " green market " },
     });
@@ -437,9 +427,7 @@ describe("GH-30 transaction explorer", () => {
     );
     renderExplorer();
 
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "pending" },
-    });
+    chooseFilter("transactions-status-filter", "Pending");
 
     await waitFor(() =>
       expect(exportLink()).toHaveAttribute("aria-disabled", "true"),
@@ -462,9 +450,7 @@ describe("GH-30 transaction explorer", () => {
     );
     renderExplorer();
 
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "posted" },
-    });
+    chooseFilter("transactions-status-filter", "Posted");
 
     await waitFor(() =>
       expect(screen.getByTestId("transactions-empty-state")).toBeVisible(),
@@ -484,12 +470,8 @@ describe("GH-30 transaction explorer", () => {
     );
     renderExplorer();
 
-    fireEvent.change(screen.getByTestId("transactions-account-filter"), {
-      target: { value: ACCOUNT_ID },
-    });
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "pending" },
-    });
+    chooseFilter("transactions-account-filter", "Household Chequing");
+    chooseFilter("transactions-status-filter", "Pending");
     fireEvent.change(screen.getByTestId("transactions-search"), {
       target: { value: "unmatchable" },
     });
@@ -509,9 +491,7 @@ describe("GH-30 transaction explorer", () => {
     );
     renderExplorer();
 
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "pending" },
-    });
+    chooseFilter("transactions-status-filter", "Pending");
     fireEvent.change(screen.getByTestId("transactions-search"), {
       target: { value: "green" },
     });
@@ -535,12 +515,8 @@ describe("GH-30 transaction explorer", () => {
     );
     renderExplorer();
 
-    fireEvent.change(screen.getByTestId("transactions-account-filter"), {
-      target: { value: ACCOUNT_ID },
-    });
-    fireEvent.change(screen.getByTestId("transactions-category-filter"), {
-      target: { value: CATEGORY_ID },
-    });
+    chooseFilter("transactions-account-filter", "Household Chequing");
+    chooseFilter("transactions-category-filter", "Groceries");
     fireEvent.click(screen.getByTestId("transactions-scope-personal"));
 
     await waitFor(() => expect(pushSpy).toHaveBeenCalled());
@@ -583,9 +559,7 @@ describe("GH-30 transaction explorer", () => {
     );
     renderExplorer();
 
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "pending" },
-    });
+    chooseFilter("transactions-status-filter", "Pending");
 
     // `findByTestId` would NOT wait here: the alert is always mounted and
     // starts empty (contract rule 10), so it resolves on the first query pass
@@ -622,13 +596,9 @@ describe("GH-30 transaction explorer", () => {
     );
     renderExplorer();
 
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "pending" },
-    });
+    chooseFilter("transactions-status-filter", "Pending");
     await waitFor(() => expect(resolvers).toHaveLength(1));
-    fireEvent.change(screen.getByTestId("transactions-inclusion-filter"), {
-      target: { value: "all" },
-    });
+    chooseFilter("transactions-inclusion-filter", "All lines");
     await waitFor(() => expect(resolvers).toHaveLength(2));
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
@@ -780,9 +750,7 @@ describe("GH-30 transaction explorer", () => {
     );
     const { unmount } = renderExplorer();
 
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "pending" },
-    });
+    chooseFilter("transactions-status-filter", "Pending");
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
     expect(replaceStateSpy).not.toHaveBeenCalled();
 
@@ -809,17 +777,13 @@ describe("GH-30 transaction explorer", () => {
     );
     renderExplorer();
 
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "pending" },
-    });
+    chooseFilter("transactions-status-filter", "Pending");
     const empty = await screen.findByTestId("transactions-empty-state");
     await waitFor(() => expect(empty).toHaveTextContent(/pending/i));
 
     // Second refresh is rejected while the member is switching to Posted.
     fetchMock.mockImplementationOnce(() => respondWith({ error: "nope" }, 503));
-    fireEvent.change(screen.getByTestId("transactions-status-filter"), {
-      target: { value: "posted" },
-    });
+    chooseFilter("transactions-status-filter", "Posted");
     await waitFor(() =>
       expect(screen.getByTestId("transactions-error")).toHaveTextContent(
         /try again/i,
@@ -853,10 +817,8 @@ describe("GH-30 transaction explorer", () => {
     );
 
     const account = screen.getByTestId("transactions-account-filter");
-    expect(account).toHaveValue(unknownId);
-    expect(
-      within(account).getByRole("option", { name: /unavailable account/i }),
-    ).toBeInTheDocument();
+    expect(account).toHaveAttribute("data-value", unknownId);
+    expect(account).toHaveTextContent(/unavailable account/i);
     // The empty state names the filter without echoing the raw identifier.
     const empty = screen.getByTestId("transactions-empty-state");
     expect(empty).toHaveTextContent(/account/i);

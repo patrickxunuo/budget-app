@@ -1,6 +1,7 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { fixtureCredentials, requireFixture } from "./support/fixtures";
 import { activateAndObservePending } from "./support/pending";
+import { chooseSelectOption } from "./support/select";
 
 const credentials = fixtureCredentials("plaid-connection");
 
@@ -32,15 +33,11 @@ async function capture(page: Page, testInfo: TestInfo, name: string) {
 
 async function chooseFirstDifferentVisibility(page: Page) {
   const visibility = page.getByTestId(/^plaid-visibility-/).first();
-  const tagName = await visibility.evaluate((element) => element.tagName);
-  if (tagName === "SELECT") {
-    const current = await visibility.inputValue();
-    await visibility.selectOption(current === "family" ? "personal" : "family");
+  const current = await visibility.getAttribute("data-value");
+  if (current === "family") {
+    await chooseSelectOption(visibility, /personal.*only me/i, "personal");
   } else {
-    const personal = visibility.getByRole("radio", { name: /personal/i });
-    const family = visibility.getByRole("radio", { name: /family/i });
-    if (await personal.isChecked()) await family.check();
-    else await personal.check();
+    await chooseSelectOption(visibility, /family.*shared/i, "family");
   }
   return visibility;
 }
@@ -130,7 +127,11 @@ test.describe("GH-11 Plaid connection management", () => {
         new URL(response.url()).pathname.endsWith("/reconcile") &&
         response.request().method() === "POST",
     );
-    await item.getByLabel(/update reason/i).selectOption("account_selection");
+    await chooseSelectOption(
+      item.getByLabel(/update reason/i),
+      "Change selected accounts",
+      "account_selection",
+    );
     await item.getByTestId(/^plaid-update-/).click();
     expect((await updateTokenResponse).status()).toBe(200);
 
@@ -167,15 +168,20 @@ test.describe("GH-11 Plaid connection management", () => {
     const item = page.getByTestId(/^plaid-connection-/).first();
     await item.getByTestId(/^plaid-disconnect-/).click();
     const modes = item.getByTestId(/^plaid-disconnect-mode-/);
-    await expect(modes).toContainText(/keep.*history|history.*keep/i);
-    await expect(modes).toContainText(/delete.*data|data.*delete/i);
-    await expect(modes).toContainText(/read.only|retain/i);
-    await expect(modes).toContainText(/permanent|remove|delete/i);
+    await modes.click();
+    const listbox = page.getByRole("listbox");
+    await expect(
+      listbox.getByRole("option", { name: /keep.*history.*retain/i }),
+    ).toBeVisible();
+    await expect(
+      listbox.getByRole("option", { name: /delete.*data.*remove/i }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(item.getByTestId(/^plaid-item-impact-/)).toContainText(
       /account|item|connection/i,
     );
 
-    await modes.selectOption("keep_history");
+    await chooseSelectOption(modes, /keep.*history/i, "keep_history");
     const confirmation = item.getByTestId(/^plaid-disconnect-confirm-/);
     await expect(confirmation).toContainText(/affects.*account/i);
     const disconnectResponse = page.waitForResponse(

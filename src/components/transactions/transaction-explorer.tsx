@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { SearchableSelect, Select } from "@/components/select";
 import { usePendingAction } from "@/hooks/use-pending-action";
 import { moveReference } from "@/lib/dashboard/domain";
 import type { DashboardReadModel } from "@/lib/dashboard/types";
@@ -487,78 +488,78 @@ export function TransactionExplorer({
           </label>
           <label className={fieldLabel}>
             Account
-            <select
+            <Select
               data-testid="transactions-account-filter"
               value={filters.accountId}
-              onChange={(event) => update({ accountId: event.target.value })}
+              onValueChange={(accountId) => update({ accountId })}
+              options={[
+                { value: "", label: "All accounts" },
+                ...model.filterOptions.accounts.map((account) => ({
+                  value: account.id,
+                  label: account.name,
+                })),
+                ...(unknownAccount
+                  ? [
+                      {
+                        value: filters.accountId,
+                        label: "Unavailable account",
+                      },
+                    ]
+                  : []),
+              ]}
               className={field}
-            >
-              <option value="">All accounts</option>
-              {model.filterOptions.accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-              {/* A hand-typed id, or one belonging to the other scope, is still
-                  filtering the request. Without a matching option the control
-                  would read "All accounts" while the set stayed narrowed. */}
-              {unknownAccount && (
-                <option value={filters.accountId}>Unavailable account</option>
-              )}
-            </select>
+            />
           </label>
           <label className={fieldLabel}>
             Category
-            <select
+            <SearchableSelect
               data-testid="transactions-category-filter"
               value={filters.categoryId}
-              onChange={(event) => update({ categoryId: event.target.value })}
+              onValueChange={(categoryId) => update({ categoryId })}
+              placeholder="All categories"
+              searchPlaceholder="Search categories"
+              emptyMessage="No categories match"
+              options={[
+                { value: "", label: "All categories" },
+                ...model.filterOptions.categories.map((category) => ({
+                  value: category.id,
+                  label: category.name,
+                })),
+                ...(unknownCategory
+                  ? [
+                      {
+                        value: filters.categoryId,
+                        label: "Unavailable category",
+                      },
+                    ]
+                  : []),
+              ]}
               className={field}
-            >
-              <option value="">All categories</option>
-              {model.filterOptions.categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-              {unknownCategory && (
-                <option value={filters.categoryId}>Unavailable category</option>
-              )}
-            </select>
+            />
           </label>
           <label className={fieldLabel}>
             Status
-            <select
+            <Select
               data-testid="transactions-status-filter"
               value={filters.status}
-              onChange={(event) =>
-                update({ status: event.target.value as ExplorerStatus })
+              onValueChange={(status) =>
+                update({ status: status as ExplorerStatus })
               }
+              options={STATUS_OPTIONS}
               className={field}
-            >
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
           </label>
           <label className={fieldLabel}>
             Inclusion
-            <select
+            <Select
               data-testid="transactions-inclusion-filter"
               value={filters.inclusion}
-              onChange={(event) =>
-                update({ inclusion: event.target.value as ExplorerInclusion })
+              onValueChange={(inclusion) =>
+                update({ inclusion: inclusion as ExplorerInclusion })
               }
+              options={INCLUSION_OPTIONS}
               className={field}
-            >
-              {INCLUSION_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
           </label>
         </div>
 

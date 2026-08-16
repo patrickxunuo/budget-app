@@ -46,6 +46,10 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function chooseScope(label: "Family" | "Personal") {
+  fireEvent.click(screen.getByTestId("category-scope"));
+  fireEvent.click(screen.getByRole("option", { name: new RegExp(label, "i") }));
+}
 beforeEach(() => {
   vi.restoreAllMocks();
 });
@@ -80,9 +84,7 @@ describe("GH-7 category workbench acceptance", () => {
     fireEvent.change(screen.getByTestId("category-color"), {
       target: { value: "#18745b" },
     });
-    fireEvent.change(screen.getByTestId("category-scope"), {
-      target: { value: "family" },
-    });
+    chooseScope("Family");
     fireEvent.click(screen.getByTestId("category-submit"));
 
     await waitFor(() => expect(screen.getByText("Groceries")).toBeVisible());
@@ -91,9 +93,7 @@ describe("GH-7 category workbench acceptance", () => {
     fireEvent.change(screen.getByTestId("category-name"), {
       target: { value: "Quiet treats" },
     });
-    fireEvent.change(screen.getByTestId("category-scope"), {
-      target: { value: "personal" },
-    });
+    chooseScope("Personal");
     fireEvent.click(screen.getByTestId("category-submit"));
 
     await waitFor(() => expect(screen.getByText("Quiet treats")).toBeVisible());

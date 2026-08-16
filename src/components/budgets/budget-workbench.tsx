@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { PendingButton } from "@/components/pending-button";
+import { SearchableSelect } from "@/components/select";
 import { usePendingAction } from "@/hooks/use-pending-action";
 import { moveMonth } from "@/lib/budgets/domain";
 import type {
@@ -303,25 +304,29 @@ export function BudgetWorkbench({
         >
           <label className="text-sm font-semibold">
             Category
-            <select
+            <SearchableSelect
               data-testid="budget-category"
               value={categoryId}
               disabled={mode.kind === "edit"}
-              onChange={(e) => setCategoryId(e.target.value)}
-              className="border-line bg-surface focus-visible:outline-brand mt-2 block min-h-11 w-full rounded-lg border px-3 focus-visible:outline-2"
-            >
-              {mode.kind === "edit" ? (
-                <option value={mode.budget.categoryId}>
-                  {mode.budget.categoryName}
-                </option>
-              ) : (
-                model.availableCategories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))
-              )}
-            </select>
+              onValueChange={setCategoryId}
+              placeholder="Choose category"
+              searchPlaceholder="Search categories"
+              emptyMessage="No categories match"
+              options={
+                mode.kind === "edit"
+                  ? [
+                      {
+                        value: mode.budget.categoryId,
+                        label: mode.budget.categoryName,
+                      },
+                    ]
+                  : model.availableCategories.map((category) => ({
+                      value: category.id,
+                      label: category.name,
+                    }))
+              }
+              className="mt-2"
+            />
           </label>
           <label className="text-sm font-semibold">
             Target (CAD)

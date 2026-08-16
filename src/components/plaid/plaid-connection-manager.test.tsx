@@ -110,6 +110,10 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function chooseOption(trigger: HTMLElement, label: RegExp) {
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole("option", { name: label }));
+}
 beforeEach(() => {
   vi.restoreAllMocks();
   plaid.open.mockReset();
@@ -181,9 +185,10 @@ describe("GH-11 PlaidConnectionManager", () => {
       });
 
     render(<PlaidConnectionManager initialConnections={[initialConnection]} />);
-    fireEvent.change(screen.getByTestId(`plaid-visibility-${personalId}`), {
-      target: { value: "family" },
-    });
+    chooseOption(
+      screen.getByTestId(`plaid-visibility-${personalId}`),
+      /family.*shared/i,
+    );
 
     const warning = screen.getByTestId(
       `plaid-visibility-warning-${personalId}`,
@@ -364,11 +369,15 @@ describe("GH-11 PlaidConnectionManager", () => {
     expect(impact).toHaveTextContent(/both accounts|2 accounts/i);
 
     const mode = screen.getByTestId(`plaid-disconnect-mode-${itemId}`);
-    expect(mode).toHaveTextContent(/keep.*history|history.*keep/i);
-    expect(mode).toHaveTextContent(/delete.*data|data.*delete/i);
-    expect(mode).toHaveTextContent(/read.only|retain|keep/i);
-    expect(mode).toHaveTextContent(/remove|delete/i);
-    fireEvent.change(mode, { target: { value: "keep_history" } });
+    fireEvent.click(mode);
+    expect(
+      screen.getByRole("option", { name: /keep.*history.*retain/i }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("option", { name: /delete.*data.*remove/i }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("option", { name: /delete.*data/i }));
+    chooseOption(mode, /keep.*history/i);
 
     const confirmation = screen.getByTestId(
       `plaid-disconnect-confirm-${itemId}`,
@@ -510,9 +519,10 @@ describe("GH-33 Plaid connection pending controls", () => {
       .mockImplementationOnce(() => disconnectRequest.promise);
     render(<PlaidConnectionManager initialConnections={[initialConnection]} />);
 
-    fireEvent.change(screen.getByTestId(`plaid-visibility-${personalId}`), {
-      target: { value: "family" },
-    });
+    chooseOption(
+      screen.getByTestId(`plaid-visibility-${personalId}`),
+      /family.*shared/i,
+    );
     const warning = screen.getByTestId(
       `plaid-visibility-warning-${personalId}`,
     );

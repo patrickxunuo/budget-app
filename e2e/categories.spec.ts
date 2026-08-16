@@ -5,6 +5,7 @@ import {
   requireFixture,
 } from "./support/fixtures";
 import { activateAndObservePending } from "./support/pending";
+import { chooseFirstSelectOption, chooseSelectOption } from "./support/select";
 
 const credentials = fixtureCredentials("categories");
 const runSeed = Date.now().toString(36);
@@ -58,7 +59,11 @@ async function createCategory(
 ) {
   await page.getByTestId("category-name").fill(name);
   await page.getByTestId("category-color").fill(color);
-  await page.getByTestId("category-scope").selectOption(scope);
+  await chooseSelectOption(
+    page.getByTestId("category-scope"),
+    scope === "family" ? /family/i : /personal/i,
+    scope,
+  );
   const response = page.waitForResponse(
     (candidate) =>
       candidate.url().endsWith("/api/categories") &&
@@ -112,25 +117,31 @@ test.describe("GH-7 scoped categories and merchant rules", () => {
     const originalBefore = (await original.textContent())?.trim();
 
     const select = row.getByTestId(`category-select-${transactionId}`);
-    const available = await select
-      .locator("option:not([disabled])")
-      .evaluateAll((options) =>
-        options
-          .map((option) => ({
-            value: (option as HTMLOptionElement).value,
-            label: option.textContent?.trim() ?? "",
-          }))
-          .filter((option) => option.value),
-      );
-    const target =
-      available.find((option) => option.label.includes(familyCategoryName)) ??
-      available.find((option) => option.label.includes(personalCategoryName));
+    await select.click();
+    const candidateNames = await page
+      .getByRole("listbox")
+      .getByRole("option")
+      .allTextContents();
+    const targetLabel =
+      candidateNames.find((label) => label.includes(familyCategoryName)) ??
+      candidateNames.find((label) => label.includes(personalCategoryName));
     test.skip(
-      !target,
+      !targetLabel,
       "Created category is not in this transaction's privacy domain.",
     );
-
-    await select.selectOption(target!.value);
+    const targetName = targetLabel!.includes(familyCategoryName)
+      ? familyCategoryName
+      : personalCategoryName;
+    const search = page.getByRole("combobox", { name: "Search categories" });
+    await search.fill(targetName.toUpperCase());
+    await expect(
+      page.getByRole("listbox").getByRole("option", { name: targetLabel! }),
+    ).toBeVisible();
+    await capture(page, testInfo, "transaction-category-search-open");
+    await page
+      .getByRole("listbox")
+      .getByRole("option", { name: targetLabel! })
+      .click();
     const mutation = page.waitForResponse(
       (candidate) =>
         candidate
@@ -142,7 +153,9 @@ test.describe("GH-7 scoped categories and merchant rules", () => {
     await activateAndObservePending(save, () => save.click());
     expect((await mutation).status()).toBe(200);
     await expect(effective).toContainText(
-      target!.label.split(" · ")[0] ?? target!.label,
+      targetLabel!.includes(familyCategoryName)
+        ? familyCategoryName
+        : personalCategoryName,
     );
     await expect(effective).toContainText(/manual/i);
     expect((await original.textContent())?.trim()).toBe(originalBefore);
@@ -205,15 +218,7 @@ test.describe("GH-7 scoped categories and merchant rules", () => {
       "",
     );
     const ruleCategory = row.getByTestId(`category-select-${transactionId}`);
-    const firstCategory = await ruleCategory
-      .locator("option[value]:not([value=''])")
-      .first()
-      .getAttribute("value");
-    test.skip(
-      !firstCategory,
-      "No visible category is available for this transaction.",
-    );
-    await ruleCategory.selectOption(firstCategory!);
+    await chooseFirstSelectOption(ruleCategory);
     const previewResponse = page.waitForResponse(
       (candidate) =>
         candidate.url().endsWith("/api/merchant-rules/preview") &&

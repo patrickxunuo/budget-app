@@ -2,9 +2,13 @@
 
 ## Current Sprint / Focus
 
-GH-31, GH-32, GH-33, GH-35, and GH-44 are closed and on `main`. GH-51 is ready for PR with its recovered implementation and fresh browser evidence; #26 should follow after the compact authenticated geometry lands. The application remains deployed at `piggy-budget-app.vercel.app` against hosted Supabase, with Plaid environment choice controlled by deployment configuration.
+GH-31, GH-32, GH-33, GH-35, and GH-44 are closed and on `main`. GH-51 and GH-26 are ready for PR. The application remains deployed at `piggy-budget-app.vercel.app` against hosted Supabase, with Plaid environment choice controlled by deployment configuration.
 
 ## Log
+
+- 2026-08-16T19:55Z [READY] GH-26 replaces all 14 browser-native selects with shared themed standard/searchable portal controls while preserving form, filter, membership, budget, transaction, and Plaid behavior; category pickers add accessible filtering and empty/result states. Focused 58/58 and full 907/907 Vitest, format, lint, typecheck, build, and independent review are green. The one configured browser run was environment-limited (64 passed, 138 fixture-skipped, 10 missing-Supabase failures); authenticated GH-26 journeys are authored but did not execute.
+
+- 2026-08-16T19:45Z [PLANNED] GH-26 will add shared accessible standard and searchable select primitives, migrate all 14 current native selects while preserving behavior/test IDs, and align the trigger/menu system with Piggy's theme across desktop and mobile. Component and existing Playwright journeys will cover keyboard, pointer, focus, filtering/empty, disabled, reduced-motion, and responsive states.
 
 - 2026-08-16T09:00Z [READY] GH-51 replaces repeated authenticated mastheads with one safe-area-aware route bar, distills Overview, Transactions, Budgets, Accounts, Categories, and Family members into immediate work surfaces, and reorders Overview around first-viewport Budget facts with Accounts before responsive Spending history. Narrow screens keep the chart visible and place the complete semantic daily table behind a native disclosure; wide screens expand it beside Accounts. Paperplane exited before shipping and removed part of its worktree, so the final reviewed source was recovered byte-for-byte and the lost acceptance/browser files were reconstructed from the full run log. Verification is green: 90 focused and 897 full Vitest checks, lint, typecheck, production build, changed-file formatting, a clean Impeccable detector, FE-007 at 3/3 with retries disabled, and the complete GH-51 Chromium browser spec at 7/7 with retries disabled. The required 390x844 and 1280x800 screenshots were attached and inspected. The original second independent review verdict was `Ready for PR`.
 

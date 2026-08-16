@@ -10,6 +10,12 @@
 - Previous run: 98 passed, 70 fixture-dependent scenarios skipped, 0 failed (168 desktop/mobile cases). GH-14 raised the runnable count from 36 to 98 by seeding an owner with `pnpm seed:e2e` and adding the fixtureless security-hardening spec; GH-13 had raised it from 14 to 36.
 - Running the suite needs roughly 2 GB of headroom. On a loaded workstation `next dev` is killed by the OS with `FATAL ERROR: Zone Allocation failed`, and every case then fails with `ERR_CONNECTION_REFUSED` from a dead web server rather than from a real defect. Run `CI=1 pnpm exec playwright test --workers=1` in that situation: `CI=1` switches the `webServer` to the production `pnpm start`, which is far lighter than the dev server.
 
+## GH-26 Themed Select and Searchable Dropdowns
+
+- [x] The shared standard/searchable primitive and all 14 migrated contexts have Vitest coverage for pointer, keyboard/typeahead, focus return, disabled/required/ARIA state, search filtering/result announcements/empty state, `FormData`, repository-wide native-select removal, and preserved feature behavior. The focused 58-check set and complete 907-check Vitest suite pass.
+- [x] Existing real-backend journeys in `budgets`, `categories`, `dashboard`, `data-lifecycle`, `manual-entries`, and `plaid-connections` now drive visible dropdown triggers through `e2e/support/select.ts`; category-search and 390 px reduced-motion screenshots are authored without request mocks.
+- Browser verification was attempted exactly once with the configured `npm run test:e2e`: 64 passed, 138 fixture-dependent cases skipped, and 10 unrelated auth/foundation cases failed because every required Supabase/server environment value was absent. The authenticated GH-26 journeys therefore remain environment-limited; no GH-26 browser assertion executed or failed, and no visual pass is claimed.
+
 ## GH-33 Shared Pending Mutation Controls
 
 - [x] Component acceptance covers the shared exclusive/latest hook, layout-stable accessible button, and transaction ledger, Plaid connections, budgets, categories, Manual/Cash, and transaction explorer migrations: 49 focused checks and the complete 909-check Vitest suite pass.
