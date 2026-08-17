@@ -1,0 +1,2 @@
+# Static validation-test password added by GH-3; it is not a credential.
+4df91d67210d0d3a309bbeb9dc17692c2f523cda:src/lib/auth/validation.test.ts:generic-api-key:14
