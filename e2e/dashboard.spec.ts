@@ -367,3 +367,126 @@ test.describe("GH-31 read-only month-to-date dashboard", () => {
     }
   });
 });
+test.describe("GH-63 spending-history interactive readings", () => {
+  test("FE-001 FE-003 FE-005 FE-006 FE-008 expose real axes, mouse and keyboard readings, and preserve the complete daily table", async ({
+    page,
+  }, testInfo) => {
+    requireDashboardFixture();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openDashboard(page);
+
+    await expect(
+      page.getByTestId("dashboard-comparison-x-axis-title"),
+    ).toHaveText("Day of month");
+    await expect(
+      page.getByTestId("dashboard-comparison-y-axis-title"),
+    ).toHaveText("Cumulative spending (CAD)");
+    const xTicks = page.getByTestId("dashboard-comparison-x-tick");
+    expect(await xTicks.count()).toBeGreaterThanOrEqual(5);
+    expect(await xTicks.count()).toBeLessThanOrEqual(6);
+    await expect(xTicks.first()).toHaveText("1");
+    await expect(xTicks.last()).not.toHaveText("");
+    await expect(
+      page.getByTestId("dashboard-comparison-y-tick").filter({ hasText: "$0" }),
+    ).toHaveCount(1);
+
+    const plot = page.getByTestId("dashboard-comparison-plot");
+    await expect(plot).toHaveAccessibleName(/spending history|inspect/i);
+    const box = await plot.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width - 2, box!.y + box!.height / 2);
+    const tooltip = page.getByTestId("dashboard-comparison-tooltip");
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toContainText(/This month/i);
+    await expect(tooltip).not.toContainText(/good|bad|red|green/i);
+    await expect(page.getByTestId("dashboard-comparison-guide")).toBeVisible();
+    await expect(
+      page.getByTestId("dashboard-comparison-active-current-marker"),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("dashboard-comparison-active-baseline-marker"),
+    ).toHaveCount(0);
+    await expect(tooltip).not.toContainText(
+      /baseline|above|below|at baseline/i,
+    );
+    await page.mouse.move(1, 1);
+    await expect(tooltip).toHaveCount(0);
+
+    await plot.focus();
+    await expect(plot).toBeFocused();
+    await expect(tooltip).toBeVisible();
+    const reading = page.getByTestId("dashboard-comparison-reading");
+    await expect(reading).toHaveAttribute("role", "status");
+    await expect(reading).toHaveAttribute("aria-live", "polite");
+    await expect(reading).not.toHaveText("");
+    await plot.press("ArrowLeft");
+    await expect(reading).not.toHaveText("");
+    await plot.press("Escape");
+    await expect(tooltip).toHaveCount(0);
+    await expect(reading).toHaveText("");
+
+    const disclosure = page.getByTestId("dashboard-daily-values-disclosure");
+    const table = page.getByTestId("dashboard-comparison-table");
+    await expect(disclosure.locator("summary")).not.toBeVisible();
+    await expect(table).toBeVisible();
+    expect(await table.getByRole("row").count()).toBeGreaterThan(1);
+    await expect(
+      table.getByRole("columnheader", { name: "Day" }),
+    ).toBeVisible();
+    await expect(
+      table.getByRole("columnheader", { name: "Current" }),
+    ).toBeVisible();
+    await expect(
+      table.getByRole("columnheader", { name: "Baseline" }),
+    ).toBeVisible();
+    await expect(xTicks.last()).toHaveText(
+      await table.getByRole("rowheader").last().innerText(),
+    );
+    await capture(page, testInfo, "dashboard-spending-history-reading-desktop");
+  });
+
+  test("FE-001 FE-004 keeps narrow axes readable and pins a touch reading until an outside interaction", async ({
+    page,
+  }, testInfo) => {
+    requireDashboardFixture();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openDashboard(page);
+
+    const xTicks = page.getByTestId("dashboard-comparison-x-tick");
+    expect(await xTicks.count()).toBeGreaterThanOrEqual(3);
+    expect(await xTicks.count()).toBeLessThanOrEqual(4);
+    const plot = page.getByTestId("dashboard-comparison-plot");
+    const box = await plot.boundingBox();
+    expect(box).not.toBeNull();
+    await plot.dispatchEvent("pointerdown", {
+      pointerType: "touch",
+      clientX: box!.x + box!.width - 2,
+      clientY: box!.y + box!.height / 2,
+      bubbles: true,
+    });
+    const tooltip = page.getByTestId("dashboard-comparison-tooltip");
+    await expect(tooltip).toBeVisible();
+    const firstReading = await tooltip.textContent();
+    await plot.dispatchEvent("pointerleave", {
+      pointerType: "touch",
+      bubbles: true,
+    });
+    await expect(tooltip).toBeVisible();
+    await plot.dispatchEvent("pointerdown", {
+      pointerType: "touch",
+      clientX: box!.x + 1,
+      clientY: box!.y + box!.height / 2,
+      bubbles: true,
+    });
+    await expect(tooltip).not.toHaveText(firstReading ?? "");
+    await page.locator("body").dispatchEvent("pointerdown", {
+      pointerType: "touch",
+      clientX: box!.x + 1,
+      clientY: 1,
+      bubbles: true,
+    });
+    await expect(tooltip).toHaveCount(0);
+    await expectNoHorizontalOverflow(page);
+    await capture(page, testInfo, "dashboard-spending-history-touch-mobile");
+  });
+});

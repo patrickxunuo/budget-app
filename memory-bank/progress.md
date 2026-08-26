@@ -6,6 +6,10 @@ GH-31, GH-32, GH-33, GH-35, and GH-44 are closed and on `main`. GH-51 and GH-26 
 
 ## Log
 
+- 2026-08-26T18:36Z [READY] GH-63 adds adaptive day/CAD axes and accessible nearest-day spending-history readings for mouse, touch, keyboard, and assistive technology while preserving the semantic table and dashboard read model. Focused 16/16 and full 915/915 Vitest, lint, typecheck, build, and review are green; Playwright finished 74 passed/142 fixture-skipped, with GH-63's four cases authored but skipped for absent dashboard credentials.
+
+- 2026-08-26T18:28Z [PLANNED] GH-63 will add adaptive day/CAD axes and accessible nearest-day readings to Spending history, preserving the month-to-date read model and semantic daily-values table. Component and focused Playwright coverage will exercise scale formatting, pointer, touch, keyboard, missing-baseline, negative-range, narrow-layout, and single-point behavior.
+
 - 2026-08-16T19:55Z [READY] GH-26 replaces all 14 browser-native selects with shared themed standard/searchable portal controls while preserving form, filter, membership, budget, transaction, and Plaid behavior; category pickers add accessible filtering and empty/result states. Focused 58/58 and full 907/907 Vitest, format, lint, typecheck, build, and independent review are green. The one configured browser run was environment-limited (64 passed, 138 fixture-skipped, 10 missing-Supabase failures); authenticated GH-26 journeys are authored but did not execute.
 
 - 2026-08-16T19:45Z [PLANNED] GH-26 will add shared accessible standard and searchable select primitives, migrate all 14 current native selects while preserving behavior/test IDs, and align the trigger/menu system with Piggy's theme across desktop and mobile. Component and existing Playwright journeys will cover keyboard, pointer, focus, filtering/empty, disabled, reduced-motion, and responsive states.
