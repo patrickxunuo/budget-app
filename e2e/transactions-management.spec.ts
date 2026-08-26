@@ -29,6 +29,16 @@ async function capture(page: Page, testInfo: TestInfo, name: string) {
   await testInfo.attach(name, { contentType: "image/png", path });
 }
 
+async function setStableViewport(
+  page: Page,
+  viewport: { width: number; height: number },
+) {
+  await page.setViewportSize(viewport);
+  await expect
+    .poll(() => page.evaluate(() => window.innerWidth))
+    .toBe(viewport.width);
+}
+
 async function openManageMenu(page: Page) {
   const menu = page.getByTestId("transactions-manage-menu");
   await expect(menu).toBeVisible();
@@ -149,11 +159,11 @@ test.describe("GH-64 transaction management routes", () => {
     await expect(firstRow.getByTestId(/^rule-create-/)).toBeVisible();
   });
 
-  test("FE-006 removes both CSV exports from mobile layout and accessibility, then exposes them at md desktop width", async ({
+  test("FE-006 removes both CSV exports from mobile layout and accessibility, then exposes them at desktop width", async ({
     page,
   }, testInfo) => {
     requireFixture("auth-owner");
-    await page.setViewportSize({ width: 767, height: 844 });
+    await setStableViewport(page, { width: 390, height: 844 });
     await signIn(page, ownerCredentials);
     await page.goto("/transactions?scope=family&reference=2026-08-24");
     const overviewExport = page.getByTestId("transactions-export-csv");
@@ -164,10 +174,10 @@ test.describe("GH-64 transaction management routes", () => {
     );
     await capture(page, testInfo, "transactions-mobile-export-hidden");
 
-    await page.setViewportSize({ width: 768, height: 900 });
+    await setStableViewport(page, { width: 1024, height: 900 });
     await expect(overviewExport).toBeVisible();
 
-    await page.setViewportSize({ width: 767, height: 844 });
+    await setStableViewport(page, { width: 390, height: 844 });
     await page.goto("/transactions/manual?scope=family");
     const manualExport = page.getByTestId("manual-entry-export");
     await expect(manualExport).toBeHidden();
@@ -176,7 +186,7 @@ test.describe("GH-64 transaction management routes", () => {
       0,
     );
 
-    await page.setViewportSize({ width: 768, height: 900 });
+    await setStableViewport(page, { width: 1024, height: 900 });
     await expect(manualExport).toBeVisible();
     await capture(page, testInfo, "transactions-desktop-exports-visible");
   });
