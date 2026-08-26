@@ -13,6 +13,13 @@ import {
   plaidViewToAccountingTransaction,
   reconcilePendingTransactions,
 } from "@/lib/transactions/accounting";
+import {
+  compareDashboardTransactions,
+  DashboardCursorError,
+  decodeDashboardCursor,
+  encodeDashboardCursor,
+  type DashboardCursorPayload,
+} from "./cursor-pagination";
 import { aggregateDashboard, inclusionMatches } from "./domain";
 import type {
   DashboardFilters,
@@ -153,6 +160,19 @@ export async function readDashboard(
   } catch (e) {
     if (e instanceof ZodError) throw e;
     throw new DashboardServiceError(400, "Invalid request.");
+  }
+  let cursorBoundary: DashboardCursorPayload | undefined;
+  if (!options.unlimited && filters.cursor) {
+    try {
+      cursorBoundary = decodeDashboardCursor(filters.cursor);
+    } catch (error) {
+      if (error instanceof DashboardCursorError) {
+        throw new DashboardServiceError(400, "Invalid request.", {
+          cursor: ["Use a cursor returned by this endpoint."],
+        });
+      }
+      throw error;
+    }
   }
   const timeZone = "America/Toronto";
   let range;
@@ -428,7 +448,21 @@ export async function readDashboard(
   }
   const aggregateRows = rows;
   rows = rows.filter((r) => inclusionMatches(r, filters.inclusion));
-  rows.sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+  rows.sort(compareDashboardTransactions);
+  const totalTransactionCount = rows.length;
+  let nextCursor: string | null = null;
+  if (!options.unlimited) {
+    if (cursorBoundary) {
+      rows = rows.filter(
+        (row) => compareDashboardTransactions(row, cursorBoundary) > 0,
+      );
+    }
+    const hasLaterRow = rows.length > filters.limit;
+    rows = rows.slice(0, filters.limit);
+    if (hasLaterRow && rows.length > 0) {
+      nextCursor = encodeDashboardCursor(rows[rows.length - 1]!);
+    }
+  }
   return aggregateDashboard({
     scope: filters.scope,
     period: filters.period,
@@ -451,5 +485,7 @@ export async function readDashboard(
     filterCategories: categories,
     limit: options.unlimited ? Number.MAX_SAFE_INTEGER : filters.limit,
     aggregateRows,
+    totalTransactionCount,
+    nextCursor,
   });
 }

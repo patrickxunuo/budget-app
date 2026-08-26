@@ -296,3 +296,61 @@ describe("GH-14 local-timezone range boundaries (F6)", () => {
     expect(totals.get("food")).toBe(40000);
   });
 });
+
+describe("GH-65 complete-set aggregation", () => {
+  const rows = Array.from({ length: 61 }, (_, index) =>
+    dashboardRow({
+      id: `row-${String(index).padStart(3, "0")}`,
+      date: `2026-08-${String(31 - (index % 31)).padStart(2, "0")}`,
+      amountCents: 100,
+    }),
+  );
+
+  it("API-001 keeps complete accounting totals and count independent of a 50-row page", () => {
+    const result = aggregateDashboard({
+      scope: "family",
+      period: "month",
+      range: { startDate: "2026-08-01", endDate: "2026-08-31" },
+      timeZone: TIME_ZONE,
+      rows,
+      aggregateRows: rows,
+      categories: [],
+      budgets: [],
+      accounts: [],
+      limit: 50,
+      totalTransactionCount: rows.length,
+      nextCursor: "opaque-next-page",
+    });
+
+    expect(result.transactions).toHaveLength(50);
+    expect(result.totalTransactionCount).toBe(61);
+    expect(result.nextCursor).toBe("opaque-next-page");
+    expect(result.summary).toMatchObject({
+      spendingCents: 6100,
+      includedCount: 61,
+    });
+  });
+
+  it("API-006 preserves complete unlimited output for CSV-style callers", () => {
+    const result = aggregateDashboard({
+      scope: "family",
+      period: "month",
+      range: { startDate: "2026-08-01", endDate: "2026-08-31" },
+      timeZone: TIME_ZONE,
+      rows,
+      aggregateRows: rows,
+      categories: [],
+      budgets: [],
+      accounts: [],
+      limit: Number.MAX_SAFE_INTEGER,
+      totalTransactionCount: rows.length,
+      nextCursor: null,
+    });
+
+    expect(result.transactions.map(({ id }) => id)).toEqual(
+      rows.map(({ id }) => id),
+    );
+    expect(result.totalTransactionCount).toBe(rows.length);
+    expect(result.nextCursor).toBeNull();
+  });
+});
