@@ -6,6 +6,10 @@ GH-31, GH-32, GH-33, GH-35, and GH-44 are closed and on `main`. GH-51 and GH-26 
 
 ## Log
 
+- 2026-08-26T21:30Z [READY] GH-64 splits Transactions into a read-only overview and independently authorized Manual/Cash and Plaid management routes, with scope/filter-preserving safe navigation, desktop-only exports, and route-specific loading fallbacks. Full 955/955 Vitest, lint, typecheck, build, formatting, and independent review are green; the one Playwright run finished 62 passed/152 fixture-skipped/12 unrelated missing-environment failures, with GH-64 browser cases authored but fixture-gated.
+
+- 2026-08-26T19:00Z [PLANNED] GH-64 will split `/transactions` into a read-only overview plus independently authorized Manual/Cash and Plaid management routes, with scope-preserving Manage/Back navigation, safe return targets, desktop-only exports, and route/component/Playwright boundary coverage.
+
 - 2026-08-26T18:36Z [READY] GH-63 adds adaptive day/CAD axes and accessible nearest-day spending-history readings for mouse, touch, keyboard, and assistive technology while preserving the semantic table and dashboard read model. Focused 16/16 and full 915/915 Vitest, lint, typecheck, build, and review are green; Playwright finished 74 passed/142 fixture-skipped, with GH-63's four cases authored but skipped for absent dashboard credentials.
 
 - 2026-08-26T18:28Z [PLANNED] GH-63 will add adaptive day/CAD axes and accessible nearest-day readings to Spending history, preserving the month-to-date read model and semantic daily-values table. Component and focused Playwright coverage will exercise scale formatting, pointer, touch, keyboard, missing-baseline, negative-range, narrow-layout, and single-point behavior.

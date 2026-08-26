@@ -16,6 +16,8 @@ Project memory. Read this file first to find what you need.
 
 ## Last Updated
 
+2026-08-26 — GH-64 separates the read-only Transactions overview from Manual/Cash and Plaid management routes, with safe scope-preserving navigation, desktop-only exports, and route-specific loading contracts. See `systemPatterns.md` and `testBaseline.md`.
+
 2026-08-26 — GH-63's spending-history chart now has adaptive day/CAD axes and accessible nearest-day readings across mouse, touch, keyboard, and assistive technology. See `systemPatterns.md` for the interactive SVG chart contract and `testBaseline.md` for coverage evidence.
 2026-08-26 — GH-62 makes successful atomic provider sync the recovery boundary for Plaid login repair and coordinates the Accounts status UI from Action needed back to Connected; see `systemPatterns.md` and `testBaseline.md`.
 

@@ -13,6 +13,8 @@ import CategoriesLoading from "./categories/loading";
 import DashboardLoading from "./dashboard/loading";
 import MembersLoading from "./settings/members/loading";
 import TransactionsLoading from "./transactions/loading";
+import ManualTransactionsLoading from "./transactions/manual/loading";
+import PlaidTransactionsLoading from "./transactions/plaid/loading";
 
 const REPO_ROOT = process.cwd();
 const MONEY = /\$\s?\d|\d+\.\d{2}/;
@@ -51,7 +53,21 @@ const ROUTES: readonly RouteCase[] = [
     Loading: TransactionsLoading,
     source: "src/app/(app)/transactions/page.tsx",
     loadingSource: "src/app/(app)/transactions/loading.tsx",
-    regions: 4,
+    regions: 3,
+  },
+  {
+    name: "transactions/manual",
+    Loading: ManualTransactionsLoading,
+    source: "src/app/(app)/transactions/manual/page.tsx",
+    loadingSource: "src/app/(app)/transactions/manual/loading.tsx",
+    regions: 3,
+  },
+  {
+    name: "transactions/plaid",
+    Loading: PlaidTransactionsLoading,
+    source: "src/app/(app)/transactions/plaid/page.tsx",
+    loadingSource: "src/app/(app)/transactions/plaid/loading.tsx",
+    regions: 2,
   },
   {
     name: "budgets",

@@ -71,9 +71,9 @@ async function prepareCategories(page: Page, testInfo: TestInfo) {
 }
 
 async function openManualLedger(page: Page, scope: "family" | "personal") {
-  await page.goto(`/transactions?scope=${scope}`);
+  await page.goto(`/transactions/manual?scope=${scope}`);
   await expect(page).toHaveURL(
-    new RegExp(`/transactions\\?(?:.*&)?scope=${scope}(?:&.*)?$`),
+    new RegExp(`/transactions/manual\\?(?:.*&)?scope=${scope}(?:&.*)?$`),
   );
   await expect(page.getByTestId("manual-entry-workbench")).toBeVisible();
   await expect(page.getByTestId("manual-entry-form")).toBeVisible();
@@ -322,13 +322,24 @@ test.describe("GH-35 Manual/Cash real-backend journeys", () => {
     }));
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
 
+    const mobileExport = page.getByTestId("manual-entry-export");
+    await expect(mobileExport).toBeHidden();
+    expect(await mobileExport.boundingBox()).toBeNull();
+    await expect(page.getByRole("link", { name: /export csv/i })).toHaveCount(
+      0,
+    );
+    await capture(page, testInfo, "manual-ledger-mobile-reduced-motion");
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const desktopExport = page.getByTestId("manual-entry-export");
+    await expect(desktopExport).toBeVisible();
     const downloadPromise = page.waitForEvent("download");
-    await page.getByTestId("manual-entry-export").click();
+    await desktopExport.click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/manual.*\.csv|\.csv$/i);
     const downloadPath = await download.path();
     expect(downloadPath).toBeTruthy();
-    await capture(page, testInfo, "manual-ledger-mobile-reduced-motion");
+    await capture(page, testInfo, "manual-ledger-desktop-export");
 
     if (refundEntryId) {
       const status = await page.evaluate(async (entryId) => {

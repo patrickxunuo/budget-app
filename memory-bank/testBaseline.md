@@ -10,6 +10,12 @@
 - Previous run: 98 passed, 70 fixture-dependent scenarios skipped, 0 failed (168 desktop/mobile cases). GH-14 raised the runnable count from 36 to 98 by seeding an owner with `pnpm seed:e2e` and adding the fixtureless security-hardening spec; GH-13 had raised it from 14 to 36.
 - Running the suite needs roughly 2 GB of headroom. On a loaded workstation `next dev` is killed by the OS with `FATAL ERROR: Zone Allocation failed`, and every case then fails with `ERR_CONNECTION_REFUSED` from a dead web server rather than from a real defect. Run `CI=1 pnpm exec playwright test --workers=1` in that situation: `CI=1` switches the `webServer` to the production `pnpm start`, which is far lighter than the dev server.
 
+## GH-64 Dedicated Transaction Management Routes
+
+- [x] Route/component acceptance proves `/transactions` reads only the overview model, dedicated Manual and Plaid routes independently authorize and load their scoped datasets, unsafe return targets fall back locally, Manage/Back links preserve canonical filters, both exports use desktop-only layout semantics, and all three loading fallbacks match their routes. The focused loading/route set passes 56/56 and the complete Vitest suite passes 955/955.
+- [x] `e2e/transactions-management.spec.ts` covers read-only overview boundaries, scope/filter-preserving Manage and Back navigation, unsafe return targets, dedicated Plaid controls, browser history, mobile/desktop export visibility, and screenshot checkpoints without API mocks. Existing Manual and category journeys now target their dedicated routes.
+- The configured one-pass `npm run test:e2e` run completed with 62 passed, 152 fixture-gated skips, and 12 unrelated missing-environment failures. All eight GH-64 desktop/mobile cases skipped because no dashboard fixture or Supabase/server environment was provisioned; no GH-64 browser assertion executed or failed, and no GH-64 screenshot was produced locally. After that run, navigation, safe-return, history, and responsive-export cases were narrowed to the lighter `auth-owner` gate; only the seeded Plaid-row case still requires `dashboard`.
+
 ## GH-63 Spending-History Axes and Interactive Readings
 
 - [x] Component acceptance covers adaptive day/CAD ticks, zero and negative ranges, pointer hover, touch pinning/outside dismissal, keyboard navigation/Escape, assistive readings, missing baselines, single points, and the retained semantic table; 16/16 focused and 915/915 full Vitest checks pass.

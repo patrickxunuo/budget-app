@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { SearchableSelect, Select } from "@/components/select";
+import { TransactionManagementMenu } from "@/components/transactions/transaction-management-navigation";
 import { usePendingAction } from "@/hooks/use-pending-action";
 import { moveReference } from "@/lib/dashboard/domain";
 import type { DashboardReadModel } from "@/lib/dashboard/types";
@@ -318,6 +319,8 @@ export function TransactionExplorer({
       ? EMPTY_REASON
       : "";
   const rangeLabel = formatRange(model.range.startDate, model.range.endDate);
+  const appliedExplorerQuery = toExplorerSearchParams(appliedFilters);
+  const returnTo = `/transactions?${appliedExplorerQuery}`;
 
   return (
     <section
@@ -337,27 +340,33 @@ export function TransactionExplorer({
             Narrow it, then take it with you.
           </h2>
         </div>
-        <div
-          role="group"
-          aria-label="Privacy scope"
-          className="border-line bg-panel flex rounded-full border p-1"
-        >
-          {(["family", "personal"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              data-testid={`transactions-scope-${option}`}
-              aria-pressed={filters.scope === option}
-              onClick={() => chooseScope(option)}
-              className={`${pill} capitalize ${
-                filters.scope === option
-                  ? "bg-brand text-on-accent"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              {option}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div
+            role="group"
+            aria-label="Privacy scope"
+            className="border-line bg-panel flex rounded-full border p-1"
+          >
+            {(["family", "personal"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                data-testid={`transactions-scope-${option}`}
+                aria-pressed={filters.scope === option}
+                onClick={() => chooseScope(option)}
+                className={`${pill} capitalize ${
+                  filters.scope === option
+                    ? "bg-brand text-on-accent"
+                    : "text-muted hover:text-ink"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <TransactionManagementMenu
+            scope={appliedFilters.scope}
+            returnTo={returnTo}
+          />
         </div>
       </div>
 
@@ -596,7 +605,7 @@ export function TransactionExplorer({
             onClick={(event) => {
               if (!exportAvailable) event.preventDefault();
             }}
-            className={`${pill} border-2 ${
+            className={`${pill} hidden border-2 md:inline-flex ${
               exportAvailable
                 ? "border-brand text-brand hover:bg-brand hover:text-on-accent transition-colors"
                 : "border-line text-muted cursor-not-allowed opacity-60"
@@ -746,7 +755,8 @@ export function TransactionExplorer({
             ) : (
               <p className="text-muted mx-auto mt-2 max-w-md text-sm leading-6">
                 {rangeLabel} has no recorded {model.scope} activity. Step to
-                another period, or record it in the Manual/Cash register below.
+                another period, or use Manage to record it in the Manual/Cash
+                register.
               </p>
             )}
           </div>
