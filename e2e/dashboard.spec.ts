@@ -382,10 +382,10 @@ test.describe("GH-63 spending-history interactive readings", () => {
       page.getByTestId("dashboard-comparison-y-axis-title"),
     ).toHaveText("Cumulative spending (CAD)");
     const xTicks = page.getByTestId("dashboard-comparison-x-tick");
-    expect(await xTicks.count()).toBeGreaterThanOrEqual(5);
-    expect(await xTicks.count()).toBeLessThanOrEqual(6);
     await expect(xTicks.first()).toHaveText("1");
     await expect(xTicks.last()).not.toHaveText("");
+    const latestDay = Number(await xTicks.last().innerText());
+    expect(await xTicks.count()).toBe(Math.min(6, latestDay));
     await expect(
       page.getByTestId("dashboard-comparison-y-tick").filter({ hasText: "$0" }),
     ).toHaveCount(1);
@@ -399,7 +399,11 @@ test.describe("GH-63 spending-history interactive readings", () => {
     await expect(tooltip).toBeVisible();
     await expect(tooltip).toContainText(/This month/i);
     await expect(tooltip).not.toContainText(/good|bad|red|green/i);
-    await expect(page.getByTestId("dashboard-comparison-guide")).toBeVisible();
+    const guide = page.getByTestId("dashboard-comparison-guide");
+    await expect(guide).toHaveCount(1);
+    const guideX = await guide.getAttribute("x1");
+    expect(guideX).not.toBeNull();
+    await expect(guide).toHaveAttribute("x2", guideX!);
     await expect(
       page.getByTestId("dashboard-comparison-active-current-marker"),
     ).toBeVisible();
