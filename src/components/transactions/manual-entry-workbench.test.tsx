@@ -566,3 +566,27 @@ describe("GH-33 manual/cash pending controls", () => {
     ).toBeEnabled();
   });
 });
+
+describe("GH-64 Manual route export visibility", () => {
+  it("FE-006 keeps Manual CSV out of mobile layout and accessibility while retaining the desktop toolbar control", () => {
+    render(
+      <ManualEntryWorkbench
+        initialEntries={[familyEntry]}
+        categories={categories}
+        viewScope="family"
+      />,
+    );
+
+    const exportControl = screen.getByTestId("manual-entry-export");
+    expect(exportControl).toHaveClass("hidden");
+    expect(
+      exportControl.className
+        .split(/\s+/)
+        .some((token) => token.startsWith("md:")),
+    ).toBe(true);
+    expect(exportControl).toHaveAttribute(
+      "href",
+      "/api/manual-entries?scope=family&format=csv",
+    );
+  });
+});

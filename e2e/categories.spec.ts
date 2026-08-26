@@ -47,7 +47,7 @@ async function openCategories(page: Page) {
 
 async function openTransactions(page: Page) {
   await signIn(page);
-  await page.goto("/transactions");
+  await page.goto("/transactions/plaid?scope=family");
   await expect(page.getByTestId("transaction-ledger")).toBeVisible();
 }
 
@@ -197,7 +197,7 @@ test.describe("GH-7 scoped categories and merchant rules", () => {
     expect((await archiveResponse).status()).toBe(200);
     await expect(entry).toContainText(/archived/i);
 
-    await page.goto("/transactions");
+    await page.goto("/transactions/plaid?scope=family");
     const ledger = page.getByTestId("transaction-ledger");
     await expect(ledger).toBeVisible();
     await expect(
@@ -273,7 +273,7 @@ test.describe("GH-7 scoped categories and merchant rules", () => {
     await capture(page, testInfo, "categories-mobile-reduced-motion");
 
     if (isFixtureProvisioned("categories-transaction")) {
-      await page.goto("/transactions");
+      await page.goto("/transactions/plaid?scope=family");
       await expect(page.getByTestId("transaction-ledger")).toBeVisible();
       const row = page.locator('[data-testid^="transaction-row-"]').first();
       await expect(row).toBeVisible();

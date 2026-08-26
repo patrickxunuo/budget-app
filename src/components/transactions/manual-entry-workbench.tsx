@@ -355,7 +355,7 @@ export function ManualEntryWorkbench({
             data-testid="manual-entry-export"
             href={`/api/manual-entries?scope=${viewScope ?? "personal"}&format=csv`}
             download
-            className="border-brand text-brand focus-visible:outline-brand rounded-full border px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="border-brand text-brand focus-visible:outline-brand hidden rounded-full border px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 md:inline-flex"
           >
             Export CSV
           </a>

@@ -861,3 +861,18 @@ describe("GH-30 transaction explorer", () => {
     }
   });
 });
+
+describe("GH-64 overview export visibility", () => {
+  it("FE-006 keeps filtered CSV out of mobile layout and accessibility while retaining the desktop toolbar control", () => {
+    renderExplorer();
+
+    const exportControl = screen.getByTestId("transactions-export-csv");
+    expect(exportControl).toHaveClass("hidden");
+    expect(
+      exportControl.className
+        .split(/\s+/)
+        .some((token) => token.startsWith("md:")),
+    ).toBe(true);
+    expect(exportControl).toHaveAttribute("href");
+  });
+});
