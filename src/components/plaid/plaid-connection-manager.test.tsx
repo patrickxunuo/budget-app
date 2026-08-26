@@ -277,6 +277,10 @@ describe("GH-11 PlaidConnectionManager", () => {
     const { rerender } = render(
       <PlaidConnectionManager initialConnections={[initialConnection]} />,
     );
+    chooseOption(
+      screen.getByTestId(`plaid-reason-${itemId}`),
+      /change selected accounts/i,
+    );
     fireEvent.click(screen.getByTestId(`plaid-update-${itemId}`));
 
     await waitFor(() =>
@@ -345,6 +349,10 @@ describe("GH-11 PlaidConnectionManager", () => {
     });
 
     render(<PlaidConnectionManager initialConnections={[initialConnection]} />);
+    chooseOption(
+      screen.getByTestId(`plaid-reason-${itemId}`),
+      /change selected accounts/i,
+    );
     fireEvent.click(screen.getByTestId(`plaid-update-${itemId}`));
 
     await waitFor(() => expect(reconciliationCount).toBe(1));
@@ -615,5 +623,164 @@ describe("GH-33 Plaid connection pending controls", () => {
     expect(applyVisibility).toBeEnabled();
     expect(screen.getByTestId(`plaid-update-${itemId}`)).toBeEnabled();
     expect(screen.getByTestId(`plaid-reconcile-${itemId}`)).toBeEnabled();
+  });
+});
+
+describe("GH-62 verified login repair synchronization", () => {
+  it("requests update token, reconciles accounts, then verifies transaction sync before notifying status", async () => {
+    const callOrder: string[] = [];
+    const completed = vi.fn();
+    window.addEventListener("plaid:sync-completed", completed);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((input) => {
+        const url = String(input);
+        if (url.endsWith("/update-token")) {
+          callOrder.push("update-token");
+          return response({
+            linkToken: "link-gh62-login-repair",
+            expiration: "2026-08-12T19:00:00.000Z",
+            affectedAccountIds: [personalId, familyId],
+          });
+        }
+        if (url.endsWith("/reconcile")) {
+          callOrder.push("reconcile");
+          return response({
+            connection: initialConnection,
+            addedAccountIds: [],
+            returnedAccountIds: [personalId, familyId],
+            deselectedAccounts: [],
+          });
+        }
+        if (url.endsWith("/api/plaid/sync")) {
+          callOrder.push("sync");
+          return response({
+            itemId,
+            status: "succeeded",
+            added: 1,
+            modified: 0,
+            removed: 0,
+            requestId: "gh62-sync-success",
+            lastSuccessAt: "2026-08-12T19:05:00.000Z",
+          });
+        }
+        return response({ connections: [initialConnection] });
+      });
+
+    const { rerender } = render(
+      <PlaidConnectionManager initialConnections={[initialConnection]} />,
+    );
+    fireEvent.click(screen.getByTestId(`plaid-update-${itemId}`));
+    await waitFor(() => expect(plaid.token).toBe("link-gh62-login-repair"));
+
+    plaid.readyForToken = true;
+    rerender(
+      <PlaidConnectionManager initialConnections={[initialConnection]} />,
+    );
+    await waitFor(() => expect(plaid.open).toHaveBeenCalledTimes(1));
+    plaid.config?.onSuccess?.("public-gh62-repaired", {
+      institution: { institution_id: "ins-maple", name: "Maple Test Bank" },
+    });
+
+    await waitFor(() =>
+      expect(callOrder).toEqual(["update-token", "reconcile", "sync"]),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/plaid/sync",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ itemId }),
+      }),
+    );
+    expect(completed).toHaveBeenCalledTimes(1);
+    expect((completed.mock.calls[0]?.[0] as CustomEvent).detail).toEqual(
+      expect.objectContaining({ itemId, status: "succeeded" }),
+    );
+    window.removeEventListener("plaid:sync-completed", completed);
+  });
+
+  it("does not notify successful repair when transaction sync fails", async () => {
+    const completed = vi.fn();
+    window.addEventListener("plaid:sync-completed", completed);
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.endsWith("/update-token")) {
+        calls.push("update-token");
+        return response({ linkToken: "link-gh62-failed-sync" });
+      }
+      if (url.endsWith("/reconcile")) {
+        calls.push("reconcile");
+        return response({
+          connection: initialConnection,
+          addedAccountIds: [],
+          returnedAccountIds: [],
+          deselectedAccounts: [],
+        });
+      }
+      if (url.endsWith("/api/plaid/sync")) {
+        calls.push("sync");
+        return response(
+          { message: "Sign in again to resume transaction updates." },
+          502,
+        );
+      }
+      return response({ connections: [initialConnection] });
+    });
+
+    const { rerender } = render(
+      <PlaidConnectionManager initialConnections={[initialConnection]} />,
+    );
+    fireEvent.click(screen.getByTestId(`plaid-update-${itemId}`));
+    await waitFor(() => expect(plaid.token).toBe("link-gh62-failed-sync"));
+    plaid.readyForToken = true;
+    rerender(
+      <PlaidConnectionManager initialConnections={[initialConnection]} />,
+    );
+    plaid.config?.onSuccess?.("public-gh62-repaired", {});
+
+    await waitFor(() =>
+      expect(calls).toEqual(["update-token", "reconcile", "sync"]),
+    );
+    expect(completed).not.toHaveBeenCalled();
+    expect(screen.getByTestId("plaid-operation-status")).toHaveTextContent(
+      /sign in again|resume transaction updates|sync failed/i,
+    );
+    window.removeEventListener("plaid:sync-completed", completed);
+  });
+
+  it("cancelling Plaid Link preserves repair state and never starts transaction sync", async () => {
+    const completed = vi.fn();
+    window.addEventListener("plaid:sync-completed", completed);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((input) => {
+        if (String(input).endsWith("/update-token")) {
+          return response({ linkToken: "link-gh62-cancel" });
+        }
+        return response({ connections: [initialConnection] });
+      });
+
+    const { rerender } = render(
+      <PlaidConnectionManager initialConnections={[initialConnection]} />,
+    );
+    fireEvent.click(screen.getByTestId(`plaid-update-${itemId}`));
+    await waitFor(() => expect(plaid.token).toBe("link-gh62-cancel"));
+    plaid.readyForToken = true;
+    rerender(
+      <PlaidConnectionManager initialConnections={[initialConnection]} />,
+    );
+    plaid.config?.onExit?.(null, {});
+
+    await waitFor(() =>
+      expect(screen.getByTestId("plaid-operation-status")).toHaveTextContent(
+        /cancelled|nothing local was changed/i,
+      ),
+    );
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
+      `/api/plaid/connections/${itemId}/update-token`,
+    ]);
+    expect(completed).not.toHaveBeenCalled();
+    window.removeEventListener("plaid:sync-completed", completed);
   });
 });

@@ -214,3 +214,88 @@ describe("GH-5 Plaid sync status", () => {
     expect(screen.getAllByTestId("plaid-sync-status")[0]).toBeVisible();
   });
 });
+
+describe("GH-62 repaired sync status handoff", () => {
+  it("changes Action needed to Connected and re-enables checks only after verified sync", async () => {
+    render(
+      <PlaidSyncStatus
+        items={[
+          {
+            ...baseStatus,
+            status: "failed",
+            errorCode: "ITEM_LOGIN_REQUIRED",
+            needsLoginRepair: true,
+          },
+        ]}
+      />,
+    );
+
+    const button = screen.getByTestId("plaid-sync-check");
+    expect(screen.getByText("Action needed")).toBeVisible();
+    expect(button).toBeDisabled();
+
+    fireEvent(
+      window,
+      new CustomEvent("plaid:sync-completed", {
+        detail: {
+          itemId: baseStatus.itemId,
+          status: "succeeded",
+          added: 2,
+          modified: 0,
+          removed: 0,
+          requestId: "gh62-verified",
+          lastSuccessAt: "2026-08-12T20:00:00.000Z",
+        },
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByText("Connected")).toBeVisible());
+    expect(screen.queryByText("Action needed")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/reconnect this institution/i),
+    ).not.toBeInTheDocument();
+    expect(button).toBeEnabled();
+  });
+
+  it("ignores failed or unrelated sync notifications and keeps repair action sticky", async () => {
+    render(
+      <PlaidSyncStatus
+        items={[
+          {
+            ...baseStatus,
+            status: "failed",
+            errorCode: "ITEM_LOGIN_REQUIRED",
+            needsLoginRepair: true,
+          },
+        ]}
+      />,
+    );
+
+    fireEvent(
+      window,
+      new CustomEvent("plaid:sync-completed", {
+        detail: {
+          itemId: "50000000-0000-4000-8000-000000000099",
+          status: "succeeded",
+          lastSuccessAt: "2026-08-12T20:00:00.000Z",
+        },
+      }),
+    );
+    fireEvent(
+      window,
+      new CustomEvent("plaid:sync-completed", {
+        detail: {
+          itemId: baseStatus.itemId,
+          status: "failed",
+          lastSuccessAt: null,
+        },
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("Action needed")).toBeVisible(),
+    );
+    expect(screen.getByTestId("plaid-sync-check")).toBeDisabled();
+    expect(screen.getByText(/reconnect this institution/i)).toBeVisible();
+  });
+});

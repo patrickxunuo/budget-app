@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { SyncResult, SyncStatus } from "@/lib/plaid/types";
 
@@ -57,6 +57,42 @@ export function PlaidSyncStatus({
   const [items, setItems] = useState(initialItems);
   const [checking, setChecking] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    function handleSyncCompleted(event: Event) {
+      const result = (event as CustomEvent<SyncResult>).detail;
+      if (
+        !result ||
+        (result.status !== "succeeded" && result.status !== "idle")
+      )
+        return;
+
+      setItems((current) =>
+        current.map((item) =>
+          item.itemId === result.itemId
+            ? {
+                ...item,
+                status: result.status,
+                lastSuccessAt: result.lastSuccessAt,
+                errorCode: null,
+                needsLoginRepair: false,
+              }
+            : item,
+        ),
+      );
+      const changed = result.added + result.modified + result.removed;
+      setFeedback((current) => ({
+        ...current,
+        [result.itemId]: changed
+          ? `${changed} transaction update${changed === 1 ? "" : "s"} completed.`
+          : "Everything is already current.",
+      }));
+    }
+
+    window.addEventListener("plaid:sync-completed", handleSyncCompleted);
+    return () =>
+      window.removeEventListener("plaid:sync-completed", handleSyncCompleted);
+  }, []);
 
   async function check(itemId: string) {
     setChecking(itemId);

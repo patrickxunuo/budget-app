@@ -15,6 +15,10 @@
 - [x] Component acceptance covers adaptive day/CAD ticks, zero and negative ranges, pointer hover, touch pinning/outside dismissal, keyboard navigation/Escape, assistive readings, missing baselines, single points, and the retained semantic table; 16/16 focused and 915/915 full Vitest checks pass.
 - [x] `e2e/dashboard.spec.ts` adds real-backend desktop and mobile journeys for axes, nearest-day readings, keyboard/touch behavior, responsive density, the semantic fallback, and screenshot checkpoints without request mocks.
 - The configured one-pass browser run completed with 74 passed and 142 fixture-dependent skips. All four GH-63 project cases skipped because `E2E_DASHBOARD_MEMBER_EMAIL` / `E2E_DASHBOARD_MEMBER_PASSWORD` were absent; no GH-63 browser assertion executed or failed, and no GH-63 screenshot was produced locally.
+## GH-62 Verified Plaid Login Repair
+
+- [x] Database and component regressions prove a successful atomic provider sync clears `needs_login_repair` and the prior login error, preserves Item/account/scope/transaction identity, and coordinates Action needed to Connected only after update-token → reconcile → sync. The focused 5 component checks, full 912-check Vitest suite, and 494 pgTAP assertions pass (red → green captured).
+- [x] `e2e/plaid-connections.spec.ts` includes the no-mock real-backend journey `Bug: Plaid repair clears Action needed after verified sync` with a repaired-state screenshot. The one configured `npm run test:e2e` run produced 64 passed, 140 skipped, and 10 unrelated missing-environment failures; both GH-62 desktop/mobile cases skipped because the `plaid-repair` fixture (`PLAID_E2E_PROVIDER`, Sandbox mode, member credentials, `E2E_PLAID_REPAIR_STATE=1`) was absent.
 
 ## GH-26 Themed Select and Searchable Dropdowns
 
