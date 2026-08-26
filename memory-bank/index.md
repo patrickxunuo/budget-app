@@ -16,6 +16,7 @@ Project memory. Read this file first to find what you need.
 
 ## Last Updated
 
+2026-08-26 — GH-63's spending-history chart now has adaptive day/CAD axes and accessible nearest-day readings across mouse, touch, keyboard, and assistive technology. See `systemPatterns.md` for the interactive SVG chart contract and `testBaseline.md` for coverage evidence.
 2026-08-26 — GH-62 makes successful atomic provider sync the recovery boundary for Plaid login repair and coordinates the Accounts status UI from Action needed back to Connected; see `systemPatterns.md` and `testBaseline.md`.
 
 2026-08-16 — GH-33's standardized pending-action implementation is ready for PR with 909 Vitest checks, fixtureless computed-style Chromium coverage, and independent review green. See `systemPatterns.md` for the shared exclusive/latest hook, stable pending button, and live-region ownership rules; see `testBaseline.md` for the environment-limited full Playwright result.

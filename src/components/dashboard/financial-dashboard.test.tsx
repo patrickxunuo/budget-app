@@ -5,6 +5,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DashboardOverviewReadModel } from "@/lib/dashboard/overview-types";
@@ -480,5 +481,335 @@ describe("GH-51 compact Overview acceptance", () => {
     );
     expect(tables[0]).toHaveTextContent(/50\.00/);
     expect(tables[0]).toHaveTextContent(/60\.00/);
+  });
+});
+
+function setDashboardViewport(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: width,
+  });
+  fireEvent(window, new Event("resize"));
+}
+
+function mockComparisonPlotBounds() {
+  const plot = screen.getByTestId("dashboard-comparison-plot");
+  vi.spyOn(plot, "getBoundingClientRect").mockReturnValue({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 640,
+    bottom: 320,
+    width: 640,
+    height: 320,
+    toJSON: () => ({}),
+  });
+  return plot;
+}
+
+describe("GH-63 spending-history axes and interactive readings", () => {
+  it("FE-001 renders titled adaptive axes with endpoint X ticks and horizontal tick-aligned CAD gridlines", () => {
+    const multiDayModel: DashboardOverviewReadModel = {
+      ...familyModel,
+      comparison: {
+        ...familyModel.comparison,
+        points: Array.from({ length: 12 }, (_, index) => ({
+          day: index + 1,
+          date: `2026-08-${String(index + 1).padStart(2, "0")}`,
+          currentCumulativeCents: (index + 1) * 5_000,
+          baselineAverageCents: (index + 1) * 4_500,
+        })),
+      },
+    };
+    setDashboardViewport(1280);
+    const { rerender } = render(
+      <FinancialDashboard initialModel={multiDayModel} />,
+    );
+
+    expect(
+      screen.getByTestId("dashboard-comparison-x-axis-title"),
+    ).toHaveTextContent("Day of month");
+    expect(
+      screen.getByTestId("dashboard-comparison-y-axis-title"),
+    ).toHaveTextContent("Cumulative spending (CAD)");
+    let xTicks = screen.getAllByTestId("dashboard-comparison-x-tick");
+    expect(xTicks.length).toBeGreaterThanOrEqual(5);
+    expect(xTicks.length).toBeLessThanOrEqual(7);
+    expect(xTicks[0]).toHaveTextContent(/^1$/);
+    expect(xTicks.at(-1)).toHaveTextContent(/^12$/);
+
+    const yTicks = screen.getAllByTestId("dashboard-comparison-y-tick");
+    expect(yTicks.some((tick) => tick.textContent === "$0")).toBe(true);
+    expect(
+      yTicks.every((tick) =>
+        /^-?\$\d+(?:\.\d+)?k?$/.test(tick.textContent ?? ""),
+      ),
+    ).toBe(true);
+    const svg = screen
+      .getByTestId("dashboard-comparison-chart")
+      .querySelector("svg")!;
+    for (const tick of yTicks) {
+      const y = tick.getAttribute("y");
+      expect(
+        [...svg.querySelectorAll("line")].some(
+          (line) =>
+            line.getAttribute("y1") === y &&
+            line.getAttribute("y2") === y &&
+            line.getAttribute("x1") !== line.getAttribute("x2"),
+        ),
+        `expected a horizontal gridline aligned to ${tick.textContent}`,
+      ).toBe(true);
+    }
+    expect(screen.queryByTestId("dashboard-comparison-guide")).toBeNull();
+
+    setDashboardViewport(390);
+    rerender(<FinancialDashboard initialModel={multiDayModel} />);
+    xTicks = screen.getAllByTestId("dashboard-comparison-x-tick");
+    expect(xTicks.length).toBeGreaterThanOrEqual(3);
+    expect(xTicks.length).toBeLessThanOrEqual(4);
+    expect(xTicks[0]).toHaveTextContent(/^1$/);
+    expect(xTicks.at(-1)).toHaveTextContent(/^12$/);
+  });
+
+  it("FE-002 always includes zero, adds negative rounded ticks only for negative data, and formats thousands compactly", () => {
+    const positive = render(<FinancialDashboard initialModel={familyModel} />);
+    let labels = screen
+      .getAllByTestId("dashboard-comparison-y-tick")
+      .map((tick) => tick.textContent ?? "");
+    expect(labels).toContain("$0");
+    expect(labels.some((label) => label.startsWith("-$"))).toBe(false);
+
+    const negativeModel: DashboardOverviewReadModel = {
+      ...familyModel,
+      comparison: {
+        baselineMonthCount: 3,
+        points: [
+          {
+            day: 1,
+            date: "2026-08-01",
+            currentCumulativeCents: -125_000,
+            baselineAverageCents: -50_000,
+          },
+          {
+            day: 12,
+            date: "2026-08-12",
+            currentCumulativeCents: 240_000,
+            baselineAverageCents: 100_000,
+          },
+        ],
+      },
+    };
+    positive.rerender(
+      <FinancialDashboard key="negative-range" initialModel={negativeModel} />,
+    );
+    labels = screen
+      .getAllByTestId("dashboard-comparison-y-tick")
+      .map((tick) => tick.textContent ?? "");
+    expect(labels).toContain("$0");
+    expect(labels.some((label) => label.startsWith("-$"))).toBe(true);
+    expect(labels.some((label) => /k$/.test(label))).toBe(true);
+    expect(labels.every((label) => !label.includes("NaN"))).toBe(true);
+  });
+
+  it("FE-003 snaps mouse readings to the nearest day, renders neutral details and available markers, then clears on leave", () => {
+    render(<FinancialDashboard initialModel={familyModel} />);
+    const plot = mockComparisonPlotBounds();
+
+    expect(screen.queryByTestId("dashboard-comparison-tooltip")).toBeNull();
+    fireEvent.pointerMove(plot, {
+      clientX: 639,
+      clientY: 120,
+      pointerType: "mouse",
+    });
+
+    const tooltip = screen.getByTestId("dashboard-comparison-tooltip");
+    expect(tooltip).toHaveTextContent(/Aug(?:ust)? 3,? 2026/i);
+    expect(tooltip).toHaveTextContent(/This month[\s\S]*\$50\.00/i);
+    expect(tooltip).toHaveTextContent(/Baseline[\s\S]*\$60\.00/i);
+    expect(tooltip).toHaveTextContent(/\$10\.00 below baseline/i);
+    expect(tooltip).not.toHaveTextContent(/good|bad|red|green/i);
+    expect(
+      screen.getByTestId("dashboard-comparison-guide"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("dashboard-comparison-active-current-marker"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("dashboard-comparison-active-baseline-marker"),
+    ).toBeInTheDocument();
+
+    fireEvent.pointerLeave(plot, { pointerType: "mouse" });
+    expect(screen.queryByTestId("dashboard-comparison-tooltip")).toBeNull();
+    expect(screen.queryByTestId("dashboard-comparison-guide")).toBeNull();
+  });
+
+  it("FE-004 pins and changes touch readings inside the plot and dismisses them on outside pointer interaction", () => {
+    render(<FinancialDashboard initialModel={familyModel} />);
+    const plot = mockComparisonPlotBounds();
+
+    fireEvent.pointerDown(plot, {
+      clientX: 639,
+      clientY: 100,
+      pointerType: "touch",
+    });
+    expect(
+      screen.getByTestId("dashboard-comparison-tooltip"),
+    ).toHaveTextContent(/Aug(?:ust)? 3,? 2026/i);
+    fireEvent.pointerLeave(plot, { pointerType: "touch" });
+    expect(
+      screen.getByTestId("dashboard-comparison-tooltip"),
+    ).toBeInTheDocument();
+
+    fireEvent.pointerDown(plot, {
+      clientX: 1,
+      clientY: 100,
+      pointerType: "touch",
+    });
+    expect(
+      screen.getByTestId("dashboard-comparison-tooltip"),
+    ).toHaveTextContent(/Aug(?:ust)? 1,? 2026/i);
+
+    fireEvent.pointerDown(document.body, { pointerType: "touch" });
+    expect(screen.queryByTestId("dashboard-comparison-tooltip")).toBeNull();
+  });
+
+  it("FE-005 supports focus, clamped arrow navigation and Escape while keeping the polite reading synchronized", () => {
+    const initialMarkup = renderToStaticMarkup(
+      <FinancialDashboard initialModel={familyModel} />,
+    );
+    expect(initialMarkup).toMatch(
+      /<p(?=[^>]*id="dashboard-comparison-reading")[^>]*><\/p>/,
+    );
+
+    render(<FinancialDashboard initialModel={familyModel} />);
+    const plot = mockComparisonPlotBounds();
+    const reading = screen.getByTestId("dashboard-comparison-reading");
+
+    expect(plot).toHaveAttribute("tabindex", "0");
+    expect(plot).toHaveAccessibleName(/spending history|inspect/i);
+    expect(reading).toHaveAttribute("role", "status");
+    expect(reading).toHaveAttribute("aria-live", "polite");
+    expect(reading).toHaveTextContent(/^$/);
+
+    fireEvent.focus(plot);
+    expect(
+      screen.getByTestId("dashboard-comparison-tooltip"),
+    ).toBeInTheDocument();
+    expect(reading).toHaveTextContent(/Aug(?:ust)? \d{1,2},? 2026/i);
+    expect(reading).toHaveTextContent(/\$\d+\.\d{2}/);
+
+    fireEvent.keyDown(plot, { key: "ArrowLeft" });
+    fireEvent.keyDown(plot, { key: "ArrowLeft" });
+    fireEvent.keyDown(plot, { key: "ArrowLeft" });
+    expect(reading).toHaveTextContent(/Aug(?:ust)? 1,? 2026/i);
+    fireEvent.keyDown(plot, { key: "ArrowDown" });
+    expect(reading).toHaveTextContent(/Aug(?:ust)? 1,? 2026/i);
+    fireEvent.keyDown(plot, { key: "ArrowRight" });
+    expect(reading).toHaveTextContent(/Aug(?:ust)? 2,? 2026/i);
+    fireEvent.keyDown(plot, { key: "ArrowUp" });
+    expect(reading).toHaveTextContent(/Aug(?:ust)? 3,? 2026/i);
+    fireEvent.keyDown(plot, { key: "ArrowUp" });
+    expect(reading).toHaveTextContent(/Aug(?:ust)? 3,? 2026/i);
+
+    fireEvent.keyDown(plot, { key: "Escape" });
+    expect(screen.queryByTestId("dashboard-comparison-tooltip")).toBeNull();
+    expect(reading).toHaveTextContent(/^$/);
+  });
+
+  it("FE-006 omits baseline marker and baseline/comparison tooltip rows when the selected point has no baseline", () => {
+    const noBaselineModel: DashboardOverviewReadModel = {
+      ...familyModel,
+      comparison: {
+        baselineMonthCount: 0,
+        points: familyModel.comparison.points.map((point) => ({
+          ...point,
+          baselineAverageCents: null,
+        })),
+      },
+    };
+    render(<FinancialDashboard initialModel={noBaselineModel} />);
+    const plot = mockComparisonPlotBounds();
+    fireEvent.pointerMove(plot, {
+      clientX: 639,
+      clientY: 100,
+      pointerType: "mouse",
+    });
+
+    const tooltip = screen.getByTestId("dashboard-comparison-tooltip");
+    expect(tooltip).toHaveTextContent(/This month[\s\S]*\$50\.00/i);
+    expect(tooltip).not.toHaveTextContent(
+      /baseline|above|below|at baseline|unavailable/i,
+    );
+    expect(
+      screen.queryByTestId("dashboard-comparison-active-baseline-marker"),
+    ).toBeNull();
+    expect(
+      screen.getByTestId("dashboard-comparison-active-current-marker"),
+    ).toBeInTheDocument();
+  });
+
+  it("FE-007 keeps one-point axes and static marker meaningful while every interaction snaps safely to that point", () => {
+    render(<FinancialDashboard initialModel={personalModel} />);
+    const plot = mockComparisonPlotBounds();
+
+    expect(
+      screen.getAllByTestId("dashboard-comparison-x-tick").at(-1)!,
+    ).toHaveTextContent(/^1$/);
+    expect(
+      screen
+        .getAllByTestId("dashboard-comparison-y-tick")
+        .some((tick) => tick.textContent === "$0"),
+    ).toBe(true);
+    expect(
+      screen.getByTestId("dashboard-comparison-current-marker"),
+    ).toBeVisible();
+
+    fireEvent.pointerMove(plot, {
+      clientX: 400,
+      clientY: 180,
+      pointerType: "mouse",
+    });
+    expect(
+      screen.getByTestId("dashboard-comparison-tooltip"),
+    ).toHaveTextContent(/Aug(?:ust)? 1,? 2026/i);
+    fireEvent.keyDown(plot, { key: "ArrowLeft" });
+    fireEvent.keyDown(plot, { key: "ArrowRight" });
+    expect(
+      screen.getByTestId("dashboard-comparison-reading"),
+    ).toHaveTextContent(/Aug(?:ust)? 1,? 2026/i);
+  });
+
+  it("FE-008 preserves the complete native daily-values disclosure and semantic table after chart interactions", () => {
+    render(<FinancialDashboard initialModel={familyModel} />);
+    const plot = mockComparisonPlotBounds();
+    fireEvent.focus(plot);
+    fireEvent.keyDown(plot, { key: "ArrowLeft" });
+    fireEvent.keyDown(plot, { key: "Escape" });
+
+    const disclosure = screen.getByTestId(
+      "dashboard-daily-values-disclosure",
+    ) as HTMLDetailsElement;
+    expect(disclosure.tagName).toBe("DETAILS");
+    fireEvent.click(
+      within(disclosure).getByText("View daily values", {
+        selector: "summary",
+      }),
+    );
+    expect(disclosure.open).toBe(true);
+
+    const table = within(screen.getByTestId("dashboard-comparison-table"));
+    expect(table.getAllByRole("row")).toHaveLength(
+      familyModel.comparison.points.length + 1,
+    );
+    expect(table.getAllByRole("rowheader")).toHaveLength(
+      familyModel.comparison.points.length,
+    );
+    expect(table.getByRole("columnheader", { name: "Day" })).toBeVisible();
+    expect(table.getByRole("columnheader", { name: "Current" })).toBeVisible();
+    expect(table.getByRole("columnheader", { name: "Baseline" })).toBeVisible();
+    expect(table.getAllByRole("row").at(-1)).toHaveTextContent(/3/);
+    expect(table.getAllByRole("row").at(-1)).toHaveTextContent(/50\.00/);
+    expect(table.getAllByRole("row").at(-1)).toHaveTextContent(/60\.00/);
   });
 });

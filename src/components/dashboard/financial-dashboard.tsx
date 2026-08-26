@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { DashboardOverviewReadModel } from "@/lib/dashboard/overview-types";
 import type { DashboardScope } from "@/lib/dashboard/types";
 
@@ -81,6 +81,52 @@ function PaceShape({
   );
 }
 
+function niceChartStep(range: number) {
+  const rough = Math.max(range, 100) / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const fraction = rough / magnitude;
+  const niceFraction =
+    fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+  return niceFraction * magnitude;
+}
+
+function compactCad(cents: number) {
+  if (cents === 0) return "$0";
+  const dollars = Math.abs(cents) / 100;
+  const sign = cents < 0 ? "-" : "";
+  const trim = (value: number) =>
+    value.toFixed(value >= 10 || Number.isInteger(value) ? 0 : 1);
+  if (dollars >= 1_000_000) return `${sign}$${trim(dollars / 1_000_000)}m`;
+  if (dollars >= 1_000) return `${sign}$${trim(dollars / 1_000)}k`;
+  return `${sign}$${trim(dollars)}`;
+}
+
+function readingDate(date: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T12:00:00Z`));
+}
+
+function comparisonCopy(currentCents: number, baselineCents: number) {
+  const difference = currentCents - baselineCents;
+  if (difference === 0) return "$0 at baseline";
+  return `${money(Math.abs(difference))} ${
+    difference > 0 ? "above" : "below"
+  } baseline`;
+}
+
+function subscribeToViewport(callback: () => void) {
+  window.addEventListener("resize", callback);
+  return () => window.removeEventListener("resize", callback);
+}
+
+function wideViewportSnapshot() {
+  return window.innerWidth >= 640;
+}
+
 function chartGeometry(
   points: DashboardOverviewReadModel["comparison"]["points"],
 ) {
@@ -90,50 +136,461 @@ function chartGeometry(
       ? []
       : [point.baselineAverageCents]),
   ]);
-  const minimum = Math.min(0, ...values);
-  const maximum = Math.max(0, ...values);
-  const span = Math.max(1, maximum - minimum);
+  const rawMinimum = Math.min(0, ...values);
+  const rawMaximum = Math.max(0, ...values);
+  const step = niceChartStep(rawMaximum - rawMinimum);
+  const minimum = Math.floor(rawMinimum / step) * step;
+  let maximum = Math.ceil(rawMaximum / step) * step;
+  if (maximum === minimum) maximum += step;
+
   const width = 640;
-  const height = 228;
-  const insetX = 22;
-  const insetY = 18;
-  const plotWidth = width - insetX * 2;
-  const plotHeight = height - insetY * 2;
-  const x = (index: number) =>
-    points.length === 1
-      ? insetX
-      : insetX + (index / (points.length - 1)) * plotWidth;
-  const y = (value: number) => insetY + ((maximum - value) / span) * plotHeight;
+  const height = 292;
+  const plotLeft = 68;
+  const plotRight = 622;
+  const plotTop = 18;
+  const plotBottom = 230;
+  const plotWidth = plotRight - plotLeft;
+  const plotHeight = plotBottom - plotTop;
+  const latestDay = Math.max(1, points.at(-1)?.day ?? 1);
+  const xForDay = (day: number) =>
+    plotLeft +
+    (latestDay === 1 ? 0 : ((day - 1) / (latestDay - 1)) * plotWidth);
+  const yForValue = (value: number) =>
+    plotTop + ((maximum - value) / (maximum - minimum)) * plotHeight;
   const path = (pick: (point: (typeof points)[number]) => number | null) => {
     const commands: string[] = [];
-    points.forEach((point, index) => {
+    let segmentStarted = false;
+    points.forEach((point) => {
       const value = pick(point);
-      if (value === null) return;
+      if (value === null) {
+        segmentStarted = false;
+        return;
+      }
       commands.push(
-        `${commands.length === 0 ? "M" : "L"}${x(index).toFixed(2)},${y(value).toFixed(2)}`,
+        `${segmentStarted ? "L" : "M"}${xForDay(point.day).toFixed(2)},${yForValue(value).toFixed(2)}`,
       );
+      segmentStarted = true;
     });
     return commands.join(" ");
+  };
+  const ticks: number[] = [];
+  for (let value = minimum; value <= maximum + step / 2; value += step) {
+    ticks.push(Object.is(value, -0) ? 0 : value);
+  }
+  const xTicks = (target: number) => {
+    const count = Math.min(target, latestDay);
+    if (count <= 1) return [1];
+    return Array.from(
+      new Set(
+        Array.from({ length: count }, (_, index) =>
+          Math.round(1 + (index / (count - 1)) * (latestDay - 1)),
+        ),
+      ),
+    );
   };
   const singlePoint =
     points.length === 1
       ? {
-          x: x(0),
-          currentY: y(points[0]!.currentCumulativeCents),
+          x: xForDay(points[0]!.day),
+          currentY: yForValue(points[0]!.currentCumulativeCents),
           baselineY:
             points[0]!.baselineAverageCents === null
               ? null
-              : y(points[0]!.baselineAverageCents),
+              : yForValue(points[0]!.baselineAverageCents),
         }
       : null;
+
   return {
     width,
     height,
-    zeroY: y(0),
+    plotLeft,
+    plotRight,
+    plotTop,
+    plotBottom,
+    xForDay,
+    yForValue,
+    yTicks: ticks,
+    narrowXTicks: xTicks(4),
+    wideXTicks: xTicks(6),
     current: path((point) => point.currentCumulativeCents),
     baseline: path((point) => point.baselineAverageCents),
     singlePoint,
   };
+}
+
+function SpendingHistoryChart({
+  points,
+}: {
+  points: DashboardOverviewReadModel["comparison"]["points"];
+}) {
+  const chart = chartGeometry(points);
+  const isWideViewport = useSyncExternalStore(
+    subscribeToViewport,
+    wideViewportSnapshot,
+    () => false,
+  );
+  const xTicks = isWideViewport ? chart.wideXTicks : chart.narrowXTicks;
+  const plotRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState<{
+    index: number;
+    mode: "hover" | "touch" | "keyboard";
+  } | null>(null);
+
+  useEffect(() => {
+    const dismissOutside = (event: Event) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        plotRef.current &&
+        !plotRef.current.contains(target)
+      ) {
+        setActive(null);
+      }
+    };
+    document.addEventListener("pointerdown", dismissOutside, true);
+    document.addEventListener("touchstart", dismissOutside, true);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside, true);
+      document.removeEventListener("touchstart", dismissOutside, true);
+    };
+  }, []);
+
+  const nearestIndex = (clientX: number) => {
+    if (points.length <= 1) return 0;
+    const bounds = plotRef.current?.getBoundingClientRect();
+    const renderedWidth = bounds?.width || chart.width;
+    const offset = bounds?.width ? clientX - bounds.left : clientX;
+    const svgX =
+      Math.max(0, Math.min(renderedWidth, offset)) *
+      (chart.width / renderedWidth);
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    points.forEach((point, index) => {
+      const distance = Math.abs(chart.xForDay(point.day) - svgX);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+    return closestIndex;
+  };
+
+  const activePoint = active ? points[active.index] : undefined;
+  const activeX = activePoint ? chart.xForDay(activePoint.day) : 0;
+  const activeCurrentY = activePoint
+    ? chart.yForValue(activePoint.currentCumulativeCents)
+    : 0;
+  const activeBaselineY =
+    activePoint?.baselineAverageCents == null
+      ? null
+      : chart.yForValue(activePoint.baselineAverageCents);
+  const deltaCopy =
+    activePoint?.baselineAverageCents == null
+      ? null
+      : comparisonCopy(
+          activePoint.currentCumulativeCents,
+          activePoint.baselineAverageCents,
+        );
+  const reading = activePoint
+    ? [
+        readingDate(activePoint.date),
+        `This month ${money(activePoint.currentCumulativeCents)}.`,
+        ...(activePoint.baselineAverageCents === null
+          ? []
+          : [
+              `Baseline ${money(activePoint.baselineAverageCents)}.`,
+              `${deltaCopy}.`,
+            ]),
+      ].join(" ")
+    : "";
+
+  const selectPointer = (clientX: number, mode: "hover" | "touch") => {
+    if (points.length === 0) return;
+    setActive({ index: nearestIndex(clientX), mode });
+  };
+
+  return (
+    <>
+      <div
+        ref={plotRef}
+        data-testid="dashboard-comparison-plot"
+        tabIndex={0}
+        aria-label="Inspect spending history by day"
+        aria-describedby="dashboard-comparison-reading"
+        className="focus-visible:outline-brand relative mt-4 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4"
+        style={{ touchAction: "pan-y" }}
+        onPointerDown={(event) =>
+          selectPointer(
+            event.clientX,
+            event.pointerType === "touch" ? "touch" : "hover",
+          )
+        }
+        onPointerMove={(event) => {
+          if (event.pointerType === "touch") {
+            selectPointer(event.clientX, "touch");
+            return;
+          }
+          if (active?.mode !== "touch") selectPointer(event.clientX, "hover");
+        }}
+        onMouseMove={(event) => {
+          if (active?.mode !== "touch") selectPointer(event.clientX, "hover");
+        }}
+        onTouchStart={(event) => {
+          const touch = event.touches[0];
+          if (touch) selectPointer(touch.clientX, "touch");
+        }}
+        onPointerLeave={() =>
+          setActive((current) => (current?.mode === "hover" ? null : current))
+        }
+        onMouseLeave={() =>
+          setActive((current) => (current?.mode === "hover" ? null : current))
+        }
+        onFocus={() => {
+          if (points.length > 0) {
+            setActive((current) => current ?? { index: 0, mode: "keyboard" });
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setActive(null);
+            return;
+          }
+          const direction =
+            event.key === "ArrowLeft" || event.key === "ArrowDown"
+              ? -1
+              : event.key === "ArrowRight" || event.key === "ArrowUp"
+                ? 1
+                : 0;
+          if (direction === 0 || points.length === 0) return;
+          event.preventDefault();
+          setActive((current) => ({
+            index: Math.max(
+              0,
+              Math.min(
+                points.length - 1,
+                (current?.index ?? (direction > 0 ? -1 : 1)) + direction,
+              ),
+            ),
+            mode: "keyboard",
+          }));
+        }}
+      >
+        <svg
+          viewBox={`0 0 ${chart.width} ${chart.height}`}
+          aria-hidden="true"
+          className="block h-auto w-full overflow-visible"
+        >
+          <g>
+            {chart.yTicks.map((tick) => {
+              const y = chart.yForValue(tick);
+              return (
+                <g key={tick}>
+                  <line
+                    x1={chart.plotLeft}
+                    x2={chart.plotRight}
+                    y1={y}
+                    y2={y}
+                    stroke={tick === 0 ? "var(--line)" : "var(--line-soft)"}
+                    strokeWidth={tick === 0 ? 1.25 : 1}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <text
+                    data-testid="dashboard-comparison-y-tick"
+                    x={chart.plotLeft - 11}
+                    y={y}
+                    dy="0.32em"
+                    textAnchor="end"
+                    fill="var(--muted)"
+                    fontSize="12"
+                    className="tabular-nums"
+                  >
+                    {compactCad(tick)}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+
+          {chart.baseline ? (
+            <path
+              d={chart.baseline}
+              fill="none"
+              stroke="var(--mineral)"
+              strokeWidth="4"
+              strokeDasharray="8 7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          ) : null}
+          <path
+            d={chart.current}
+            fill="none"
+            stroke="var(--brand)"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+
+          {chart.singlePoint ? (
+            <>
+              {chart.singlePoint.baselineY !== null ? (
+                <circle
+                  data-testid="dashboard-comparison-baseline-marker"
+                  cx={chart.singlePoint.x}
+                  cy={chart.singlePoint.baselineY}
+                  r="7"
+                  fill="var(--surface)"
+                  stroke="var(--mineral)"
+                  strokeWidth="4"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ) : null}
+              <circle
+                data-testid="dashboard-comparison-current-marker"
+                cx={chart.singlePoint.x}
+                cy={chart.singlePoint.currentY}
+                r="5"
+                fill="var(--brand)"
+              />
+            </>
+          ) : null}
+
+          {activePoint ? (
+            <g>
+              <line
+                data-testid="dashboard-comparison-guide"
+                x1={activeX}
+                x2={activeX}
+                y1={chart.plotTop}
+                y2={chart.plotBottom}
+                stroke="var(--ink)"
+                strokeWidth="1.5"
+                strokeDasharray="3 5"
+                opacity="0.58"
+                vectorEffect="non-scaling-stroke"
+              />
+              {activeBaselineY !== null ? (
+                <circle
+                  data-testid="dashboard-comparison-active-baseline-marker"
+                  cx={activeX}
+                  cy={activeBaselineY}
+                  r="7"
+                  fill="var(--surface)"
+                  stroke="var(--mineral)"
+                  strokeWidth="4"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ) : null}
+              <circle
+                data-testid="dashboard-comparison-active-current-marker"
+                cx={activeX}
+                cy={activeCurrentY}
+                r="6"
+                fill="var(--surface)"
+                stroke="var(--brand)"
+                strokeWidth="4"
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
+          ) : null}
+
+          <g>
+            {xTicks.map((day) => (
+              <text
+                key={day}
+                data-testid="dashboard-comparison-x-tick"
+                x={chart.xForDay(day)}
+                y={chart.plotBottom + 24}
+                textAnchor={
+                  day === 1 ? "start" : day === xTicks.at(-1) ? "end" : "middle"
+                }
+                fill="var(--muted)"
+                fontSize="12"
+                className="tabular-nums"
+              >
+                {day}
+              </text>
+            ))}
+          </g>
+
+          <text
+            data-testid="dashboard-comparison-x-axis-title"
+            x={(chart.plotLeft + chart.plotRight) / 2}
+            y={chart.height - 5}
+            textAnchor="middle"
+            fill="var(--ink)"
+            fontSize="12"
+            fontWeight="600"
+          >
+            Day of month
+          </text>
+          <text
+            data-testid="dashboard-comparison-y-axis-title"
+            x={-(chart.plotTop + chart.plotBottom) / 2}
+            y="15"
+            transform="rotate(-90)"
+            textAnchor="middle"
+            fill="var(--ink)"
+            fontSize="12"
+            fontWeight="600"
+          >
+            Cumulative spending (CAD)
+          </text>
+        </svg>
+
+        {activePoint ? (
+          <div
+            data-testid="dashboard-comparison-tooltip"
+            data-side={activeX > chart.width * 0.68 ? "left" : "right"}
+            className={`border-line bg-panel pointer-events-none absolute top-3 z-10 w-[min(15rem,72%)] rounded-xl border px-3 py-2.5 shadow-lg ${
+              activeX > chart.width * 0.68 ? "-ml-2 -translate-x-full" : "ml-2"
+            }`}
+            style={{ left: `${(activeX / chart.width) * 100}%` }}
+          >
+            <p className="text-ink text-xs font-semibold">
+              {readingDate(activePoint.date)}
+            </p>
+            <dl className="mt-2 space-y-1 text-xs tabular-nums">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">This month</dt>
+                <dd className="text-ink font-semibold">
+                  {money(activePoint.currentCumulativeCents)}
+                </dd>
+              </div>
+              {activePoint.baselineAverageCents !== null ? (
+                <>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted">Baseline</dt>
+                    <dd className="text-ink font-semibold">
+                      {money(activePoint.baselineAverageCents)}
+                    </dd>
+                  </div>
+                  <div className="border-line-soft mt-1 border-t pt-1">
+                    <dt className="sr-only">Comparison</dt>
+                    <dd className="text-muted font-medium">{deltaCopy}</dd>
+                  </div>
+                </>
+              ) : null}
+            </dl>
+          </div>
+        ) : null}
+      </div>
+
+      <p
+        id="dashboard-comparison-reading"
+        data-testid="dashboard-comparison-reading"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {reading}
+      </p>
+    </>
+  );
 }
 
 export function FinancialDashboard({
@@ -223,7 +680,6 @@ export function FinancialDashboard({
 
   const health = model.budgetHealth;
   const pace = health.pace ?? "unavailable";
-  const chart = chartGeometry(model.comparison.points);
   const progressWidth = Math.max(
     0,
     Math.min(100, health.progressPercent ?? health.expectedPercent),
@@ -477,77 +933,15 @@ export function FinancialDashboard({
               {baselineNote(model.comparison.baselineMonthCount)}
             </p>
 
-            <svg
-              viewBox={`0 0 ${chart.width} ${chart.height}`}
-              aria-hidden="true"
-              className="mt-4 block h-auto w-full"
-            >
-              {[0.25, 0.5, 0.75].map((fraction) => (
-                <line
-                  key={fraction}
-                  x1="22"
-                  x2="618"
-                  y1={chart.height * fraction}
-                  y2={chart.height * fraction}
-                  stroke="var(--line-soft)"
-                  strokeWidth="1"
-                />
-              ))}
-              <line
-                x1="22"
-                x2="618"
-                y1={chart.zeroY}
-                y2={chart.zeroY}
-                stroke="var(--line)"
-                strokeWidth="1"
-              />
-              {chart.baseline ? (
-                <path
-                  d={chart.baseline}
-                  fill="none"
-                  stroke="var(--mineral)"
-                  strokeWidth="4"
-                  strokeDasharray="8 7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : null}
-              <path
-                d={chart.current}
-                fill="none"
-                stroke="var(--brand)"
-                strokeWidth="5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-              />
-              {chart.singlePoint ? (
-                <>
-                  {chart.singlePoint.baselineY !== null ? (
-                    <circle
-                      data-testid="dashboard-comparison-baseline-marker"
-                      aria-hidden="true"
-                      cx={chart.singlePoint.x}
-                      cy={chart.singlePoint.baselineY}
-                      r="7"
-                      fill="var(--surface)"
-                      stroke="var(--mineral)"
-                      strokeWidth="4"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  ) : null}
-                  <circle
-                    data-testid="dashboard-comparison-current-marker"
-                    aria-hidden="true"
-                    cx={chart.singlePoint.x}
-                    cy={chart.singlePoint.currentY}
-                    r="5"
-                    fill="var(--brand)"
-                  />
-                </>
-              ) : null}
-            </svg>
+            <SpendingHistoryChart
+              key={model.comparison.points
+                .map(
+                  (point) =>
+                    `${point.date}:${point.currentCumulativeCents}:${point.baselineAverageCents}`,
+                )
+                .join("|")}
+              points={model.comparison.points}
+            />
 
             <details
               ref={dailyValuesDisclosure}

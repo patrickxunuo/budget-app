@@ -10,6 +10,12 @@
 - Previous run: 98 passed, 70 fixture-dependent scenarios skipped, 0 failed (168 desktop/mobile cases). GH-14 raised the runnable count from 36 to 98 by seeding an owner with `pnpm seed:e2e` and adding the fixtureless security-hardening spec; GH-13 had raised it from 14 to 36.
 - Running the suite needs roughly 2 GB of headroom. On a loaded workstation `next dev` is killed by the OS with `FATAL ERROR: Zone Allocation failed`, and every case then fails with `ERR_CONNECTION_REFUSED` from a dead web server rather than from a real defect. Run `CI=1 pnpm exec playwright test --workers=1` in that situation: `CI=1` switches the `webServer` to the production `pnpm start`, which is far lighter than the dev server.
 
+## GH-63 Spending-History Axes and Interactive Readings
+
+- [x] Component acceptance covers adaptive day/CAD ticks, zero and negative ranges, pointer hover, touch pinning/outside dismissal, keyboard navigation/Escape, assistive readings, missing baselines, single points, and the retained semantic table; 16/16 focused and 915/915 full Vitest checks pass.
+- [x] `e2e/dashboard.spec.ts` adds real-backend desktop and mobile journeys for axes, nearest-day readings, keyboard/touch behavior, responsive density, the semantic fallback, and screenshot checkpoints without request mocks.
+- The configured one-pass browser run completed with 74 passed and 142 fixture-dependent skips. All four GH-63 project cases skipped because `E2E_DASHBOARD_MEMBER_EMAIL` / `E2E_DASHBOARD_MEMBER_PASSWORD` were absent; no GH-63 browser assertion executed or failed, and no GH-63 screenshot was produced locally.
+
 ## GH-62 Verified Plaid Login Repair
 
 - [x] Database and component regressions prove a successful atomic provider sync clears `needs_login_repair` and the prior login error, preserves Item/account/scope/transaction identity, and coordinates Action needed to Connected only after update-token → reconcile → sync. The focused 5 component checks, full 912-check Vitest suite, and 494 pgTAP assertions pass (red → green captured).

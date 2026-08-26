@@ -6,6 +6,9 @@ GH-31, GH-32, GH-33, GH-35, and GH-44 are closed and on `main`. GH-51 and GH-26 
 
 ## Log
 
+- 2026-08-26T18:36Z [READY] GH-63 adds adaptive day/CAD axes and accessible nearest-day spending-history readings for mouse, touch, keyboard, and assistive technology while preserving the semantic table and dashboard read model. Focused 16/16 and full 915/915 Vitest, lint, typecheck, build, and review are green; Playwright finished 74 passed/142 fixture-skipped, with GH-63's four cases authored but skipped for absent dashboard credentials.
+
+- 2026-08-26T18:28Z [PLANNED] GH-63 will add adaptive day/CAD axes and accessible nearest-day readings to Spending history, preserving the month-to-date read model and semantic daily-values table. Component and focused Playwright coverage will exercise scale formatting, pointer, touch, keyboard, missing-baseline, negative-range, narrow-layout, and single-point behavior.
 - 2026-08-26T18:26Z [READY] GH-62 makes verified post-repair transaction sync the sole recovery boundary: atomic commit clears sticky login-repair/error state, the Accounts repair flow reconciles then syncs, and the status card returns to Connected without replacing Item/account/scope/history identity. Red → green coverage is 5 focused component checks and 494 pgTAP assertions; full 912 Vitest, lint, typecheck, build, formatting, and independent review are green. The authored real-backend browser journey remained fixture-gated in the one configured run (64 passed, 140 skipped, 10 unrelated missing-environment failures).
 
 - 2026-08-26T17:51Z [PLANNED] GH-62 will make verified post-repair transaction sync atomically clear Plaid login-repair/error state, coordinate the Accounts status UI back to Connected, preserve Item/account/history identity, and add database plus repair-transition regression coverage.
