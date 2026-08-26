@@ -32,8 +32,12 @@ async function capture(page: Page, testInfo: TestInfo, name: string) {
 async function openManageMenu(page: Page) {
   const menu = page.getByTestId("transactions-manage-menu");
   await expect(menu).toBeVisible();
-  const trigger = menu.getByRole("button", { name: /manage/i });
-  if (await trigger.isVisible()) await trigger.click();
+  const trigger = menu.locator("summary");
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  await expect(menu).toHaveAttribute("open", "");
+  await expect(menu.getByTestId("transactions-manage-manual")).toBeVisible();
+  await expect(menu.getByTestId("transactions-manage-plaid")).toBeVisible();
   return menu;
 }
 

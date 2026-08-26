@@ -384,8 +384,11 @@ test.describe("GH-63 spending-history interactive readings", () => {
     const xTicks = page.getByTestId("dashboard-comparison-x-tick");
     await expect(xTicks.first()).toHaveText("1");
     await expect(xTicks.last()).not.toHaveText("");
-    const latestDay = Number(await xTicks.last().textContent());
-    expect(await xTicks.count()).toBe(Math.min(6, latestDay));
+    const availableDays = await page
+      .getByTestId("dashboard-comparison-table")
+      .getByRole("rowheader")
+      .count();
+    await expect(xTicks).toHaveCount(Math.min(6, availableDays));
     await expect(
       page.getByTestId("dashboard-comparison-y-tick").filter({ hasText: "$0" }),
     ).toHaveCount(1);
