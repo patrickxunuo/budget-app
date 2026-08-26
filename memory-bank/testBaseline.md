@@ -10,6 +10,11 @@
 - Previous run: 98 passed, 70 fixture-dependent scenarios skipped, 0 failed (168 desktop/mobile cases). GH-14 raised the runnable count from 36 to 98 by seeding an owner with `pnpm seed:e2e` and adding the fixtureless security-hardening spec; GH-13 had raised it from 14 to 36.
 - Running the suite needs roughly 2 GB of headroom. On a loaded workstation `next dev` is killed by the OS with `FATAL ERROR: Zone Allocation failed`, and every case then fails with `ERR_CONNECTION_REFUSED` from a dead web server rather than from a real defect. Run `CI=1 pnpm exec playwright test --workers=1` in that situation: `CI=1` switches the `webServer` to the production `pnpm start`, which is far lighter than the dev server.
 
+## GH-62 Verified Plaid Login Repair
+
+- [x] Database and component regressions prove a successful atomic provider sync clears `needs_login_repair` and the prior login error, preserves Item/account/scope/transaction identity, and coordinates Action needed to Connected only after update-token → reconcile → sync. The focused 5 component checks, full 912-check Vitest suite, and 494 pgTAP assertions pass (red → green captured).
+- [x] `e2e/plaid-connections.spec.ts` includes the no-mock real-backend journey `Bug: Plaid repair clears Action needed after verified sync` with a repaired-state screenshot. The one configured `npm run test:e2e` run produced 64 passed, 140 skipped, and 10 unrelated missing-environment failures; both GH-62 desktop/mobile cases skipped because the `plaid-repair` fixture (`PLAID_E2E_PROVIDER`, Sandbox mode, member credentials, `E2E_PLAID_REPAIR_STATE=1`) was absent.
+
 ## GH-26 Themed Select and Searchable Dropdowns
 
 - [x] The shared standard/searchable primitive and all 14 migrated contexts have Vitest coverage for pointer, keyboard/typeahead, focus return, disabled/required/ARIA state, search filtering/result announcements/empty state, `FormData`, repository-wide native-select removal, and preserved feature behavior. The focused 58-check set and complete 907-check Vitest suite pass.

@@ -4,6 +4,7 @@ import { activateAndObservePending } from "./support/pending";
 import { chooseSelectOption } from "./support/select";
 
 const credentials = fixtureCredentials("plaid-connection");
+const repairCredentials = fixtureCredentials("plaid-repair");
 
 function requireConnectionFixture() {
   requireFixture("plaid-connection");
@@ -229,5 +230,75 @@ test.describe("GH-11 Plaid connection management", () => {
       "polite",
     );
     await capture(page, testInfo, "plaid-connections-mobile-reduced-motion");
+  });
+});
+
+test.describe("GH-62 Plaid login repair", () => {
+  test.describe.configure({ mode: "serial" });
+  test.beforeEach(() => requireFixture("plaid-repair"));
+
+  test("Bug: Plaid repair clears Action needed after verified sync", async ({
+    page,
+  }, testInfo) => {
+    if (!repairCredentials) return;
+    await page.goto("/sign-in");
+    await page.getByLabel("Email").fill(repairCredentials.email);
+    await page
+      .getByLabel("Password", { exact: true })
+      .fill(repairCredentials.password);
+    await page.getByTestId("sign-in-submit").click();
+    await expect(page).toHaveURL(/\/(?:dashboard|accounts)(?:\?.*)?$/);
+    await page.goto("/accounts");
+
+    const freshness = page.getByTestId("plaid-sync-status").first();
+    const check = freshness.getByTestId("plaid-sync-check").first();
+    await expect(freshness).toContainText("Action needed");
+    await expect(check).toBeDisabled();
+
+    const requests: string[] = [];
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname;
+      if (
+        request.method() === "POST" &&
+        (/\/update-token$/.test(path) ||
+          /\/reconcile$/.test(path) ||
+          path === "/api/plaid/sync")
+      ) {
+        requests.push(path);
+      }
+    });
+    const updateResponse = page.waitForResponse(
+      (response) =>
+        /\/update-token$/.test(new URL(response.url()).pathname) &&
+        response.request().method() === "POST",
+    );
+    const reconcileResponse = page.waitForResponse(
+      (response) =>
+        /\/reconcile$/.test(new URL(response.url()).pathname) &&
+        response.request().method() === "POST",
+    );
+    const syncResponse = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/plaid/sync" &&
+        response.request().method() === "POST",
+    );
+
+    await page
+      .getByTestId(/^plaid-update-/)
+      .first()
+      .click();
+    expect((await updateResponse).status()).toBe(200);
+    expect((await reconcileResponse).status()).toBe(200);
+    expect((await syncResponse).status()).toBe(200);
+    expect(requests).toEqual([
+      expect.stringMatching(/\/update-token$/),
+      expect.stringMatching(/\/reconcile$/),
+      "/api/plaid/sync",
+    ]);
+
+    await expect(freshness).toContainText("Connected");
+    await expect(freshness).not.toContainText("Action needed");
+    await expect(check).toBeEnabled();
+    await capture(page, testInfo, "gh-62-plaid-repair-verified-connected");
   });
 });

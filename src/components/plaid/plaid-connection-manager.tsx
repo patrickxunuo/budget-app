@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePlaidLink } from "react-plaid-link";
 import { PendingButton } from "@/components/pending-button";
 import { Select } from "@/components/select";
@@ -10,6 +10,7 @@ import type {
   PlaidConnection,
   PlaidDisconnectMode,
   PlaidUpdateReason,
+  SyncResult,
 } from "@/lib/plaid/types";
 
 type ApiError = { code?: string; message?: string };
@@ -47,8 +48,8 @@ function date(value: string | null) {
 
 type RunMutation = (
   action: string,
-  work: () => Promise<void>,
-) => Promise<void | undefined>;
+  work: () => Promise<unknown>,
+) => Promise<unknown | undefined>;
 
 function UpdateControl({
   itemId,
@@ -59,7 +60,7 @@ function UpdateControl({
   runMutation,
 }: {
   itemId: string;
-  onReconcile: () => Promise<void>;
+  onReconcile: () => Promise<boolean>;
   announce: (text: string) => void;
   pending: boolean;
   pendingAction: string;
@@ -68,11 +69,47 @@ function UpdateControl({
   const [reason, setReason] = useState<PlaidUpdateReason>("login_repair");
   const [token, setToken] = useState<string | null>(null);
   const [shouldOpen, setShouldOpen] = useState(false);
+  const activeReason = useRef<PlaidUpdateReason>("login_repair");
+  const reconcileAfterUpdate = useCallback(
+    async (updateReason: PlaidUpdateReason) => {
+      const reconciled = await onReconcile();
+      if (!reconciled || updateReason !== "login_repair") return;
+
+      announce("Sign-in repaired. Checking for available updates…");
+      try {
+        const result = await request<SyncResult>("/api/plaid/sync", "POST", {
+          itemId,
+        });
+        if (result.status !== "succeeded" && result.status !== "idle") return;
+
+        window.dispatchEvent(
+          new CustomEvent<SyncResult>("plaid:sync-completed", {
+            detail: result,
+          }),
+        );
+        const changed = result.added + result.modified + result.removed;
+        announce(
+          changed
+            ? `Sign-in repaired and ${changed} transaction update${changed === 1 ? "" : "s"} completed.`
+            : "Sign-in repaired. Everything is already current.",
+        );
+      } catch (error) {
+        announce(
+          error instanceof Error
+            ? error.message
+            : "Sign-in was repaired, but updates are temporarily unavailable.",
+        );
+      }
+    },
+    [announce, itemId, onReconcile],
+  );
   const onSuccess = useCallback(() => {
     setShouldOpen(false);
     setToken(null);
-    void runMutation(`reconcile:${itemId}`, onReconcile);
-  }, [itemId, onReconcile, runMutation]);
+    void runMutation(`reconcile:${itemId}`, () =>
+      reconcileAfterUpdate(activeReason.current),
+    );
+  }, [itemId, reconcileAfterUpdate, runMutation]);
   const plaid = usePlaidLink({
     token,
     onSuccess,
@@ -107,8 +144,9 @@ function UpdateControl({
           result.linkToken.startsWith("e2e-deterministic-")
         ) {
           setToken(null);
-          await onReconcile();
+          await reconcileAfterUpdate(reason);
         } else {
+          activeReason.current = reason;
           setToken(result.linkToken);
           setShouldOpen(true);
         }
@@ -213,10 +251,12 @@ export function PlaidConnectionManager({
         setStatus(
           `Reconciliation complete: ${result.addedAccountIds.length} new, ${result.returnedAccountIds.length} returned, ${result.deselectedAccounts.length} deselected.`,
         );
+        return true;
       } catch (error) {
         setStatus(
           error instanceof Error ? error.message : "Reconciliation failed.",
         );
+        return false;
       }
     },
     [],
