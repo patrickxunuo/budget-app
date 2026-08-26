@@ -300,7 +300,105 @@ select is(
   'API-013 the sync succeeds despite unlinked account activity'
 );
 
+-- GH-62 regression: a completed provider transaction sync is the only event
+-- that may clear a prior login-repair failure. Reconciliation alone does not
+-- mutate this state, while the atomic commit must preserve every durable Item,
+-- account, and transaction identity already in the ledger.
+update public.sync_state set
+  status = 'failed', error_code = 'ITEM_LOGIN_REQUIRED',
+  error_message = 'Sign in again.', needs_login_repair = true,
+  current_request_id = null, current_trigger = null, claim_started_at = null
+where plaid_item_id = '83000000-0000-4000-8000-000000000001';
+
+create temporary table gh62_identity_snapshot on commit drop as
+select
+  (select jsonb_agg(jsonb_build_object(
+    'id', id, 'plaid_item_id', plaid_item_id, 'workspace_id', workspace_id,
+    'provider_account_id', provider_account_id, 'scope', scope
+  ) order by id) from public.accounts
+    where plaid_item_id = '83000000-0000-4000-8000-000000000001') as accounts,
+  (select jsonb_agg(jsonb_build_object(
+    'id', id, 'account_id', account_id,
+    'plaid_transaction_id', plaid_transaction_id,
+    'amount', amount, 'removed_at', removed_at
+  ) order by id) from public.transactions
+    where account_id = '84000000-0000-4000-8000-000000000001') as transactions;
+
+select lives_ok(
+  $$select public.claim_plaid_sync(
+    '83000000-0000-4000-8000-000000000001',
+    '85000000-0000-4000-8000-000000000062',
+    'member',
+    '82000000-0000-4000-8000-000000000001',
+    '81000000-0000-4000-8000-000000000001'
+  )$$,
+  'GH-62 login-repair Item can be claimed for its verifying transaction sync'
+);
+select lives_ok(
+  $$select public.commit_plaid_sync(
+    '83000000-0000-4000-8000-000000000001',
+    '85000000-0000-4000-8000-000000000062',
+    'post-unlinked-page',
+    'gh62-verified-cursor',
+    'provider-request-gh62-success',
+    '[]'::jsonb, '[]'::jsonb, '[]'::jsonb
+  )$$,
+  'GH-62 successful provider commit completes the repaired Item sync'
+);
+select results_eq(
+  $$select status::text, needs_login_repair, error_code, error_message
+    from public.sync_state
+    where plaid_item_id = '83000000-0000-4000-8000-000000000001'$$,
+  $$values ('succeeded'::text, false, null::text, null::text)$$,
+  'GH-62 successful commit clears login repair and the prior login error together'
+);
+select is(
+  (select jsonb_agg(jsonb_build_object(
+    'id', id, 'plaid_item_id', plaid_item_id, 'workspace_id', workspace_id,
+    'provider_account_id', provider_account_id, 'scope', scope
+  ) order by id) from public.accounts
+    where plaid_item_id = '83000000-0000-4000-8000-000000000001'),
+  (select accounts from gh62_identity_snapshot),
+  'GH-62 verified sync preserves account identity, ownership, and visibility'
+);
+select is(
+  (select jsonb_agg(jsonb_build_object(
+    'id', id, 'account_id', account_id,
+    'plaid_transaction_id', plaid_transaction_id,
+    'amount', amount, 'removed_at', removed_at
+  ) order by id) from public.transactions
+    where account_id = '84000000-0000-4000-8000-000000000001'),
+  (select transactions from gh62_identity_snapshot),
+  'GH-62 verified empty sync preserves transaction identity and history'
+);
+select is(
+  (select id from public.plaid_items
+    where plaid_item_id = 'sync-provider-item'),
+  '83000000-0000-4000-8000-000000000001'::uuid,
+  'GH-62 verified sync preserves the provider Item identity'
+);
+
+select public.claim_plaid_sync(
+  '83000000-0000-4000-8000-000000000001',
+  '85000000-0000-4000-8000-000000000063',
+  'member',
+  '82000000-0000-4000-8000-000000000001',
+  '81000000-0000-4000-8000-000000000001'
+);
+select public.fail_plaid_sync(
+  '83000000-0000-4000-8000-000000000001',
+  '85000000-0000-4000-8000-000000000063',
+  'ITEM_LOGIN_REQUIRED',
+  'Sign in again to resume updates.',
+  true,
+  'provider-request-gh62-failed'
+);
+select results_eq(
+  $$select status::text, needs_login_repair, error_code
+    from public.sync_state
+    where plaid_item_id = '83000000-0000-4000-8000-000000000001'$$,
+  $$values ('failed'::text, true, 'ITEM_LOGIN_REQUIRED'::text)$$,
+  'GH-62 failed provider sync keeps login-repair state sticky'
+);
 select * from finish();
 rollback;
-
-
