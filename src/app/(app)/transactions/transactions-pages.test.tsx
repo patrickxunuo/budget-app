@@ -181,3 +181,29 @@ describe("GH-64 transaction route boundaries", () => {
     },
   );
 });
+
+describe("GH-65 server-rendered transaction pagination", () => {
+  it("FE-004 requests an initial server buffer of up to 50 rows", async () => {
+    render(
+      await TransactionsPage({
+        searchParams: Promise.resolve({
+          scope: "family",
+          period: "month",
+          reference: "2026-08-26",
+        }),
+      }),
+    );
+
+    expect(screen.getByTestId("transactions-explorer")).toBeInTheDocument();
+    expect(mocks.readDashboard).toHaveBeenCalledTimes(1);
+    expect(mocks.readDashboard).toHaveBeenCalledWith(
+      apiContext,
+      expect.objectContaining({
+        scope: "family",
+        period: "month",
+        reference: "2026-08-26",
+        limit: 50,
+      }),
+    );
+  });
+});

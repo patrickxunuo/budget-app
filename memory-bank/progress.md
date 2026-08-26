@@ -6,6 +6,10 @@ GH-31, GH-32, GH-33, GH-35, and GH-44 are closed and on `main`. GH-51 and GH-26 
 
 ## Log
 
+- 2026-08-26T23:00Z [READY] GH-65 adds opaque deterministic cursor pagination, complete filtered counts, responsive 10/50-row reveal, buffered continuation/retry, and plain-URL default reconciliation to Transactions. Focused 77/77 and full 983/983 Vitest, lint, typecheck, format, build, and independent review are green; Playwright authored but fixture-limited (83 pass/124 skip/25 environment failures overall, no GH-65 browser assertion reached).
+
+- 2026-08-26T22:11Z [PLANNED] GH-65 will add deterministic opaque cursor pagination to the transaction read model, complete filtered counts, responsive 10-row mobile reveal and 50-row desktop first paint, continuation retry without lost state, URL-default reconciliation, and service/component/Playwright coverage beyond 50 rows.
+
 - 2026-08-26T21:30Z [READY] GH-64 splits Transactions into a read-only overview and independently authorized Manual/Cash and Plaid management routes, with scope/filter-preserving safe navigation, desktop-only exports, and route-specific loading fallbacks. Full 955/955 Vitest, lint, typecheck, build, formatting, and independent review are green; the one Playwright run finished 62 passed/152 fixture-skipped/12 unrelated missing-environment failures, with GH-64 browser cases authored but fixture-gated.
 
 - 2026-08-26T19:00Z [PLANNED] GH-64 will split `/transactions` into a read-only overview plus independently authorized Manual/Cash and Plaid management routes, with scope-preserving Manage/Back navigation, safe return targets, desktop-only exports, and route/component/Playwright boundary coverage.

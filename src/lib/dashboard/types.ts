@@ -52,6 +52,8 @@ export type DashboardReadModel = {
     freshnessAt: string | null;
   }>;
   transactions: DashboardTransaction[];
+  totalTransactionCount: number;
+  nextCursor: string | null;
   filterOptions: {
     accounts: Array<{ id: string; name: string }>;
     categories: Array<{ id: string; name: string }>;
@@ -69,4 +71,5 @@ export type DashboardFilters = {
   inclusion: DashboardInclusion;
   search?: string;
   limit: number;
+  cursor?: string;
 };

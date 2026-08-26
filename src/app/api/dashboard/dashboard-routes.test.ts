@@ -1,4 +1,4 @@
-﻿import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -37,6 +37,9 @@ import {
   readDashboard,
 } from "@/lib/dashboard/service";
 import { GET } from "./route";
+
+const ACCOUNT_ID = "11111111-1111-4111-8111-111111111111";
+const CATEGORY_ID = "22222222-2222-4222-8222-222222222222";
 
 const actor = {
   supabase: {},
@@ -105,6 +108,8 @@ const familyModel = {
       excluded: false,
     },
   ],
+  totalTransactionCount: 1,
+  nextCursor: null,
   filterOptions: {
     accounts: [{ id: "account-family", name: "Household Chequing" }],
     categories: [{ id: "cat-family", name: "Groceries" }],
@@ -360,5 +365,82 @@ describe("GH-9 dashboard route acceptance", () => {
       /transactions|accounts|summary|balance/i,
     );
     expect(readDashboard).not.toHaveBeenCalled();
+  });
+});
+
+describe("GH-65 complete cursor pagination route", () => {
+  it("API-001 returns complete totals/count with a bounded first page and continuation cursor", async () => {
+    const paged = {
+      ...familyModel,
+      summary: {
+        ...familyModel.summary,
+        includedCount: 73,
+        spendingCents: 73000,
+      },
+      totalTransactionCount: 73,
+      transactions: Array.from({ length: 50 }, (_, index) => ({
+        ...familyModel.transactions[0],
+        id: `stable-${String(index).padStart(2, "0")}`,
+      })),
+      nextCursor: "opaque-next-page",
+    };
+    vi.mocked(readDashboard).mockResolvedValue(paged as never);
+
+    const response = await GET(
+      request("scope=family&period=month&reference=2026-08-12&limit=50"),
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.transactions).toHaveLength(50);
+    expect(body).toMatchObject({
+      totalTransactionCount: 73,
+      nextCursor: "opaque-next-page",
+      summary: { includedCount: 73, spendingCents: 73000 },
+    });
+  });
+
+  it("API-004 forwards every result-affecting filter together with cursor and limit", async () => {
+    const cursor = "eyJ2ZXJzaW9uIjoxfQ";
+    const response = await GET(
+      request(
+        `scope=personal&period=custom&reference=2026-08-31&from=2026-08-01&to=2026-08-31&search=coffee&accountId=${ACCOUNT_ID}&categoryId=${CATEGORY_ID}&status=posted&inclusion=included&limit=10&cursor=${cursor}`,
+      ),
+    );
+    expect(response.status).toBe(200);
+    const raw = vi.mocked(readDashboard).mock.calls[0]?.[1];
+    expect(raw).toBeInstanceOf(URLSearchParams);
+    expect(Object.fromEntries(raw as URLSearchParams)).toEqual({
+      scope: "personal",
+      period: "custom",
+      reference: "2026-08-31",
+      from: "2026-08-01",
+      to: "2026-08-31",
+      search: "coffee",
+      accountId: ACCOUNT_ID,
+      categoryId: CATEGORY_ID,
+      status: "posted",
+      inclusion: "included",
+      limit: "10",
+      cursor,
+    });
+  });
+
+  it("API-005 returns cursor field detail for malformed or unsupported cursors", async () => {
+    vi.mocked(readDashboard).mockRejectedValue(
+      new DashboardServiceError(400, "Invalid request.", {
+        cursor: ["Use a supported dashboard cursor."],
+      }),
+    );
+
+    const response = await GET(
+      request(
+        "scope=family&period=month&reference=2026-08-12&cursor=not-a-cursor",
+      ),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Invalid request.",
+      fields: { cursor: ["Use a supported dashboard cursor."] },
+    });
   });
 });

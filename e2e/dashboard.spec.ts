@@ -51,6 +51,7 @@ async function waitForTransactionsResponse(
   await action();
   const result = await pending;
   expect(result.status()).toBe(200);
+  return result;
 }
 
 async function waitForOverviewResponse(
@@ -495,5 +496,181 @@ test.describe("GH-63 spending-history interactive readings", () => {
     await expect(tooltip).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
     await capture(page, testInfo, "dashboard-spending-history-touch-mobile");
+  });
+});
+
+test.describe("GH-65 complete cursor pagination", () => {
+  test("FE-001 FE-002 FE-003 FE-009 progressively reveals the real mobile ledger and requests only at cursor exhaustion", async ({
+    page,
+  }, testInfo) => {
+    requireDashboardFixture();
+    await page.setViewportSize({ width: 390, height: 844 });
+    let dashboardRequests = 0;
+    page.on("request", (request) => {
+      if (
+        request.method() === "GET" &&
+        request.url().includes("/api/dashboard?")
+      ) {
+        dashboardRequests += 1;
+      }
+    });
+    await openTransactions(page);
+
+    const rows = page.locator(
+      '[data-testid^="transactions-result-"]:not([data-testid="transactions-result-list"])',
+    );
+    const visibleCount = page.getByTestId("transactions-visible-count");
+    const countText = (await visibleCount.textContent()) ?? "";
+    const total = Number(countText.match(/of\s+(\d+)/i)?.[1] ?? 0);
+    test.skip(
+      total <= 50,
+      "GH-65 browser acceptance requires a real dashboard fixture with more than 50 matching transactions.",
+    );
+
+    await expect(rows).toHaveCount(10);
+    await expect(visibleCount).toContainText(`10 of ${total}`);
+    const showMore = page.getByTestId("transactions-show-more");
+    await expect(showMore).toHaveAccessibleName("Show 10 more");
+    const box = await showMore.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+
+    const initialRequestCount = dashboardRequests;
+    await showMore.click();
+    await expect(rows).toHaveCount(20);
+    expect(dashboardRequests).toBe(initialRequestCount);
+
+    await showMore.click();
+    await showMore.click();
+    await showMore.click();
+    await expect(rows).toHaveCount(50);
+    expect(dashboardRequests).toBe(initialRequestCount);
+
+    await showMore.click();
+    await expect.poll(() => dashboardRequests).toBe(initialRequestCount + 1);
+    await expect(rows).toHaveCount(Math.min(60, total));
+    const ids = await rows.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute("data-testid")),
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(page.url()).not.toMatch(/cursor|limit|visible|page=/i);
+    const exportUrl = new URL(
+      (await page.getByTestId("transactions-export-csv").getAttribute("href"))!,
+      page.url(),
+    );
+    expect(exportUrl.pathname).toBe("/api/transactions/export");
+    for (const key of ["cursor", "limit", "visible", "page"]) {
+      expect(exportUrl.searchParams.has(key)).toBe(false);
+    }
+    await capture(page, testInfo, "transactions-cursor-pagination-mobile");
+  });
+
+  test("FE-004 renders up to 50 real rows initially on desktop with complete totals", async ({
+    page,
+  }, testInfo) => {
+    requireDashboardFixture();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openTransactions(page);
+
+    const visibleCount = page.getByTestId("transactions-visible-count");
+    const countText = (await visibleCount.textContent()) ?? "";
+    const total = Number(countText.match(/of\s+(\d+)/i)?.[1] ?? 0);
+    test.skip(
+      total <= 50,
+      "GH-65 browser acceptance requires a real dashboard fixture with more than 50 matching transactions.",
+    );
+    const rows = page.locator(
+      '[data-testid^="transactions-result-"]:not([data-testid="transactions-result-list"])',
+    );
+    await expect(rows).toHaveCount(50);
+    await expect(visibleCount).toContainText(`50 of ${total}`);
+    await expect(
+      page.getByTestId("transactions-summary-spending"),
+    ).toBeVisible();
+    await capture(page, testInfo, "transactions-cursor-pagination-desktop");
+  });
+
+  test("FE-005 FE-007 resets expanded pagination for a real filter change and plain Transactions navigation", async ({
+    page,
+  }) => {
+    requireDashboardFixture();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openTransactions(page);
+    const visibleCount = page.getByTestId("transactions-visible-count");
+    const total = Number(
+      ((await visibleCount.textContent()) ?? "").match(/of\s+(\d+)/i)?.[1] ?? 0,
+    );
+    test.skip(
+      total <= 10,
+      "GH-65 reset acceptance requires a real dashboard fixture with more than 10 matching transactions.",
+    );
+
+    await page.getByTestId("transactions-show-more").click();
+    await expect(visibleCount).toHaveText(
+      `${Math.min(20, total)} of ${total} transactions visible`,
+    );
+    const postedResponse = await waitForTransactionsResponse(page, () =>
+      chooseSelectOption(
+        page.getByTestId("transactions-status-filter"),
+        "Posted",
+        "posted",
+      ),
+    );
+    const postedModel = (await postedResponse.json()) as {
+      totalTransactionCount: number;
+    };
+    await expect(visibleCount).toHaveText(
+      `${Math.min(10, postedModel.totalTransactionCount)} of ${postedModel.totalTransactionCount} transactions visible`,
+    );
+    expect(page.url()).not.toMatch(/cursor|limit|visible|page=/i);
+    expect(page.url()).toContain("status=posted");
+
+    const transactionsLink = page
+      .getByRole("navigation", { name: "Primary" })
+      .getByRole("link", { name: /transactions/i });
+    await transactionsLink.click();
+    await expect(page).toHaveURL(/\/transactions$/);
+    await expect(
+      page.getByTestId("transactions-status-filter"),
+    ).toHaveAttribute("data-value", "all");
+    await expect(
+      page.getByTestId("transactions-inclusion-filter"),
+    ).toHaveAttribute("data-value", "default");
+    await expect(page.getByTestId("transactions-scope-family")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.getByTestId("transactions-period-month")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(visibleCount).toHaveText(
+      `${Math.min(10, total)} of ${total} transactions visible`,
+    );
+
+    const today = await page.evaluate(() => {
+      const values = Object.fromEntries(
+        new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Toronto",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+          .formatToParts(new Date())
+          .map(({ type, value }) => [type, value]),
+      );
+      return `${values.year}-${values.month}-${values.day}`;
+    });
+    const exportUrl = new URL(
+      (await page.getByTestId("transactions-export-csv").getAttribute("href"))!,
+      page.url(),
+    );
+    expect(Object.fromEntries(exportUrl.searchParams)).toEqual({
+      scope: "family",
+      period: "month",
+      reference: today,
+      status: "all",
+      inclusion: "default",
+    });
   });
 });

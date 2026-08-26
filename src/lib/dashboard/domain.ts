@@ -138,6 +138,8 @@ export function aggregateDashboard(input: {
   }>;
   limit: number;
   aggregateRows?: DashboardTransaction[];
+  totalTransactionCount?: number;
+  nextCursor?: string | null;
 }): DashboardReadModel {
   const accounting = (input.aggregateRows ?? input.rows).map((r) => ({
     id: r.id,
@@ -210,6 +212,8 @@ export function aggregateDashboard(input: {
       .filter((c) => c.spendingCents !== 0 || c.budgetCents !== null),
     accounts: input.accounts,
     transactions: input.rows.slice(0, input.limit),
+    totalTransactionCount: input.totalTransactionCount ?? input.rows.length,
+    nextCursor: input.nextCursor ?? null,
     filterOptions: {
       accounts: (input.filterAccounts ?? input.accounts).map(
         ({ id, name }) => ({

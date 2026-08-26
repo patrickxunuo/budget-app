@@ -26,9 +26,10 @@ import { TransactionExplorer } from "./transaction-explorer";
  * timers — the same approach that file uses — rather than fake timers.
  */
 
-const { pushSpy, replaceSpy } = vi.hoisted(() => ({
+const { pushSpy, replaceSpy, searchParamsSpy } = vi.hoisted(() => ({
   pushSpy: vi.fn(),
   replaceSpy: vi.fn(),
+  searchParamsSpy: vi.fn(() => new URLSearchParams()),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -41,7 +42,7 @@ vi.mock("next/navigation", () => ({
     forward: vi.fn(),
   }),
   usePathname: () => "/transactions",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: searchParamsSpy,
 }));
 
 const ACCOUNT_ID = "11111111-1111-4111-8111-111111111111";
@@ -139,6 +140,8 @@ const initialModel: DashboardReadModel = {
     },
   ],
   transactions: [pendingRow, refundRow, excludedTransferRow],
+  totalTransactionCount: 3,
+  nextCursor: null,
   filterOptions: {
     accounts: [{ id: ACCOUNT_ID, name: "Household Chequing" }],
     categories: [{ id: CATEGORY_ID, name: "Groceries" }],
@@ -190,6 +193,8 @@ const emptyModel: DashboardReadModel = {
   },
   trend: [],
   transactions: [],
+  totalTransactionCount: 0,
+  nextCursor: null,
 };
 
 const staleModel: DashboardReadModel = {
@@ -241,6 +246,8 @@ beforeEach(() => {
   vi.restoreAllMocks();
   pushSpy.mockClear();
   replaceSpy.mockClear();
+  searchParamsSpy.mockReset();
+  searchParamsSpy.mockReturnValue(new URLSearchParams());
 });
 
 describe("GH-30 transaction explorer", () => {
@@ -875,4 +882,317 @@ describe("GH-64 overview export visibility", () => {
     ).toBe(true);
     expect(exportControl).toHaveAttribute("href");
   });
+});
+
+function paginationRow(index: number): DashboardTransaction {
+  return {
+    ...pendingRow,
+    id: `page-row-${String(index).padStart(3, "0")}`,
+    merchantOrDescription: `Pagination row ${index}`,
+    date: `2026-08-${String(31 - (index % 31)).padStart(2, "0")}`,
+    pending: false,
+  };
+}
+
+function paginationModel(
+  start: number,
+  count: number,
+  nextCursor: string | null,
+): DashboardReadModel {
+  return {
+    ...initialModel,
+    transactions: Array.from({ length: count }, (_, offset) =>
+      paginationRow(start + offset),
+    ),
+    totalTransactionCount: 65,
+    nextCursor,
+    summary: { ...initialModel.summary, includedCount: 65 },
+  };
+}
+
+function setDesktopMatches(desktop: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: desktop && query === "(min-width: 768px)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
+describe("GH-65 progressive transaction pagination", () => {
+  it("FE-001 shows 10 of the complete count on mobile with a named 44px reveal target", () => {
+    setDesktopMatches(false);
+    renderExplorer(paginationModel(0, 50, "cursor-50"));
+
+    expect(resultRows()).toHaveLength(10);
+    expect(screen.getByTestId("transactions-visible-count")).toHaveTextContent(
+      /10\s+of\s+65\s+transactions/i,
+    );
+    const showMore = screen.getByTestId("transactions-show-more");
+    expect(showMore).toHaveAccessibleName("Show 10 more");
+    expect(showMore).toHaveClass("min-h-11");
+    expect(
+      screen.getByTestId("transactions-pagination-status"),
+    ).toHaveAttribute("aria-live", "polite");
+    expect(
+      screen.getByTestId("transactions-pagination-status"),
+    ).toBeEmptyDOMElement();
+  });
+
+  it("FE-002 reveals exactly 10 buffered rows without issuing a request", () => {
+    setDesktopMatches(false);
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    renderExplorer(paginationModel(0, 50, "cursor-50"));
+
+    fireEvent.click(screen.getByTestId("transactions-show-more"));
+
+    expect(resultRows()).toHaveLength(20);
+    expect(screen.getByTestId("transactions-visible-count")).toHaveTextContent(
+      /20\s+of\s+65/i,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("FE-003 fetches one cursor page only after exhausting the buffer and appends the next 10 uniquely", async () => {
+    setDesktopMatches(false);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => respondWith(paginationModel(50, 15, null)));
+    renderExplorer(paginationModel(0, 50, "cursor-50"));
+    const showMore = screen.getByTestId("transactions-show-more");
+
+    for (let index = 0; index < 4; index += 1) fireEvent.click(showMore);
+    expect(resultRows()).toHaveLength(50);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.click(showMore);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const continuation = urlOf(fetchMock.mock.calls[0]);
+    expect(continuation.pathname).toBe("/api/dashboard");
+    expect(continuation.searchParams.get("cursor")).toBe("cursor-50");
+    expect(continuation.searchParams.get("limit")).toBe("50");
+    await waitFor(() => expect(resultRows()).toHaveLength(60));
+    expect(new Set(resultRows().map((item) => item.dataset.testid)).size).toBe(
+      60,
+    );
+  });
+
+  it("FE-004 hydrates desktop to the full 50-row server buffer while retaining complete totals", async () => {
+    setDesktopMatches(true);
+    renderExplorer(paginationModel(0, 50, "cursor-50"));
+
+    await waitFor(() => expect(resultRows()).toHaveLength(50));
+    expect(screen.getByTestId("transactions-visible-count")).toHaveTextContent(
+      /50\s+of\s+65/i,
+    );
+    expect(
+      screen.getByTestId("transactions-summary-spending"),
+    ).toHaveTextContent(/137\.50/);
+  });
+
+  it("FE-005 replaces expanded pages and restores mobile depth when a result filter changes", async () => {
+    setDesktopMatches(false);
+    const refreshed = {
+      ...paginationModel(100, 22, null),
+      totalTransactionCount: 22,
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => respondWith(refreshed));
+    renderExplorer(paginationModel(0, 50, "cursor-50"));
+    fireEvent.click(screen.getByTestId("transactions-show-more"));
+    expect(resultRows()).toHaveLength(20);
+
+    chooseFilter("transactions-status-filter", "Pending");
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("transactions-visible-count"),
+      ).toHaveTextContent(/10\s+of\s+22/i),
+    );
+    expect(resultRows()).toHaveLength(10);
+    expect(screen.queryByTestId("transactions-result-page-row-000")).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(urlOf(fetchMock.mock.calls[0]).searchParams.has("cursor")).toBe(
+      false,
+    );
+    expect(screen.queryByTestId("transactions-pagination-retry")).toBeNull();
+  });
+
+  it("FE-006 discards an older continuation after a newer filter response replaces the view", async () => {
+    setDesktopMatches(false);
+    const resolvers: Array<(response: Response) => void> = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+    renderExplorer(paginationModel(0, 10, "cursor-10"));
+
+    fireEvent.click(screen.getByTestId("transactions-show-more"));
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    chooseFilter("transactions-status-filter", "Pending");
+    await waitFor(() => expect(resolvers).toHaveLength(2));
+
+    await act(async () => {
+      resolvers[1]!(
+        jsonResponse({
+          ...paginationModel(100, 12, null),
+          totalTransactionCount: 12,
+        }),
+      );
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("transactions-visible-count"),
+      ).toHaveTextContent(/10\s+of\s+12/i),
+    );
+
+    await act(async () => {
+      resolvers[0]!(jsonResponse(paginationModel(10, 10, null)));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.queryByTestId("transactions-result-page-row-010")).toBeNull();
+    expect(
+      screen.getByTestId("transactions-result-page-row-100"),
+    ).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("FE-008 retains loaded order after continuation failure and retry recovers with the same cursor", async () => {
+    setDesktopMatches(false);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() =>
+        respondWith({ error: "Continuation unavailable." }, 503),
+      )
+      .mockImplementationOnce(() => respondWith(paginationModel(10, 10, null)));
+    renderExplorer(paginationModel(0, 10, "cursor-10"));
+    const originalOrder = resultRows().map((item) => item.dataset.testid);
+
+    fireEvent.click(screen.getByTestId("transactions-show-more"));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("transactions-pagination-error"),
+      ).toHaveTextContent(/continuation unavailable|try again/i),
+    );
+    expect(resultRows().map((item) => item.dataset.testid)).toEqual(
+      originalOrder,
+    );
+    expect(
+      screen.getByTestId("transactions-pagination-retry"),
+    ).toHaveAccessibleName(/retry/i);
+
+    fireEvent.click(screen.getByTestId("transactions-pagination-retry"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    for (const call of fetchMock.mock.calls) {
+      expect(urlOf(call).searchParams.get("cursor")).toBe("cursor-10");
+    }
+    await waitFor(() => expect(resultRows()).toHaveLength(20));
+    expect(screen.queryByTestId("transactions-pagination-retry")).toBeNull();
+    expect(
+      screen.getByTestId("transactions-pagination-error"),
+    ).toBeEmptyDOMElement();
+  });
+
+  it("FE-009 never writes feed depth/cursor into the URL or complete-set CSV href", async () => {
+    setDesktopMatches(false);
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => respondWith(paginationModel(10, 10, null)));
+    renderExplorer(paginationModel(0, 10, "cursor-10"));
+
+    fireEvent.click(screen.getByTestId("transactions-show-more"));
+    await waitFor(() => expect(resultRows()).toHaveLength(20));
+
+    expect(replaceState).not.toHaveBeenCalled();
+    expect(window.location.search).not.toMatch(/cursor|limit|visible|page/i);
+    const href = exportHref();
+    expect(href.pathname).toBe("/api/transactions/export");
+    for (const key of ["cursor", "limit", "visible", "page"]) {
+      expect(href.searchParams.has(key), `CSV must omit ${key}`).toBe(false);
+    }
+    expect(urlOf(fetchMock.mock.calls[0]).searchParams.get("cursor")).toBe(
+      "cursor-10",
+    );
+  });
+});
+
+it("GH-65 FE-007 reconciles a historical narrowed surface to current Toronto defaults on plain /transactions", async () => {
+  setDesktopMatches(false);
+  const expectedTorontoDate = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Toronto",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(new Date())
+      .map(({ type, value }) => [type, value]),
+  );
+  const today = `${expectedTorontoDate.year}-${expectedTorontoDate.month}-${expectedTorontoDate.day}`;
+  const filtered = {
+    ...initialFilters,
+    reference: "2020-01-15",
+    search: "historical",
+    status: "pending" as const,
+  };
+  searchParamsSpy.mockReturnValue(
+    new URLSearchParams(
+      "reference=2020-01-15&search=historical&status=pending",
+    ),
+  );
+  const refreshed = {
+    ...paginationModel(200, 18, null),
+    totalTransactionCount: 18,
+  };
+  const fetchMock = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(() => respondWith(refreshed));
+  const view = render(
+    <TransactionExplorer
+      initialModel={paginationModel(0, 50, "cursor-50")}
+      initialFilters={filtered}
+    />,
+  );
+  fireEvent.click(screen.getByTestId("transactions-show-more"));
+  expect(resultRows()).toHaveLength(20);
+
+  searchParamsSpy.mockReturnValue(new URLSearchParams());
+  view.rerender(
+    <TransactionExplorer
+      initialModel={paginationModel(0, 50, "cursor-50")}
+      initialFilters={filtered}
+    />,
+  );
+
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  const request = urlOf(fetchMock.mock.calls[0]);
+  expect(Object.fromEntries(request.searchParams)).toEqual({
+    scope: "family",
+    period: "month",
+    reference: today,
+    status: "all",
+    inclusion: "default",
+    limit: "50",
+  });
+  await waitFor(() =>
+    expect(screen.getByTestId("transactions-visible-count")).toHaveTextContent(
+      "10 of 18 transactions visible",
+    ),
+  );
+  expect(resultRows()).toHaveLength(10);
+  expect(screen.queryByTestId("transactions-result-page-row-000")).toBeNull();
+  expect(screen.queryByTestId("transactions-pagination-retry")).toBeNull();
 });

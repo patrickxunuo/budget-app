@@ -1,14 +1,23 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 import { SearchableSelect, Select } from "@/components/select";
 import { TransactionManagementMenu } from "@/components/transactions/transaction-management-navigation";
 import { usePendingAction } from "@/hooks/use-pending-action";
 import { moveReference } from "@/lib/dashboard/domain";
 import type { DashboardReadModel } from "@/lib/dashboard/types";
+import { formatLocalDate } from "@/lib/transactions/accounting";
 import {
   describeActiveFilters,
+  parseExplorerFilters,
   SEARCH_MAX_LENGTH,
   toExplorerSearchParams,
   toReadModelQuery,
@@ -25,6 +34,27 @@ export type TransactionExplorerProps = {
 };
 
 const DISPLAY_LIMIT = 50;
+const MOBILE_INITIAL_LIMIT = 10;
+const DESKTOP_MEDIA_QUERY = "(min-width: 768px)";
+
+function subscribeToDesktopViewport(onChange: () => void) {
+  if (typeof window.matchMedia !== "function") return () => undefined;
+  const media = window.matchMedia(DESKTOP_MEDIA_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+
+function getDesktopViewportSnapshot() {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia(DESKTOP_MEDIA_QUERY).matches
+  );
+}
+
+function getDesktopViewportServerSnapshot() {
+  return false;
+}
+const REVEAL_COUNT = 10;
 const SEARCH_DEBOUNCE_MS = 120;
 const REFRESHING_REASON = "Refreshing the filtered view.";
 const EMPTY_REASON = "No transactions match the current filters.";
@@ -83,6 +113,8 @@ export function TransactionExplorer({
   initialFilters,
 }: TransactionExplorerProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlQuery = searchParams.toString();
   const [isPending, startTransition] = useTransition();
   const [model, setModel] = useState(initialModel);
   const [filters, setFilters] = useState(initialFilters);
@@ -95,6 +127,19 @@ export function TransactionExplorer({
   );
   const { pending: loading, run } = usePendingAction({ strategy: "latest" });
   const [error, setError] = useState("");
+  const isDesktopViewport = useSyncExternalStore(
+    subscribeToDesktopViewport,
+    getDesktopViewportSnapshot,
+    getDesktopViewportServerSnapshot,
+  );
+  const responsiveInitialLimit = isDesktopViewport
+    ? DISPLAY_LIMIT
+    : MOBILE_INITIAL_LIMIT;
+  const [revealedCount, setRevealedCount] = useState<number | null>(null);
+  const visibleCount = revealedCount ?? responsiveInitialLimit;
+  const [paginationLoading, setPaginationLoading] = useState(false);
+  const [paginationError, setPaginationError] = useState("");
+  const [paginationStatus, setPaginationStatus] = useState("");
   // The export always describes the query that produced the rows on screen, so
   // it is snapshotted when a response lands rather than read from live controls.
   const [exportQuery, setExportQuery] = useState(() =>
@@ -125,6 +170,9 @@ export function TransactionExplorer({
   const customRangeTouched = useRef(false);
   const filtersRef = useRef(filters);
 
+  const continuationRequestId = useRef(0);
+  const lastUrlQuery = useRef(urlQuery);
+
   // `filters` cannot go in the refresh effect's own dependency array: a change
   // that left both query strings identical would cancel an in-flight request
   // without starting a replacement, and the pending flag would never clear.
@@ -140,9 +188,53 @@ export function TransactionExplorer({
   }, [filters]);
 
   useEffect(() => {
+    if (urlQuery === lastUrlQuery.current) return;
+    lastUrlQuery.current = urlQuery;
+    // Re-entering the canonical route means "this month now", not the date
+    // from whichever historical URL originally seeded this preserved surface.
+    // This effect runs only on the client, so reading the clock cannot alter
+    // server markup or create a hydration mismatch.
+    const currentTorontoDate = formatLocalDate(new Date(), "America/Toronto");
+    const urlFilters = parseExplorerFilters(
+      new URLSearchParams(urlQuery),
+      currentTorontoDate,
+    );
+    if (toExplorerSearchParams(urlFilters) === explorerQuery) return;
+
+    continuationRequestId.current += 1;
+    const reconciliation = window.setTimeout(() => {
+      // URL changes are an external navigation event. Reconcile on its task so
+      // rapid back/forward changes can cancel stale work before it mutates the
+      // preserved client surface.
+      if (lastUrlQuery.current !== urlQuery) return;
+      setPaginationLoading(false);
+      setPaginationError("");
+      setPaginationStatus("");
+      setRevealedCount(null);
+      setSearchInput(urlFilters.search);
+      customRangeTouched.current = false;
+      setDraftFrom(urlFilters.from || initialModel.range.startDate);
+      setDraftTo(urlFilters.to || initialModel.range.endDate);
+      debounceMs.current = 0;
+      setFilters(urlFilters);
+    }, 0);
+    return () => window.clearTimeout(reconciliation);
+  }, [
+    explorerQuery,
+    initialModel.range.endDate,
+    initialModel.range.startDate,
+    urlQuery,
+  ]);
+
+  useEffect(() => {
     const view = `${readModelQuery}|${explorerQuery}`;
     if (view === appliedView.current) return;
     appliedView.current = view;
+    continuationRequestId.current += 1;
+    setPaginationLoading(false);
+    setPaginationError("");
+    setPaginationStatus("");
+    setRevealedCount(null);
     const id = ++requestId.current;
     // Cancelled by this effect's cleanup — on a filter change, and critically on
     // unmount. A scope selection unmounts this component (the page keys it), and
@@ -178,8 +270,12 @@ export function TransactionExplorer({
           );
         // A slow earlier response must never overwrite a newer one.
         if (!settled()) return;
-        displayedScope.current = body.scope;
-        setModel(body);
+        const nextModel = body as DashboardReadModel;
+        displayedScope.current = nextModel.scope;
+        setModel(nextModel);
+        setRevealedCount(null);
+        setPaginationError("");
+        setPaginationStatus("");
         setExportQuery(readModelQuery);
         setAppliedFilters(filtersRef.current);
         if (!customRangeTouched.current) {
@@ -211,6 +307,10 @@ export function TransactionExplorer({
   }, [readModelQuery, explorerQuery, run]);
 
   function update(patch: Partial<ExplorerFilters>, debounce = false) {
+    continuationRequestId.current += 1;
+    setPaginationLoading(false);
+    setPaginationError("");
+    setPaginationStatus("");
     debounceMs.current = debounce ? SEARCH_DEBOUNCE_MS : 0;
     setFilters((current) => ({ ...current, ...patch }));
   }
@@ -293,8 +393,87 @@ export function TransactionExplorer({
     update({ search: value.trim().slice(0, SEARCH_MAX_LENGTH).trim() }, true);
   }
 
+  async function revealMore() {
+    if (readModelQuery !== exportQuery || busy || paginationLoading) return;
+    setPaginationError("");
+    if (visibleCount < model.transactions.length) {
+      const nextVisibleCount = Math.min(
+        visibleCount + REVEAL_COUNT,
+        model.transactions.length,
+      );
+      setRevealedCount(nextVisibleCount);
+      setPaginationStatus(
+        `${nextVisibleCount} of ${model.totalTransactionCount ?? model.transactions.length} transactions visible.`,
+      );
+      return;
+    }
+
+    const cursor = model.nextCursor;
+    if (!cursor || paginationLoading) return;
+    const id = ++continuationRequestId.current;
+    const view = appliedView.current;
+    setPaginationLoading(true);
+    setPaginationStatus("Loading 10 more transactions.");
+    try {
+      const query = new URLSearchParams(exportQuery);
+      query.set("limit", String(DISPLAY_LIMIT));
+      query.set("cursor", cursor);
+      const response = await fetch(`/api/dashboard?${query}`, {
+        headers: { accept: "application/json" },
+      });
+      const body = (await response.json()) as DashboardReadModel & {
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(
+          typeof body.error === "string"
+            ? body.error
+            : "More transactions could not be loaded.",
+        );
+      }
+      if (id !== continuationRequestId.current || view !== appliedView.current)
+        return;
+
+      const seen = new Set(
+        model.transactions.map((row) => `${row.source}:${row.id}`),
+      );
+      const additions = body.transactions.filter(
+        (row) => !seen.has(`${row.source}:${row.id}`),
+      );
+      const transactions = [...model.transactions, ...additions];
+      const nextVisibleCount = Math.min(
+        visibleCount + REVEAL_COUNT,
+        transactions.length,
+      );
+      setModel({ ...body, transactions });
+      setRevealedCount(nextVisibleCount);
+      setPaginationStatus(
+        additions.length > 0
+          ? `${nextVisibleCount} of ${body.totalTransactionCount} transactions visible.`
+          : "No additional transactions were available.",
+      );
+    } catch (reason) {
+      if (id !== continuationRequestId.current || view !== appliedView.current)
+        return;
+      setPaginationStatus("");
+      setPaginationError(
+        reason instanceof Error
+          ? reason.message
+          : "More transactions could not be loaded.",
+      );
+    } finally {
+      if (id === continuationRequestId.current) setPaginationLoading(false);
+    }
+  }
+
   const busy = loading || isPending;
-  const rows = model.transactions;
+  const loadedRows = model.transactions;
+  const rows = loadedRows.slice(0, visibleCount);
+  const totalTransactionCount =
+    model.totalTransactionCount ?? loadedRows.length;
+  const canShowMore =
+    rows.length < totalTransactionCount &&
+    (visibleCount < loadedRows.length || Boolean(model.nextCursor));
   const unknownAccount =
     filters.accountId !== "" &&
     !model.filterOptions.accounts.some(
@@ -312,7 +491,7 @@ export function TransactionExplorer({
     appliedFilters,
     model.filterOptions,
   );
-  const exportAvailable = !busy && rows.length > 0;
+  const exportAvailable = !busy && totalTransactionCount > 0;
   const exportReason = busy
     ? REFRESHING_REASON
     : rows.length === 0
@@ -762,6 +941,66 @@ export function TransactionExplorer({
           </div>
         )}
       </div>
+
+      <div className="border-line bg-panel flex flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p
+          data-testid="transactions-visible-count"
+          className="font-utility text-muted text-[.68rem] font-semibold tracking-[.12em] uppercase"
+        >
+          <span className="font-display text-ink text-lg tracking-normal tabular-nums">
+            {rows.length}
+          </span>{" "}
+          of {totalTransactionCount} transactions visible
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          {canShowMore && (
+            <button
+              type="button"
+              data-testid="transactions-show-more"
+              onClick={() => void revealMore()}
+              disabled={
+                paginationLoading || busy || readModelQuery !== exportQuery
+              }
+              aria-busy={paginationLoading || undefined}
+              className={`${pill} bg-mineral text-on-accent hover:bg-brand disabled:cursor-wait disabled:opacity-65 motion-reduce:transition-none`}
+            >
+              Show 10 more
+            </button>
+          )}
+          <p
+            data-testid="transactions-pagination-error"
+            role="alert"
+            className={
+              paginationError
+                ? "text-alert max-w-xs text-xs leading-5"
+                : "sr-only"
+            }
+          >
+            {paginationError}
+          </p>
+          {paginationError && (
+            <button
+              type="button"
+              data-testid="transactions-pagination-retry"
+              onClick={() => void revealMore()}
+              disabled={paginationLoading}
+              className={`${pill} border-alert text-alert hover:bg-alert/5 border disabled:cursor-wait disabled:opacity-65 motion-reduce:transition-none`}
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      </div>
+
+      <p
+        data-testid="transactions-pagination-status"
+        role="status"
+        aria-live="polite"
+        className="sr-only"
+      >
+        {paginationStatus}
+      </p>
     </section>
   );
 }
