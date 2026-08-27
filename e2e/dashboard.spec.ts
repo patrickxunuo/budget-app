@@ -387,7 +387,7 @@ test.describe("GH-63 spending-history interactive readings", () => {
     await expect(xTicks.last()).not.toHaveText("");
     const availableDays = await page
       .getByTestId("dashboard-comparison-table")
-      .getByRole("rowheader")
+      .locator('tbody th[scope="row"]')
       .count();
     await expect(xTicks).toHaveCount(Math.min(6, availableDays));
     await expect(
