@@ -328,6 +328,7 @@ function SelectBase({
     }
     if (event.key === "Escape" && open) {
       event.preventDefault();
+      event.stopPropagation();
       close(true);
       return;
     }
@@ -362,6 +363,7 @@ function SelectBase({
       choose(activeOption);
     } else if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       close(true);
     } else if (!searchable && event.key.length === 1 && /\S/.test(event.key)) {
       handleTypeahead(event.key);
@@ -371,7 +373,8 @@ function SelectBase({
   const menu = open && placement && (
     <div
       ref={menuRef}
-      className="piggy-select-menu border-line bg-surface text-ink fixed z-[1000] overflow-hidden rounded-xl border shadow-[0_20px_55px_color-mix(in_srgb,var(--ink)_20%,transparent)]"
+      data-piggy-select-portal-for={triggerId}
+      className="piggy-select-menu border-line bg-surface text-ink fixed z-[1200] overflow-hidden rounded-xl border shadow-[0_20px_55px_color-mix(in_srgb,var(--ink)_20%,transparent)]"
       style={{
         left: placement.left,
         top: placement.top,

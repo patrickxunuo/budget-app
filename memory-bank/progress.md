@@ -6,6 +6,10 @@ GH-31, GH-32, GH-33, GH-35, and GH-44 are closed and on `main`. GH-51 and GH-26 
 
 ## Log
 
+- 2026-08-27T00:42Z [READY] GH-66 makes Transactions compact and information-first on mobile with complete 2x2 totals, modal advanced filters/chips, date-grouped wrapping ledger rows, source-authorized read-only detail sheets, deterministic 23-row browser fixtures, and preserved desktop review/export. Full 1009/1009 Vitest, formatting, lint, typecheck, build, Playwright discovery, and independent review are green; the single configured browser run reached no cases before exposing the now-fixed initial route collision, so no local browser pass is claimed.
+
+- 2026-08-26T23:30Z [PLANNED] GH-66 will make Transactions compact and information-first on mobile with direct hierarchy, a 2x2 complete summary, modal advanced filters and removable chips, a date-grouped dense ledger, source-authorized read-only details, retained desktop review/export, and component/API/Playwright coverage.
+
 - 2026-08-26T23:00Z [READY] GH-65 adds opaque deterministic cursor pagination, complete filtered counts, responsive 10/50-row reveal, buffered continuation/retry, and plain-URL default reconciliation to Transactions. Focused 77/77 and full 983/983 Vitest, lint, typecheck, format, build, and independent review are green; Playwright authored but fixture-limited (83 pass/124 skip/25 environment failures overall, no GH-65 browser assertion reached).
 
 - 2026-08-26T22:11Z [PLANNED] GH-65 will add deterministic opaque cursor pagination to the transaction read model, complete filtered counts, responsive 10-row mobile reveal and 50-row desktop first paint, continuation retry without lost state, URL-default reconciliation, and service/component/Playwright coverage beyond 50 rows.

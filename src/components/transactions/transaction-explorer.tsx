@@ -10,10 +10,19 @@ import {
   useTransition,
 } from "react";
 import { SearchableSelect, Select } from "@/components/select";
+import {
+  TransactionDetailSheet,
+  type TransactionDetailSelection,
+} from "@/components/transactions/transaction-detail-sheet";
+import { TransactionFeed } from "@/components/transactions/transaction-feed";
+import { TransactionFilterSheet } from "@/components/transactions/transaction-filter-sheet";
 import { TransactionManagementMenu } from "@/components/transactions/transaction-management-navigation";
 import { usePendingAction } from "@/hooks/use-pending-action";
 import { moveReference } from "@/lib/dashboard/domain";
-import type { DashboardReadModel } from "@/lib/dashboard/types";
+import type {
+  DashboardReadModel,
+  DashboardTransaction,
+} from "@/lib/dashboard/types";
 import { formatLocalDate } from "@/lib/transactions/accounting";
 import {
   describeActiveFilters,
@@ -127,6 +136,9 @@ export function TransactionExplorer({
   );
   const { pending: loading, run } = usePendingAction({ strategy: "latest" });
   const [error, setError] = useState("");
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [detailSelection, setDetailSelection] =
+    useState<TransactionDetailSelection | null>(null);
   const isDesktopViewport = useSyncExternalStore(
     subscribeToDesktopViewport,
     getDesktopViewportSnapshot,
@@ -501,60 +513,216 @@ export function TransactionExplorer({
   const appliedExplorerQuery = toExplorerSearchParams(appliedFilters);
   const returnTo = `/transactions?${appliedExplorerQuery}`;
 
+  const filterChips: Array<{
+    field: string;
+    label: string;
+    clear: Partial<ExplorerFilters>;
+  }> = [];
+  if (appliedFilters.accountId) {
+    filterChips.push({
+      field: "account",
+      label:
+        model.filterOptions.accounts.find(
+          (account) => account.id === appliedFilters.accountId,
+        )?.name ?? "Unavailable account",
+      clear: { accountId: "" },
+    });
+  }
+  if (appliedFilters.categoryId) {
+    filterChips.push({
+      field: "category",
+      label:
+        model.filterOptions.categories.find(
+          (category) => category.id === appliedFilters.categoryId,
+        )?.name ?? "Unavailable category",
+      clear: { categoryId: "" },
+    });
+  }
+  if (appliedFilters.status !== "all") {
+    filterChips.push({
+      field: "status",
+      label: appliedFilters.status,
+      clear: { status: "all" },
+    });
+  }
+  if (appliedFilters.inclusion !== "default") {
+    filterChips.push({
+      field: "inclusion",
+      label: appliedFilters.inclusion,
+      clear: { inclusion: "default" },
+    });
+  }
+  if (
+    appliedFilters.period === "custom" &&
+    appliedFilters.from &&
+    appliedFilters.to
+  ) {
+    filterChips.push({
+      field: "dates",
+      label: `${appliedFilters.from} to ${appliedFilters.to}`,
+      clear: { period: "month", from: "", to: "" },
+    });
+  }
+
+  const emptyState = (
+    <div
+      data-testid="transactions-empty-state"
+      className="bg-panel px-6 py-12 text-center"
+    >
+      <p className="font-display text-2xl font-semibold">
+        No matching transactions.
+      </p>
+      {activeFilters.length > 0 ? (
+        <>
+          <p className="text-muted mx-auto mt-2 max-w-md text-sm leading-6">
+            Nothing in {rangeLabel} survives every filter you have applied:
+          </p>
+          <ul className="mt-3 flex flex-wrap justify-center gap-2">
+            {activeFilters.map((label) => (
+              <li
+                key={label}
+                className="border-line text-muted font-utility rounded-full border px-3 py-1 text-xs"
+              >
+                {label}
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted mx-auto mt-4 max-w-md text-sm leading-6">
+            Widen one of them, or step to another period.
+          </p>
+        </>
+      ) : (
+        <p className="text-muted mx-auto mt-2 max-w-md text-sm leading-6">
+          {rangeLabel} has no recorded {model.scope} activity. Step to another
+          period, or use Manage to record it in the Manual/Cash register.
+        </p>
+      )}
+    </div>
+  );
+
+  function selectTransaction(
+    row: DashboardTransaction,
+    trigger: HTMLButtonElement,
+  ) {
+    setDetailSelection({ id: row.id, source: row.source, trigger });
+  }
+
   return (
     <section
       data-testid="transactions-explorer"
       aria-labelledby="transactions-explorer-title"
-      className="mb-14 grid min-w-0 gap-5"
+      className="mb-14 grid min-w-0 gap-4 md:gap-5"
     >
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p className="font-utility text-brand text-[.62rem] font-semibold tracking-[.16em] uppercase">
-            Exploration · {model.scope} ledger
-          </p>
-          <h2
-            id="transactions-explorer-title"
-            className="font-display mt-2 text-3xl leading-none font-semibold tracking-[-.035em]"
-          >
-            Narrow it, then take it with you.
-          </h2>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <div
-            role="group"
-            aria-label="Privacy scope"
-            className="border-line bg-panel flex rounded-full border p-1"
-          >
-            {(["family", "personal"] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                data-testid={`transactions-scope-${option}`}
-                aria-pressed={filters.scope === option}
-                onClick={() => chooseScope(option)}
-                className={`${pill} capitalize ${
-                  filters.scope === option
-                    ? "bg-brand text-on-accent"
-                    : "text-muted hover:text-ink"
-                }`}
-              >
-                {option}
-              </button>
-            ))}
+      <header className="grid min-w-0 gap-3">
+        <div className="flex min-w-0 items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-utility text-brand text-[.62rem] font-semibold tracking-[.16em] uppercase">
+              {model.scope} ledger
+            </p>
+            <h2 id="transactions-explorer-title" className="sr-only">
+              Transaction activity
+            </h2>
           </div>
-          <TransactionManagementMenu
-            scope={appliedFilters.scope}
-            returnTo={returnTo}
-          />
+          <div className="hidden md:block">
+            <TransactionManagementMenu
+              scope={appliedFilters.scope}
+              returnTo={returnTo}
+            />
+          </div>
         </div>
+        <p
+          data-testid="transactions-range-label"
+          className="font-display text-lg font-semibold tracking-[-.02em] md:text-xl"
+        >
+          {rangeLabel}
+        </p>
+        <p
+          data-testid="transactions-visible-count"
+          className="font-utility text-muted text-[.66rem] font-semibold tracking-[.12em] uppercase"
+        >
+          <span className="font-display text-ink text-lg tracking-normal tabular-nums">
+            {rows.length}
+          </span>{" "}
+          of {totalTransactionCount} transactions visible
+        </p>
+      </header>
+
+      <div
+        role="group"
+        aria-label="Privacy scope"
+        className="border-line bg-panel grid grid-cols-2 rounded-full border p-1 md:ml-auto md:flex md:w-fit"
+      >
+        {(["family", "personal"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            data-testid={`transactions-scope-${option}`}
+            aria-pressed={filters.scope === option}
+            onClick={() => chooseScope(option)}
+            className={`${pill} capitalize ${
+              filters.scope === option
+                ? "bg-brand text-on-accent"
+                : "text-muted hover:text-ink"
+            }`}
+          >
+            {option}
+          </button>
+        ))}
       </div>
 
-      <div className="border-line bg-surface grid min-w-0 gap-4 rounded-2xl border p-4 sm:p-5">
-        <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
+      <div
+        aria-label="Filtered totals"
+        role="group"
+        className="border-line bg-line grid grid-cols-2 gap-px overflow-hidden rounded-2xl border xl:grid-cols-4"
+      >
+        {[
+          {
+            label: "Income",
+            value: cad(model.summary.incomeCents),
+            testId: "transactions-summary-income",
+          },
+          {
+            label: "Spending",
+            value: cad(model.summary.spendingCents),
+            testId: "transactions-summary-spending",
+          },
+          {
+            label: "Net flow",
+            value: cad(model.summary.netFlowCents),
+            testId: "transactions-summary-net",
+          },
+          {
+            label: "Pending",
+            value: `${cad(model.summary.pendingAmountCents)} · ${model.summary.pendingCount}`,
+            testId: "transactions-summary-pending",
+          },
+        ].map((tile) => (
+          <article
+            key={tile.testId}
+            className="bg-surface min-w-0 px-3 py-3 md:px-5 md:py-4"
+          >
+            <p className="font-utility text-muted truncate text-[.55rem] font-semibold tracking-[.12em] uppercase md:text-[.62rem]">
+              {tile.label}
+            </p>
+            <p
+              data-testid={tile.testId}
+              className="font-display text-ink mt-1 truncate text-lg font-semibold tabular-nums md:mt-3 md:text-2xl"
+            >
+              {tile.value}
+            </p>
+          </article>
+        ))}
+        <p className="bg-surface text-muted col-span-2 px-4 py-2 text-[.68rem] leading-5 md:px-5 md:py-3 md:text-xs xl:col-span-4">
+          Complete filtered totals, independent of the visible page.
+        </p>
+      </div>
+
+      <div className="border-line bg-surface grid min-w-0 gap-4 rounded-2xl border p-4 md:p-5">
+        <div className="grid min-w-0 gap-3 md:flex md:flex-wrap md:items-center">
           <div
             role="group"
             aria-label="Accounting period"
-            className="flex flex-wrap gap-2"
+            className="grid min-w-0 grid-cols-4 gap-1.5 md:flex md:flex-wrap md:gap-2"
           >
             {PERIODS.map((period) => (
               <button
@@ -570,7 +738,7 @@ export function TransactionExplorer({
                       : period.label
                 }
                 onClick={() => choosePeriod(period.value)}
-                className={`${pill} border ${
+                className={`${pill} min-w-0 border px-2 md:px-4 ${
                   filters.period === period.value
                     ? "border-brand bg-brand text-on-accent"
                     : "border-line text-muted hover:text-ink"
@@ -580,30 +748,58 @@ export function TransactionExplorer({
               </button>
             ))}
           </div>
-          <div className="flex gap-2 sm:ml-auto">
+          <div className="grid grid-cols-2 gap-2 md:ml-auto md:flex">
             <button
               type="button"
               data-testid="transactions-previous-period"
               aria-label="Previous period"
               onClick={() => stepPeriod(-1)}
-              className={`${pill} border-line text-ink hover:bg-panel flex-1 border`}
+              className={`${pill} border-line text-ink hover:bg-panel size-11 border !px-0 md:size-auto md:!px-3`}
             >
-              Previous
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 20 20"
+                className="size-4"
+                fill="none"
+              >
+                <path
+                  d="m12 5-5 5 5 5"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="hidden md:ml-2 md:inline">Previous</span>
             </button>
             <button
               type="button"
               data-testid="transactions-next-period"
               aria-label="Next period"
               onClick={() => stepPeriod(1)}
-              className={`${pill} border-line text-ink hover:bg-panel flex-1 border`}
+              className={`${pill} border-line text-ink hover:bg-panel size-11 border !px-0 md:size-auto md:!px-3`}
             >
-              Next
+              <span className="hidden md:mr-2 md:inline">Next</span>
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 20 20"
+                className="size-4"
+                fill="none"
+              >
+                <path
+                  d="m8 5 5 5-5 5"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
           </div>
         </div>
 
-        {filters.period === "custom" && (
-          <div className="border-line bg-panel grid gap-3 rounded-xl border p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        {filters.period === "custom" && !filterSheetOpen && (
+          <div className="border-line bg-panel hidden gap-3 rounded-xl border p-3 md:grid md:grid-cols-[1fr_1fr_auto] md:items-end">
             <label className={fieldLabel}>
               From
               <input
@@ -635,33 +831,14 @@ export function TransactionExplorer({
               data-testid="transactions-custom-apply"
               onClick={applyCustomRange}
               disabled={!customRangeReady}
-              className={`${pill} bg-brand text-on-accent disabled:cursor-not-allowed disabled:opacity-50`}
+              className={`${pill} bg-brand text-on-accent disabled:opacity-50`}
             >
               Apply range
             </button>
-            <p className="text-muted col-span-full text-xs leading-5">
-              {customRangeReady
-                ? "Previous and Next then step by whole range lengths."
-                : "Choose a start and an end date; the end cannot precede the start."}
-            </p>
           </div>
         )}
 
-        <div className="border-line flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t pt-4">
-          <p
-            data-testid="transactions-range-label"
-            className="font-display text-xl font-semibold tracking-[-.02em]"
-          >
-            {rangeLabel}
-          </p>
-          <p className="font-utility text-muted text-[.62rem] tracking-[.14em] uppercase">
-            {model.timeZone} · {rows.length}
-            {rows.length === DISPLAY_LIMIT ? " newest" : ""} line
-            {rows.length === 1 ? "" : "s"} shown
-          </p>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 md:grid-cols-1">
           <label className={fieldLabel}>
             Search
             <input
@@ -674,91 +851,139 @@ export function TransactionExplorer({
               className={field}
             />
           </label>
-          <label className={fieldLabel}>
-            Account
-            <Select
-              data-testid="transactions-account-filter"
-              value={filters.accountId}
-              onValueChange={(accountId) => update({ accountId })}
-              options={[
-                { value: "", label: "All accounts" },
-                ...model.filterOptions.accounts.map((account) => ({
-                  value: account.id,
-                  label: account.name,
-                })),
-                ...(unknownAccount
-                  ? [
-                      {
-                        value: filters.accountId,
-                        label: "Unavailable account",
-                      },
-                    ]
-                  : []),
-              ]}
-              className={field}
-            />
-          </label>
-          <label className={fieldLabel}>
-            Category
-            <SearchableSelect
-              data-testid="transactions-category-filter"
-              value={filters.categoryId}
-              onValueChange={(categoryId) => update({ categoryId })}
-              placeholder="All categories"
-              searchPlaceholder="Search categories"
-              emptyMessage="No categories match"
-              options={[
-                { value: "", label: "All categories" },
-                ...model.filterOptions.categories.map((category) => ({
-                  value: category.id,
-                  label: category.name,
-                })),
-                ...(unknownCategory
-                  ? [
-                      {
-                        value: filters.categoryId,
-                        label: "Unavailable category",
-                      },
-                    ]
-                  : []),
-              ]}
-              className={field}
-            />
-          </label>
-          <label className={fieldLabel}>
-            Status
-            <Select
-              data-testid="transactions-status-filter"
-              value={filters.status}
-              onValueChange={(status) =>
-                update({ status: status as ExplorerStatus })
-              }
-              options={STATUS_OPTIONS}
-              className={field}
-            />
-          </label>
-          <label className={fieldLabel}>
-            Inclusion
-            <Select
-              data-testid="transactions-inclusion-filter"
-              value={filters.inclusion}
-              onValueChange={(inclusion) =>
-                update({ inclusion: inclusion as ExplorerInclusion })
-              }
-              options={INCLUSION_OPTIONS}
-              className={field}
-            />
-          </label>
+          {!isDesktopViewport && (
+            <div className="self-end">
+              <TransactionFilterSheet
+                filters={filters}
+                accounts={model.filterOptions.accounts}
+                categories={model.filterOptions.categories}
+                unknownAccount={unknownAccount}
+                unknownCategory={unknownCategory}
+                draftFrom={draftFrom}
+                draftTo={draftTo}
+                customRangeReady={customRangeReady}
+                onOpenChange={setFilterSheetOpen}
+                onUpdate={(patch) => update(patch)}
+                onDraftFrom={(value) => {
+                  customRangeTouched.current = true;
+                  setDraftFrom(value);
+                }}
+                onDraftTo={(value) => {
+                  customRangeTouched.current = true;
+                  setDraftTo(value);
+                }}
+                onApplyCustomRange={applyCustomRange}
+              />
+            </div>
+          )}
         </div>
 
-        <div className="border-line flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-          <div className="w-full min-w-0 sm:w-auto sm:flex-1">
+        {!filterSheetOpen && (
+          <div className="hidden gap-3 md:grid md:grid-cols-2 xl:grid-cols-4">
+            <label className={fieldLabel}>
+              Account
+              <Select
+                data-testid="transactions-account-filter"
+                value={filters.accountId}
+                onValueChange={(accountId) => update({ accountId })}
+                options={[
+                  { value: "", label: "All accounts" },
+                  ...model.filterOptions.accounts.map((account) => ({
+                    value: account.id,
+                    label: account.name,
+                  })),
+                  ...(unknownAccount
+                    ? [
+                        {
+                          value: filters.accountId,
+                          label: "Unavailable account",
+                        },
+                      ]
+                    : []),
+                ]}
+                className={field}
+              />
+            </label>
+            <label className={fieldLabel}>
+              Category
+              <SearchableSelect
+                data-testid="transactions-category-filter"
+                value={filters.categoryId}
+                onValueChange={(categoryId) => update({ categoryId })}
+                placeholder="All categories"
+                searchPlaceholder="Search categories"
+                emptyMessage="No categories match"
+                options={[
+                  { value: "", label: "All categories" },
+                  ...model.filterOptions.categories.map((category) => ({
+                    value: category.id,
+                    label: category.name,
+                  })),
+                  ...(unknownCategory
+                    ? [
+                        {
+                          value: filters.categoryId,
+                          label: "Unavailable category",
+                        },
+                      ]
+                    : []),
+                ]}
+                className={field}
+              />
+            </label>
+            <label className={fieldLabel}>
+              Status
+              <Select
+                data-testid="transactions-status-filter"
+                value={filters.status}
+                onValueChange={(status) =>
+                  update({ status: status as ExplorerStatus })
+                }
+                options={STATUS_OPTIONS}
+                className={field}
+              />
+            </label>
+            <label className={fieldLabel}>
+              Inclusion
+              <Select
+                data-testid="transactions-inclusion-filter"
+                value={filters.inclusion}
+                onValueChange={(inclusion) =>
+                  update({ inclusion: inclusion as ExplorerInclusion })
+                }
+                options={INCLUSION_OPTIONS}
+                className={field}
+              />
+            </label>
+          </div>
+        )}
+
+        <div
+          data-testid="transactions-filter-chips"
+          aria-label="Applied filters"
+          className={
+            filterChips.length > 0 ? "flex min-w-0 flex-wrap gap-2" : "sr-only"
+          }
+        >
+          {filterChips.map((chip) => (
+            <button
+              key={chip.field}
+              type="button"
+              data-testid={`transactions-filter-chip-${chip.field}`}
+              aria-label={`Remove ${chip.label} filter`}
+              onClick={() => update(chip.clear)}
+              className="border-line bg-panel focus-visible:outline-focus inline-flex min-h-11 max-w-full items-center gap-2 rounded-full border px-3 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              <span className="truncate">{chip.label}</span>
+              <span aria-hidden="true">×</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="border-line hidden items-center justify-between gap-3 border-t pt-4 md:flex">
+          <div className="min-w-0">
             <p className="font-utility text-muted text-[.62rem] font-semibold tracking-[.14em] uppercase">
               Portable ledger
-            </p>
-            <p className="text-muted mt-1 text-sm leading-5">
-              Downloads exactly the {model.scope} view on screen as a safe UTF-8
-              CSV.
             </p>
             <p
               id="transactions-export-reason"
@@ -776,7 +1001,6 @@ export function TransactionExplorer({
                 : undefined
             }
             download
-            role={exportAvailable ? undefined : "link"}
             tabIndex={0}
             aria-disabled={exportAvailable ? undefined : true}
             aria-busy={busy || undefined}
@@ -786,7 +1010,7 @@ export function TransactionExplorer({
             }}
             className={`${pill} hidden border-2 md:inline-flex ${
               exportAvailable
-                ? "border-brand text-brand hover:bg-brand hover:text-on-accent transition-colors"
+                ? "border-brand text-brand hover:bg-brand hover:text-on-accent"
                 : "border-line text-muted cursor-not-allowed opacity-60"
             }`}
           >
@@ -803,7 +1027,6 @@ export function TransactionExplorer({
       >
         {busy ? REFRESHING_REASON : ""}
       </p>
-
       <p
         data-testid="transactions-error"
         role="alert"
@@ -816,181 +1039,48 @@ export function TransactionExplorer({
         {error}
       </p>
 
-      <div
-        aria-label="Filtered totals"
-        role="group"
-        className="border-line bg-line grid gap-px overflow-hidden rounded-2xl border sm:grid-cols-2 xl:grid-cols-4"
-      >
-        {[
-          {
-            label: "Income",
-            value: cad(model.summary.incomeCents),
-            testId: "transactions-summary-income",
-          },
-          {
-            label: "Spending after refunds",
-            value: cad(model.summary.spendingCents),
-            testId: "transactions-summary-spending",
-          },
-          {
-            label: "Net flow",
-            value: cad(model.summary.netFlowCents),
-            testId: "transactions-summary-net",
-          },
-        ].map((tile) => (
-          <article key={tile.testId} className="bg-surface px-5 py-4">
-            <p className="font-utility text-muted text-[.62rem] font-semibold tracking-[.14em] uppercase">
-              {tile.label}
-            </p>
-            <p
-              data-testid={tile.testId}
-              className="font-display text-ink mt-3 text-2xl font-semibold tabular-nums"
-            >
-              {tile.value}
-            </p>
-          </article>
-        ))}
-        <article className="bg-panel px-5 py-4">
-          <p className="font-utility text-muted text-[.62rem] font-semibold tracking-[.14em] uppercase">
-            Pending
-          </p>
-          <p
-            data-testid="transactions-summary-pending"
-            className="font-display text-ink mt-3 text-2xl font-semibold tabular-nums"
-          >
-            {cad(model.summary.pendingAmountCents)} ·{" "}
-            {model.summary.pendingCount} pending
-          </p>
-        </article>
-        <p className="bg-surface text-muted col-span-full px-5 py-3 text-xs leading-5">
-          Totals cover the complete filtered set, not just the lines listed
-          below.
-        </p>
-      </div>
+      <TransactionFeed
+        rows={rows}
+        timeZone={model.timeZone}
+        onSelect={selectTransaction}
+        emptyState={emptyState}
+      />
 
-      <div
-        data-testid="transactions-result-list"
-        aria-label="Filtered transactions"
-        role="group"
-        className="border-line bg-surface min-w-0 overflow-hidden rounded-2xl border"
-      >
-        {rows.map((row) => (
-          <article
-            key={row.id}
-            data-testid={`transactions-result-${row.id}`}
-            className="border-line grid gap-2 border-b p-5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-          >
-            <div className="min-w-0">
-              <h3 className="font-display text-lg leading-tight font-semibold break-words">
-                {row.merchantOrDescription}
-              </h3>
-              <p className="text-muted mt-1 text-xs leading-5">
-                {row.date} · {row.source} · {row.scope} privacy ·{" "}
-                {row.pending ? "Pending" : "Posted"} · {row.kind}
-                {row.excluded ? " · Excluded" : ""}
-              </p>
-              <p className="text-muted text-xs leading-5">
-                {row.accountName ?? "Off-bank manual entry"} ·{" "}
-                {row.category?.name ?? "Uncategorized"}
-              </p>
-            </div>
-            <strong
-              className={`font-display text-xl font-semibold tabular-nums sm:text-right ${
-                row.amountCents > 0 ? "text-brand" : "text-ink"
-              }`}
-            >
-              {cad(row.amountCents)}
-            </strong>
-          </article>
-        ))}
-        {rows.length === 0 && (
-          <div
-            data-testid="transactions-empty-state"
-            className="bg-panel px-6 py-12 text-center"
-          >
-            <p className="font-display text-2xl font-semibold">
-              No matching transactions.
-            </p>
-            {activeFilters.length > 0 ? (
-              <>
-                <p className="text-muted mx-auto mt-2 max-w-md text-sm leading-6">
-                  Nothing in {rangeLabel} survives every filter you have
-                  applied:
-                </p>
-                <ul className="mt-3 flex flex-wrap justify-center gap-2">
-                  {activeFilters.map((label) => (
-                    <li
-                      key={label}
-                      className="border-line text-muted font-utility rounded-full border px-3 py-1 text-xs"
-                    >
-                      {label}
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-muted mx-auto mt-4 max-w-md text-sm leading-6">
-                  Widen one of them, or step to another period.
-                </p>
-              </>
-            ) : (
-              <p className="text-muted mx-auto mt-2 max-w-md text-sm leading-6">
-                {rangeLabel} has no recorded {model.scope} activity. Step to
-                another period, or use Manage to record it in the Manual/Cash
-                register.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="border-line bg-panel flex flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <p
-          data-testid="transactions-visible-count"
-          className="font-utility text-muted text-[.68rem] font-semibold tracking-[.12em] uppercase"
-        >
-          <span className="font-display text-ink text-lg tracking-normal tabular-nums">
-            {rows.length}
-          </span>{" "}
-          of {totalTransactionCount} transactions visible
-        </p>
-
-        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          {canShowMore && (
-            <button
-              type="button"
-              data-testid="transactions-show-more"
-              onClick={() => void revealMore()}
-              disabled={
-                paginationLoading || busy || readModelQuery !== exportQuery
-              }
-              aria-busy={paginationLoading || undefined}
-              className={`${pill} bg-mineral text-on-accent hover:bg-brand disabled:cursor-wait disabled:opacity-65 motion-reduce:transition-none`}
-            >
-              Show 10 more
-            </button>
-          )}
-          <p
-            data-testid="transactions-pagination-error"
-            role="alert"
-            className={
-              paginationError
-                ? "text-alert max-w-xs text-xs leading-5"
-                : "sr-only"
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
+        {canShowMore && (
+          <button
+            type="button"
+            data-testid="transactions-show-more"
+            onClick={() => void revealMore()}
+            disabled={
+              paginationLoading || busy || readModelQuery !== exportQuery
             }
+            aria-busy={paginationLoading || undefined}
+            className={`${pill} bg-mineral text-on-accent hover:bg-brand w-full disabled:cursor-wait disabled:opacity-65 md:w-auto`}
           >
-            {paginationError}
-          </p>
-          {paginationError && (
-            <button
-              type="button"
-              data-testid="transactions-pagination-retry"
-              onClick={() => void revealMore()}
-              disabled={paginationLoading}
-              className={`${pill} border-alert text-alert hover:bg-alert/5 border disabled:cursor-wait disabled:opacity-65 motion-reduce:transition-none`}
-            >
-              Retry
-            </button>
-          )}
-        </div>
+            Show 10 more
+          </button>
+        )}
+        <p
+          data-testid="transactions-pagination-error"
+          role="alert"
+          className={
+            paginationError ? "text-alert text-xs leading-5" : "sr-only"
+          }
+        >
+          {paginationError}
+        </p>
+        {paginationError && (
+          <button
+            type="button"
+            data-testid="transactions-pagination-retry"
+            onClick={() => void revealMore()}
+            disabled={paginationLoading}
+            className={`${pill} border-alert text-alert border disabled:opacity-65`}
+          >
+            Retry
+          </button>
+        )}
       </div>
 
       <p
@@ -1001,6 +1091,11 @@ export function TransactionExplorer({
       >
         {paginationStatus}
       </p>
+
+      <TransactionDetailSheet
+        selection={detailSelection}
+        onClose={() => setDetailSelection(null)}
+      />
     </section>
   );
 }
