@@ -337,6 +337,12 @@ describe("GH-30 transaction explorer", () => {
     expect(
       screen.getByTestId("transactions-summary-spending"),
     ).toHaveTextContent(/987\.65/);
+    expect(
+      screen.getByTestId("transactions-filter-chip-inclusion"),
+    ).toHaveTextContent("All lines");
+    expect(
+      screen.getByTestId("transactions-filter-chip-inclusion"),
+    ).toHaveAccessibleName("Remove All lines filter");
   });
 
   it("COMP-003 reads totals from the summary rather than the rendered rows", async () => {

@@ -1,4 +1,10 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+  type TestInfo,
+} from "@playwright/test";
 import { fixtureCredentials, requireFixture } from "./support/fixtures";
 import { chooseFirstSelectOption, chooseSelectOption } from "./support/select";
 
@@ -77,6 +83,22 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
 }
 
+async function openAdvancedTransactionFilters(page: Page): Promise<Locator> {
+  if ((page.viewportSize()?.width ?? 0) < 768) {
+    await page.getByTestId("transactions-filters-trigger").click();
+    const sheet = page.getByTestId("transactions-filter-sheet");
+    await expect(sheet).toBeVisible();
+    return sheet;
+  }
+  return page.locator("main");
+}
+
+async function closeAdvancedTransactionFilters(page: Page) {
+  if ((page.viewportSize()?.width ?? 0) >= 768) return;
+  await page.getByTestId("transactions-filter-close").click();
+  await expect(page.getByTestId("transactions-filter-sheet")).toBeHidden();
+}
+
 test.describe("GH-30 transaction exploration regression", () => {
   test("FE-002 previous, next, week, and custom period navigation refreshes real calendar ranges", async ({
     page,
@@ -98,11 +120,17 @@ test.describe("GH-30 transaction exploration regression", () => {
       page.getByTestId("transactions-period-week").click(),
     );
     await page.getByTestId("transactions-period-custom").click();
-    await page.getByTestId("transactions-custom-from").fill("2026-08-03");
-    await page.getByTestId("transactions-custom-to").fill("2026-08-09");
+    const advancedFilters = await openAdvancedTransactionFilters(page);
+    await advancedFilters
+      .getByTestId("transactions-custom-from")
+      .fill("2026-08-03");
+    await advancedFilters
+      .getByTestId("transactions-custom-to")
+      .fill("2026-08-09");
     await waitForTransactionsResponse(page, () =>
-      page.getByTestId("transactions-custom-apply").click(),
+      advancedFilters.getByTestId("transactions-custom-apply").click(),
     );
+    await closeAdvancedTransactionFilters(page);
     await expect(page.getByTestId("transactions-range-label")).toContainText(
       /Aug(?:ust)? 3|2026-08-03/i,
     );
@@ -117,20 +145,32 @@ test.describe("GH-30 transaction exploration regression", () => {
   }, testInfo) => {
     requireDashboardFixture();
     await openTransactions(page);
-    const account = page.getByTestId("transactions-account-filter");
-    const category = page.getByTestId("transactions-category-filter");
-    await chooseFirstSelectOption(account);
-    await chooseFirstSelectOption(category);
-    await chooseSelectOption(
-      page.getByTestId("transactions-status-filter"),
-      "Pending",
-      "pending",
+    const advancedFilters = await openAdvancedTransactionFilters(page);
+    const account = advancedFilters.getByTestId("transactions-account-filter");
+    const category = advancedFilters.getByTestId(
+      "transactions-category-filter",
     );
-    await chooseSelectOption(
-      page.getByTestId("transactions-inclusion-filter"),
-      "All lines",
-      "all",
+    await waitForTransactionsResponse(page, async () => {
+      await chooseFirstSelectOption(account);
+    });
+    await waitForTransactionsResponse(page, async () => {
+      await chooseFirstSelectOption(category);
+    });
+    await waitForTransactionsResponse(page, () =>
+      chooseSelectOption(
+        advancedFilters.getByTestId("transactions-status-filter"),
+        "Pending",
+        "pending",
+      ),
     );
+    await waitForTransactionsResponse(page, () =>
+      chooseSelectOption(
+        advancedFilters.getByTestId("transactions-inclusion-filter"),
+        "All lines",
+        "all",
+      ),
+    );
+    await closeAdvancedTransactionFilters(page);
     await waitForTransactionsResponse(page, async () => {
       await page.getByTestId("transactions-search").fill("a");
       await page.getByTestId("transactions-search").press("Enter");

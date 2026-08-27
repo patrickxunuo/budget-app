@@ -548,7 +548,10 @@ export function TransactionExplorer({
   if (appliedFilters.inclusion !== "default") {
     filterChips.push({
       field: "inclusion",
-      label: appliedFilters.inclusion,
+      label:
+        INCLUSION_OPTIONS.find(
+          (option) => option.value === appliedFilters.inclusion,
+        )?.label ?? appliedFilters.inclusion,
       clear: { inclusion: "default" },
     });
   }
