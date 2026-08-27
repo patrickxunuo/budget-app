@@ -16,6 +16,8 @@ Project memory. Read this file first to find what you need.
 
 ## Last Updated
 
+2026-08-27 — GH-66 makes the Transactions overview compact and information-first on mobile, with modal advanced filters, a wrapping grouped ledger, source-authorized read-only details, portaled modal focus rules, and deterministic mixed-source E2E fixtures. See `systemPatterns.md` and `testBaseline.md`.
+
 2026-08-26 — GH-65 adds deterministic opaque cursor pagination and complete result counts to Transactions, with responsive buffered reveal, continuation retry, request-current guards, and current-date plain-URL reconciliation. See `systemPatterns.md` and `testBaseline.md`.
 
 2026-08-26 — GH-64 separates the read-only Transactions overview from Manual/Cash and Plaid management routes, with safe scope-preserving navigation, desktop-only exports, and route-specific loading contracts. See `systemPatterns.md` and `testBaseline.md`.

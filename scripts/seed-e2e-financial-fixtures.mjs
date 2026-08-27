@@ -20,6 +20,12 @@ const FIXTURE = Object.freeze({
   categoryId: "e2000000-0000-4000-8000-000000000038",
   budgetId: "e2000000-0000-4000-8000-000000000039",
   transactionId: "e2000000-0000-4000-8000-000000000040",
+  manualTransactionId: "e2000000-0000-4000-8000-000000000080",
+  informationFirstTransactionIds: Array.from(
+    { length: 21 },
+    (_, index) =>
+      `e2000000-0000-4000-8000-0000000000${String(41 + index).padStart(2, "0")}`,
+  ),
   plaidItemProviderId: "e2e-gh35-dashboard-item",
   availableAccountProviderId: "e2e-gh35-family-chequing",
   unavailableAccountProviderId: "e2e-gh35-family-unavailable",
@@ -314,11 +320,101 @@ resultOrFail(
       kind_override: null,
       merchant_rule_id: null,
       excluded: false,
+      note: "GH-66 complete metadata fixture",
     },
     { onConflict: "transaction_id" },
   ),
 );
 
+const informationFirstMonth = transactionDate.slice(0, 7);
+const informationFirstPendingDate = `${informationFirstMonth}-28`;
+const informationFirstDates = Array.from(
+  { length: 7 },
+  (_, index) =>
+    `${informationFirstMonth}-${String(index + 1).padStart(2, "0")}`,
+);
+const informationFirstTransactions = FIXTURE.informationFirstTransactionIds.map(
+  (id, index) => ({
+    id,
+    workspace_id: workspaceId,
+    account_id: FIXTURE.availableAccountId,
+    plaid_transaction_id: `e2e-gh66-ledger-${String(index + 1).padStart(2, "0")}`,
+    amount: 1 + index / 100,
+    currency_code: "CAD",
+    authorized_date:
+      index === 0
+        ? informationFirstPendingDate
+        : informationFirstDates[index % informationFirstDates.length],
+    transaction_date:
+      index === 0
+        ? informationFirstPendingDate
+        : informationFirstDates[index % informationFirstDates.length],
+    merchant_name: `GH-66 Ledger Merchant ${String(index + 1).padStart(2, "0")}`,
+    name: `GH-66 deterministic excluded transaction ${String(index + 1).padStart(2, "0")}`,
+    pending: index === 0,
+    pending_transaction_id: null,
+    removed_at: null,
+    provider_payload: {
+      stableMerchantId: `e2e-gh66-merchant-${index + 1}`,
+      personalFinanceCategory: {
+        primary: "GENERAL_MERCHANDISE",
+        detailed: "GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE",
+      },
+      fixture: "GH-66",
+    },
+  }),
+);
+
+resultOrFail(
+  "reconciling GH-66 information-first Plaid rows",
+  await admin
+    .from("transactions")
+    .upsert(informationFirstTransactions, { onConflict: "id" }),
+);
+
+resultOrFail(
+  "reconciling GH-66 exceptional transaction metadata",
+  await admin.from("transaction_metadata").upsert(
+    FIXTURE.informationFirstTransactionIds.map((transactionId, index) => ({
+      transaction_id: transactionId,
+      workspace_id: workspaceId,
+      updated_by: user.id,
+      scope: "family",
+      owner_profile_id: null,
+      category_id: FIXTURE.categoryId,
+      kind_override: null,
+      merchant_rule_id: null,
+      excluded: true,
+      note: index === 0 ? "Pending and excluded GH-66 fixture" : null,
+    })),
+    { onConflict: "transaction_id" },
+  ),
+);
+
+resultOrFail(
+  "reconciling GH-66 manual information-first row",
+  await admin.from("manual_entries").upsert(
+    {
+      id: FIXTURE.manualTransactionId,
+      workspace_id: workspaceId,
+      created_by: user.id,
+      last_edited_by: user.id,
+      scope: "family",
+      owner_profile_id: null,
+      kind: "income",
+      amount: 1,
+      currency_code: "CAD",
+      entry_date: transactionDate,
+      description: "GH-66 Manual Cash Adjustment",
+      category_id: FIXTURE.categoryId,
+      notes: "Deterministic manual detail note",
+      archived_at: null,
+      deleted_at: null,
+      deleted_by: null,
+    },
+    { onConflict: "id" },
+  ),
+);
 const assignments = [
   `E2E_DASHBOARD_MEMBER_EMAIL=${email}`,
   `E2E_DASHBOARD_MEMBER_PASSWORD=${password}`,

@@ -337,6 +337,12 @@ describe("GH-30 transaction explorer", () => {
     expect(
       screen.getByTestId("transactions-summary-spending"),
     ).toHaveTextContent(/987\.65/);
+    expect(
+      screen.getByTestId("transactions-filter-chip-inclusion"),
+    ).toHaveTextContent("All lines");
+    expect(
+      screen.getByTestId("transactions-filter-chip-inclusion"),
+    ).toHaveAccessibleName("Remove All lines filter");
   });
 
   it("COMP-003 reads totals from the summary rather than the rendered rows", async () => {
@@ -1195,4 +1201,462 @@ it("GH-65 FE-007 reconciles a historical narrowed surface to current Toronto def
   expect(resultRows()).toHaveLength(10);
   expect(screen.queryByTestId("transactions-result-page-row-000")).toBeNull();
   expect(screen.queryByTestId("transactions-pagination-retry")).toBeNull();
+});
+
+const GH66_PLAID_ID = "60000000-0000-4000-8000-000000000001";
+const GH66_MANUAL_ID = "60000000-0000-4000-8000-000000000002";
+
+const informationFirstModel: DashboardReadModel = {
+  ...initialModel,
+  transactions: [
+    {
+      ...pendingRow,
+      id: GH66_PLAID_ID,
+      date: "2026-08-12",
+      merchantOrDescription: "Green Market",
+      pending: true,
+    },
+    {
+      ...refundRow,
+      id: GH66_MANUAL_ID,
+      date: "2026-08-11",
+      merchantOrDescription: "Cash adjustment",
+      excluded: true,
+    },
+    {
+      ...excludedTransferRow,
+      id: "60000000-0000-4000-8000-000000000003",
+      date: "2026-08-10",
+      merchantOrDescription: "Ordinary posted purchase",
+      excluded: false,
+      kind: "spending",
+    },
+  ],
+  totalTransactionCount: 3,
+};
+
+const plaidDetail = {
+  id: GH66_PLAID_ID,
+  source: "plaid" as const,
+  date: "2026-08-12",
+  merchantOrDescription: "Green Market",
+  description: "GREEN MARKET TORONTO",
+  amountCents: -2500,
+  accountName: "Household Chequing",
+  scope: "family" as const,
+  state: "pending" as const,
+  kind: "spending" as const,
+  originalCategory: {
+    primary: "FOOD_AND_DRINK",
+    detailed: "FOOD_AND_DRINK_GROCERIES",
+  },
+  effectiveCategory: "Groceries",
+  excluded: false,
+  notes: "Weekly food shop",
+};
+
+function appearsBefore(first: HTMLElement, second: HTMLElement) {
+  return Boolean(
+    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+}
+
+describe("GH-66 mobile transactions information-first", () => {
+  it("FE-001 orders the 390px information hierarchy, keeps four compact totals, and exposes 44px targets", () => {
+    setDesktopMatches(false);
+    renderExplorer(informationFirstModel);
+
+    const heading = screen.getByRole("heading", {
+      level: 2,
+      name: "Transaction activity",
+    });
+    const range = screen.getByTestId("transactions-range-label");
+    const count = screen.getByTestId("transactions-visible-count");
+    const scope = screen.getByTestId("transactions-scope-family");
+    const income = screen.getByTestId("transactions-summary-income");
+    const spending = screen.getByTestId("transactions-summary-spending");
+    const net = screen.getByTestId("transactions-summary-net");
+    const pending = screen.getByTestId("transactions-summary-pending");
+    const period = screen.getByTestId("transactions-period-month");
+    const search = screen.getByTestId("transactions-search");
+    const filters = screen.getByTestId("transactions-filters-trigger");
+    const feed = screen.getByTestId("transactions-result-list");
+
+    expect(appearsBefore(heading, range)).toBe(true);
+    expect(appearsBefore(range, count)).toBe(true);
+    expect(appearsBefore(count, scope)).toBe(true);
+    expect(appearsBefore(scope, income)).toBe(true);
+    expect(appearsBefore(pending, period)).toBe(true);
+    expect(appearsBefore(period, search)).toBe(true);
+    expect(appearsBefore(filters, feed)).toBe(true);
+    for (const total of [income, spending, net, pending])
+      expect(total).toBeVisible();
+    expect(income.parentElement?.parentElement).toHaveClass("grid-cols-2");
+    const firstRow = screen.getByTestId(`transactions-result-${GH66_PLAID_ID}`);
+    for (const content of [
+      within(firstRow).getByText("Green Market"),
+      within(firstRow).getByText(/Household Chequing.*Groceries/i),
+    ]) {
+      expect(content).not.toHaveClass("truncate");
+      expect(content.className).toMatch(/whitespace-normal|break-words/);
+    }
+    for (const target of [scope, period, search, filters, ...resultRows()]) {
+      expect(target.className).toMatch(/min-h-(?:11|14)/);
+    }
+  });
+
+  it("FE-002 opens a labelled mobile filter modal, operates advanced/custom fields, traps focus, closes on Escape, and restores trigger focus", async () => {
+    setDesktopMatches(false);
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      respondWith(informationFirstModel),
+    );
+    renderExplorer(informationFirstModel);
+    const trigger = screen.getByTestId("transactions-filters-trigger");
+
+    fireEvent.click(screen.getByTestId("transactions-period-custom"));
+    fireEvent.click(trigger);
+    const sheet = screen.getByTestId("transactions-filter-sheet");
+    expect(sheet).toHaveAttribute("role", "dialog");
+    expect(sheet).toHaveAttribute("aria-modal", "true");
+    expect(sheet).toHaveAccessibleName(/filters/i);
+    expect(
+      within(sheet).getByTestId("transactions-account-filter"),
+    ).toBeVisible();
+    expect(
+      within(sheet).getByTestId("transactions-category-filter"),
+    ).toBeVisible();
+    expect(
+      within(sheet).getByTestId("transactions-status-filter"),
+    ).toBeVisible();
+    expect(
+      within(sheet).getByTestId("transactions-inclusion-filter"),
+    ).toBeVisible();
+    fireEvent.change(within(sheet).getByTestId("transactions-custom-from"), {
+      target: { value: "2026-08-01" },
+    });
+    fireEvent.change(within(sheet).getByTestId("transactions-custom-to"), {
+      target: { value: "2026-08-12" },
+    });
+    expect(screen.getByTestId("transactions-filter-count")).toHaveTextContent(
+      /1|2/,
+    );
+
+    const close = within(sheet).getByTestId("transactions-filter-close");
+    close.focus();
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(sheet).toContainElement(document.activeElement as HTMLElement);
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByTestId("transactions-filter-sheet")).toBeNull(),
+    );
+    expect(trigger).toHaveFocus();
+  });
+
+  it("FE-003 removes chips through the controller, resets mobile reveal depth, commits only successful URL state, and retains rows on failure", async () => {
+    setDesktopMatches(false);
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    const expanded = paginationModel(0, 25, null);
+    const narrowed = {
+      ...expanded,
+      transactions: expanded.transactions.slice(0, 18),
+      totalTransactionCount: 18,
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => respondWith(narrowed));
+    renderExplorer(expanded);
+    fireEvent.click(screen.getByTestId("transactions-show-more"));
+    expect(resultRows()).toHaveLength(20);
+
+    fireEvent.click(screen.getByTestId("transactions-filters-trigger"));
+    chooseFilter("transactions-status-filter", "Pending");
+    await waitFor(() => expect(resultRows()).toHaveLength(10));
+    await waitFor(() => expect(replaceState).toHaveBeenCalled());
+    expect(
+      new URL(
+        String(replaceState.mock.calls.at(-1)?.[2]),
+        "http://localhost",
+      ).searchParams.get("status"),
+    ).toBe("pending");
+    expect(screen.getByTestId("transactions-filter-chips")).toHaveTextContent(
+      /pending/i,
+    );
+
+    const retained = resultRows().map((row) => row.dataset.testid);
+    fetchMock.mockImplementationOnce(() =>
+      respondWith({ error: "Refresh failed." }, 503),
+    );
+    fireEvent.click(screen.getByTestId("transactions-filter-chip-status"));
+    await waitFor(() =>
+      expect(screen.getByTestId("transactions-error")).toHaveTextContent(
+        /try again|failed/i,
+      ),
+    );
+    expect(resultRows().map((row) => row.dataset.testid)).toEqual(retained);
+    expect(
+      new URL(
+        String(replaceState.mock.calls.at(-1)?.[2]),
+        "http://localhost",
+      ).searchParams.get("status"),
+    ).toBe("pending");
+  });
+
+  it("FE-004 groups the mixed feed by date with a dense two-line hierarchy and only exceptional badges", () => {
+    setDesktopMatches(false);
+    renderExplorer(informationFirstModel);
+
+    for (const date of ["2026-08-12", "2026-08-11", "2026-08-10"]) {
+      const heading = screen.getByTestId(`transactions-date-group-${date}`);
+      expect(heading).toBeVisible();
+      expect(heading.tagName).toMatch(/^H[2-6]$/);
+      expect(heading.closest("button,details,summary")).toBeNull();
+    }
+    const plaid = screen.getByTestId(`transactions-result-${GH66_PLAID_ID}`);
+    expect(plaid).toHaveTextContent(/green market.*25\.00/i);
+    expect(plaid).toHaveTextContent(/household chequing.*groceries/i);
+    expect(plaid).toHaveTextContent(/pending/i);
+    expect(plaid).not.toHaveTextContent(
+      /family privacy|plaid|spending|2026-08-12/i,
+    );
+    const manual = screen.getByTestId(`transactions-result-${GH66_MANUAL_ID}`);
+    expect(manual).toHaveTextContent(/manual/i);
+    expect(manual).toHaveTextContent(/excluded/i);
+    const ordinary = screen.getByTestId(
+      "transactions-result-60000000-0000-4000-8000-000000000003",
+    );
+    expect(ordinary).not.toHaveTextContent(
+      /family privacy|plaid|spending|2026-08-10/i,
+    );
+  });
+
+  it("FE-005 opens source-aware read-only detail, replaces the skeleton with all metadata, and restores focus and scroll on close", async () => {
+    setDesktopMatches(false);
+    let resolveDetail!: (response: Response) => void;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveDetail = resolve;
+        }),
+    );
+    const scrollTo = vi
+      .spyOn(window, "scrollTo")
+      .mockImplementation(() => undefined);
+    renderExplorer(informationFirstModel);
+    const row = screen.getByTestId(`transactions-result-${GH66_PLAID_ID}`);
+    row.focus();
+    fireEvent.click(row);
+
+    const sheet = screen.getByTestId("transaction-detail-sheet");
+    expect(sheet).toHaveAttribute("role", "dialog");
+    expect(screen.getByTestId("transaction-detail-loading")).toBeVisible();
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `/api/transactions/detail/plaid/${GH66_PLAID_ID}`,
+    );
+    expect(document.body.style.overflow).toBe("hidden");
+
+    await act(async () => {
+      resolveDetail(jsonResponse({ transaction: plaidDetail }));
+      await Promise.resolve();
+    });
+    const metadata = await screen.findByTestId("transaction-detail-metadata");
+    expect(sheet).toHaveTextContent(/Green Market/i);
+    for (const text of [
+      "GREEN MARKET TORONTO",
+      "Household Chequing",
+      "FOOD_AND_DRINK",
+      "Groceries",
+      "Weekly food shop",
+      "Pending",
+      "Family",
+    ]) {
+      expect(metadata).toHaveTextContent(new RegExp(text, "i"));
+    }
+    expect(
+      within(sheet).queryByRole("button", {
+        name: /edit|delete|categor|export|manage/i,
+      }),
+    ).toBeNull();
+    fireEvent.click(screen.getByTestId("transaction-detail-close"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("transaction-detail-sheet")).toBeNull(),
+    );
+    expect(row).toHaveFocus();
+    expect(document.body.style.overflow).toBe("");
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("FE-006 contains detail failure, retries the same source/id successfully, and leaves the feed usable after close", async () => {
+    setDesktopMatches(false);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() =>
+        respondWith({ error: "Detail unavailable." }, 503),
+      )
+      .mockImplementationOnce(() => respondWith({ transaction: plaidDetail }));
+    renderExplorer(informationFirstModel);
+    fireEvent.click(screen.getByTestId(`transactions-result-${GH66_PLAID_ID}`));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("transaction-detail-error")).toHaveTextContent(
+        /try again|unavailable/i,
+      ),
+    );
+    expect(screen.getByTestId("transactions-result-list")).toBeVisible();
+    fireEvent.click(screen.getByTestId("transaction-detail-retry"));
+    await screen.findByTestId("transaction-detail-metadata");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const call of fetchMock.mock.calls)
+      expect(String(call[0])).toBe(
+        `/api/transactions/detail/plaid/${GH66_PLAID_ID}`,
+      );
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByTestId("transaction-detail-sheet")).toBeNull(),
+    );
+    expect(
+      screen.getByTestId(`transactions-result-${GH66_MANUAL_ID}`),
+    ).toBeEnabled();
+  });
+
+  it("FE-007 reveals exactly 10 more mobile rows without resetting scroll and announces the new count", async () => {
+    setDesktopMatches(false);
+    const scrollTo = vi
+      .spyOn(window, "scrollTo")
+      .mockImplementation(() => undefined);
+    renderExplorer(paginationModel(0, 25, null));
+    fireEvent.click(screen.getByTestId("transactions-show-more"));
+    expect(resultRows()).toHaveLength(20);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("transactions-pagination-status"),
+      ).toHaveTextContent(/20.*visible|showing.*20/i),
+    );
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("FE-008 keeps the 50-row desktop review surface, inline filters, Manage, and compact CSV export", async () => {
+    setDesktopMatches(true);
+    renderExplorer(paginationModel(0, 50, null));
+    await waitFor(() => expect(resultRows()).toHaveLength(50));
+    for (const id of [
+      "transactions-account-filter",
+      "transactions-category-filter",
+      "transactions-status-filter",
+      "transactions-inclusion-filter",
+    ]) {
+      expect(screen.getByTestId(id)).toBeVisible();
+    }
+    expect(screen.queryByTestId("transactions-filters-trigger")).toBeNull();
+    expect(
+      within(screen.getByTestId("transactions-manage-menu")).getByText(
+        /^Manage$/,
+      ),
+    ).toBeVisible();
+    expect(screen.getByTestId("transactions-export-csv")).toBeVisible();
+  });
+});
+
+function installMutableDesktopMatchMedia(initialDesktop = false) {
+  let desktop = initialDesktop;
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const media = {
+    get matches() {
+      return desktop;
+    },
+    media: "(min-width: 768px)",
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(
+      (type: string, listener: (event: MediaQueryListEvent) => void) => {
+        if (type === "change") listeners.add(listener);
+      },
+    ),
+    removeEventListener: vi.fn(
+      (type: string, listener: (event: MediaQueryListEvent) => void) => {
+        if (type === "change") listeners.delete(listener);
+      },
+    ),
+    dispatchEvent: vi.fn(),
+  };
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => media),
+  });
+  return {
+    setDesktop(next: boolean) {
+      desktop = next;
+      const event = {
+        matches: next,
+        media: media.media,
+      } as MediaQueryListEvent;
+      for (const listener of listeners) listener(event);
+    },
+  };
+}
+
+describe("GH-66 modal portal and responsive ownership regressions", () => {
+  it("FE-002 keeps focus inside the mobile sheet plus its portaled searchable category, and Escape unwinds one layer at a time", async () => {
+    setDesktopMatches(false);
+    renderExplorer(informationFirstModel);
+    const trigger = screen.getByTestId("transactions-filters-trigger");
+    fireEvent.click(trigger);
+    const sheet = screen.getByTestId("transactions-filter-sheet");
+    const category = within(sheet).getByTestId("transactions-category-filter");
+    fireEvent.click(category);
+
+    const menu = document.querySelector<HTMLElement>(".piggy-select-menu");
+    expect(menu).not.toBeNull();
+    const search = within(menu!).getByRole("combobox", {
+      name: /search categories/i,
+    });
+    await waitFor(() => expect(search).toHaveFocus());
+
+    fireEvent.keyDown(search, { key: "Tab" });
+    expect(
+      sheet.contains(document.activeElement) ||
+        menu!.contains(document.activeElement),
+    ).toBe(true);
+    fireEvent.keyDown(document.activeElement ?? search, {
+      key: "Tab",
+      shiftKey: true,
+    });
+    expect(
+      sheet.contains(document.activeElement) ||
+        menu!.contains(document.activeElement),
+    ).toBe(true);
+
+    fireEvent.keyDown(search, { key: "Escape" });
+    await waitFor(() =>
+      expect(document.querySelector(".piggy-select-menu")).toBeNull(),
+    );
+    expect(screen.getByTestId("transactions-filter-sheet")).toBeVisible();
+    await waitFor(() => expect(category).toHaveFocus());
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByTestId("transactions-filter-sheet")).toBeNull(),
+    );
+    expect(trigger).toHaveFocus();
+  });
+
+  it("FE-008 reveals all inline advanced filters when the viewport changes from mobile to desktop while the sheet is open", async () => {
+    const viewport = installMutableDesktopMatchMedia(false);
+    renderExplorer(informationFirstModel);
+    fireEvent.click(screen.getByTestId("transactions-filters-trigger"));
+    expect(screen.getByTestId("transactions-filter-sheet")).toBeVisible();
+
+    act(() => viewport.setDesktop(true));
+
+    const explorer = screen.getByTestId("transactions-explorer");
+    for (const id of [
+      "transactions-account-filter",
+      "transactions-category-filter",
+      "transactions-status-filter",
+      "transactions-inclusion-filter",
+    ]) {
+      expect(within(explorer).getByTestId(id)).toBeVisible();
+    }
+  });
 });

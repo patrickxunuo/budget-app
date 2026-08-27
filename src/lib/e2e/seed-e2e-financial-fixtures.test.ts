@@ -59,3 +59,39 @@ describe("seed-e2e-financial-fixtures CLI safety", () => {
     }
   });
 });
+
+it("seeds the deterministic GH-66 mixed-source information-first ledger without changing categorized dashboard spending", () => {
+  const source = readFileSync(scriptPath, "utf8");
+
+  expect(source).toMatch(
+    /informationFirstTransactionIds:\s*Array\.from\([\s\S]*?length:\s*21/,
+  );
+  expect(source).toMatch(
+    /informationFirstMonth = transactionDate\.slice\(0, 7\)/,
+  );
+  expect(source).toMatch(
+    /informationFirstPendingDate = `\$\{informationFirstMonth\}-28`/,
+  );
+  expect(source).toMatch(
+    /informationFirstDates = Array\.from\([\s\S]*?length:\s*7[\s\S]*?informationFirstMonth[\s\S]*?padStart\(2, "0"\)/,
+  );
+  expect(source).toMatch(
+    /authorized_date:[\s\S]*?index === 0[\s\S]*?informationFirstPendingDate[\s\S]*?transaction_date:[\s\S]*?index === 0[\s\S]*?informationFirstPendingDate/,
+  );
+  expect(source).toMatch(/reconciling GH-66 information-first Plaid rows/);
+  expect(source).toMatch(/pending:\s*index === 0/);
+  expect(source).toMatch(/excluded:\s*true/);
+  expect(source).toMatch(/reconciling GH-66 manual information-first row/);
+  expect(source).toMatch(/description:\s*"GH-66 Manual Cash Adjustment"/);
+  expect(source).toMatch(/notes:\s*"Deterministic manual detail note"/);
+  expect(source).toMatch(/note:\s*"GH-66 complete metadata fixture"/);
+
+  const originalCategoryUpsert = source.match(
+    /reconciling the fixture transaction category[\s\S]*?const informationFirstDates/,
+  )?.[0];
+  expect(originalCategoryUpsert).toBeDefined();
+  expect(originalCategoryUpsert).toMatch(/excluded:\s*false/);
+  expect(originalCategoryUpsert).toMatch(
+    /note:\s*"GH-66 complete metadata fixture"/,
+  );
+});

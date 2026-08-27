@@ -1,4 +1,10 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+  type TestInfo,
+} from "@playwright/test";
 import { fixtureCredentials, requireFixture } from "./support/fixtures";
 import { chooseFirstSelectOption, chooseSelectOption } from "./support/select";
 
@@ -77,6 +83,22 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
 }
 
+async function openAdvancedTransactionFilters(page: Page): Promise<Locator> {
+  if ((page.viewportSize()?.width ?? 0) < 768) {
+    await page.getByTestId("transactions-filters-trigger").click();
+    const sheet = page.getByTestId("transactions-filter-sheet");
+    await expect(sheet).toBeVisible();
+    return sheet;
+  }
+  return page.locator("main");
+}
+
+async function closeAdvancedTransactionFilters(page: Page) {
+  if ((page.viewportSize()?.width ?? 0) >= 768) return;
+  await page.getByTestId("transactions-filter-close").click();
+  await expect(page.getByTestId("transactions-filter-sheet")).toBeHidden();
+}
+
 test.describe("GH-30 transaction exploration regression", () => {
   test("FE-002 previous, next, week, and custom period navigation refreshes real calendar ranges", async ({
     page,
@@ -98,11 +120,17 @@ test.describe("GH-30 transaction exploration regression", () => {
       page.getByTestId("transactions-period-week").click(),
     );
     await page.getByTestId("transactions-period-custom").click();
-    await page.getByTestId("transactions-custom-from").fill("2026-08-03");
-    await page.getByTestId("transactions-custom-to").fill("2026-08-09");
+    const advancedFilters = await openAdvancedTransactionFilters(page);
+    await advancedFilters
+      .getByTestId("transactions-custom-from")
+      .fill("2026-08-03");
+    await advancedFilters
+      .getByTestId("transactions-custom-to")
+      .fill("2026-08-09");
     await waitForTransactionsResponse(page, () =>
-      page.getByTestId("transactions-custom-apply").click(),
+      advancedFilters.getByTestId("transactions-custom-apply").click(),
     );
+    await closeAdvancedTransactionFilters(page);
     await expect(page.getByTestId("transactions-range-label")).toContainText(
       /Aug(?:ust)? 3|2026-08-03/i,
     );
@@ -117,20 +145,32 @@ test.describe("GH-30 transaction exploration regression", () => {
   }, testInfo) => {
     requireDashboardFixture();
     await openTransactions(page);
-    const account = page.getByTestId("transactions-account-filter");
-    const category = page.getByTestId("transactions-category-filter");
-    await chooseFirstSelectOption(account);
-    await chooseFirstSelectOption(category);
-    await chooseSelectOption(
-      page.getByTestId("transactions-status-filter"),
-      "Pending",
-      "pending",
+    const advancedFilters = await openAdvancedTransactionFilters(page);
+    const account = advancedFilters.getByTestId("transactions-account-filter");
+    const category = advancedFilters.getByTestId(
+      "transactions-category-filter",
     );
-    await chooseSelectOption(
-      page.getByTestId("transactions-inclusion-filter"),
-      "All lines",
-      "all",
+    await waitForTransactionsResponse(page, async () => {
+      await chooseFirstSelectOption(account);
+    });
+    await waitForTransactionsResponse(page, async () => {
+      await chooseFirstSelectOption(category);
+    });
+    await waitForTransactionsResponse(page, () =>
+      chooseSelectOption(
+        advancedFilters.getByTestId("transactions-status-filter"),
+        "Pending",
+        "pending",
+      ),
     );
+    await waitForTransactionsResponse(page, () =>
+      chooseSelectOption(
+        advancedFilters.getByTestId("transactions-inclusion-filter"),
+        "All lines",
+        "all",
+      ),
+    );
+    await closeAdvancedTransactionFilters(page);
     await waitForTransactionsResponse(page, async () => {
       await page.getByTestId("transactions-search").fill("a");
       await page.getByTestId("transactions-search").press("Enter");
@@ -177,21 +217,20 @@ test.describe("GH-30 transaction exploration regression", () => {
       "transactions-previous-period",
       "transactions-next-period",
       "transactions-search",
-      "transactions-account-filter",
-      "transactions-category-filter",
-      "transactions-status-filter",
-      "transactions-inclusion-filter",
+      "transactions-filters-trigger",
     ]) {
       const control = page.getByTestId(id);
       await expect(control).toHaveAccessibleName(/.+/);
       const box = await control.boundingBox();
       expect(box, `${id} must be laid out at 390 px`).not.toBeNull();
       expect(
-        Math.min(box!.width, box!.height),
-        `${id} must be at least 44 px on its smallest side`,
+        box!.height,
+        `${id} must be at least 44 px tall`,
       ).toBeGreaterThanOrEqual(44);
     }
-    const categoryMenuTrigger = page.getByTestId(
+    await page.getByTestId("transactions-filters-trigger").click();
+    const filterSheet = page.getByTestId("transactions-filter-sheet");
+    const categoryMenuTrigger = filterSheet.getByTestId(
       "transactions-category-filter",
     );
     await categoryMenuTrigger.click();
@@ -208,6 +247,7 @@ test.describe("GH-30 transaction exploration regression", () => {
       })),
     ).toEqual({ animationName: "none", overflowsHorizontally: false });
     await capture(page, testInfo, "transactions-mobile-category-select-open");
+    await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
     const controls = await page
       .getByTestId("transactions-search")
@@ -590,28 +630,51 @@ test.describe("GH-65 complete cursor pagination", () => {
     await capture(page, testInfo, "transactions-cursor-pagination-desktop");
   });
 
-  test("FE-005 FE-007 resets expanded pagination for a real filter change and plain Transactions navigation", async ({
+  test("FE-005 FE-007 resets expanded pagination through the mobile filter sheet and plain Transactions navigation", async ({
     page,
   }) => {
     requireDashboardFixture();
     await page.setViewportSize({ width: 390, height: 844 });
     await openTransactions(page);
     const visibleCount = page.getByTestId("transactions-visible-count");
-    const total = Number(
-      ((await visibleCount.textContent()) ?? "").match(/of\s+(\d+)/i)?.[1] ?? 0,
+    const readTotal = async () =>
+      Number(
+        ((await visibleCount.textContent()) ?? "").match(/of\s+(\d+)/i)?.[1] ??
+          0,
+      );
+    await expect.poll(readTotal).toBeGreaterThan(0);
+    const defaultTotal = await readTotal();
+
+    const filterTrigger = page.getByTestId("transactions-filters-trigger");
+    await filterTrigger.click();
+    const filterSheet = page.getByTestId("transactions-filter-sheet");
+    const allLinesResponse = await waitForTransactionsResponse(page, () =>
+      chooseSelectOption(
+        filterSheet.getByTestId("transactions-inclusion-filter"),
+        "All lines",
+        "all",
+      ),
     );
-    test.skip(
-      total <= 10,
-      "GH-65 reset acceptance requires a real dashboard fixture with more than 10 matching transactions.",
+    const allLinesModel = (await allLinesResponse.json()) as {
+      totalTransactionCount: number;
+    };
+    expect(allLinesModel.totalTransactionCount).toBeGreaterThan(10);
+    await page.getByTestId("transactions-filter-close").click();
+    await expect(visibleCount).toHaveText(
+      `10 of ${allLinesModel.totalTransactionCount} transactions visible`,
     );
 
-    await page.getByTestId("transactions-show-more").click();
+    const showMore = page.getByTestId("transactions-show-more");
+    await expect(showMore).toBeVisible();
+    await showMore.click();
     await expect(visibleCount).toHaveText(
-      `${Math.min(20, total)} of ${total} transactions visible`,
+      `${Math.min(20, allLinesModel.totalTransactionCount)} of ${allLinesModel.totalTransactionCount} transactions visible`,
     );
+
+    await filterTrigger.click();
     const postedResponse = await waitForTransactionsResponse(page, () =>
       chooseSelectOption(
-        page.getByTestId("transactions-status-filter"),
+        filterSheet.getByTestId("transactions-status-filter"),
         "Posted",
         "posted",
       ),
@@ -619,23 +682,27 @@ test.describe("GH-65 complete cursor pagination", () => {
     const postedModel = (await postedResponse.json()) as {
       totalTransactionCount: number;
     };
+    await page.getByTestId("transactions-filter-close").click();
     await expect(visibleCount).toHaveText(
       `${Math.min(10, postedModel.totalTransactionCount)} of ${postedModel.totalTransactionCount} transactions visible`,
     );
     expect(page.url()).not.toMatch(/cursor|limit|visible|page=/i);
     expect(page.url()).toContain("status=posted");
+    expect(page.url()).toContain("inclusion=all");
 
     const transactionsLink = page
       .getByRole("navigation", { name: "Primary" })
       .getByRole("link", { name: /transactions/i });
     await transactionsLink.click();
     await expect(page).toHaveURL(/\/transactions$/);
+    await filterTrigger.click();
     await expect(
-      page.getByTestId("transactions-status-filter"),
+      filterSheet.getByTestId("transactions-status-filter"),
     ).toHaveAttribute("data-value", "all");
     await expect(
-      page.getByTestId("transactions-inclusion-filter"),
+      filterSheet.getByTestId("transactions-inclusion-filter"),
     ).toHaveAttribute("data-value", "default");
+    await page.getByTestId("transactions-filter-close").click();
     await expect(page.getByTestId("transactions-scope-family")).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -645,7 +712,7 @@ test.describe("GH-65 complete cursor pagination", () => {
       "true",
     );
     await expect(visibleCount).toHaveText(
-      `${Math.min(10, total)} of ${total} transactions visible`,
+      `${Math.min(10, defaultTotal)} of ${defaultTotal} transactions visible`,
     );
 
     const today = await page.evaluate(() => {
@@ -672,5 +739,253 @@ test.describe("GH-65 complete cursor pagination", () => {
       status: "all",
       inclusion: "default",
     });
+  });
+});
+
+test.describe("GH-66 responsive transactions information-first", () => {
+  test("FE-009 covers the deterministic real mobile hierarchy, filters, grouping, expansion, details, failure recovery, hidden actions, overflow, targets, and screenshots", async ({
+    page,
+    context,
+  }, testInfo) => {
+    requireDashboardFixture();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openTransactions(page);
+
+    await expect(page.getByTestId("route-heading")).toBeVisible();
+    await expect(page.getByTestId("route-heading")).toHaveText("Transactions");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    await expect(
+      page.getByRole("heading", { level: 2, name: "Transaction activity" }),
+    ).toBeAttached();
+    const ordered = await page.locator("main").evaluate((main) => {
+      const selectors = [
+        '[data-testid="transactions-range-label"]',
+        '[data-testid="transactions-visible-count"]',
+        '[data-testid="transactions-scope-family"]',
+        '[data-testid="transactions-summary-income"]',
+        '[data-testid="transactions-period-month"]',
+        '[data-testid="transactions-search"]',
+        '[data-testid="transactions-filters-trigger"]',
+        '[data-testid="transactions-result-list"]',
+      ];
+      return selectors.map((selector) => {
+        const element = main.querySelector(selector);
+        if (!element)
+          throw new Error(`Missing mobile hierarchy element: ${selector}`);
+        return (element as HTMLElement).offsetTop;
+      });
+    });
+    expect(ordered).toEqual([...ordered].sort((a, b) => a - b));
+    for (const id of [
+      "transactions-summary-income",
+      "transactions-summary-spending",
+      "transactions-summary-net",
+      "transactions-summary-pending",
+    ]) {
+      await expect(page.getByTestId(id)).toBeVisible();
+    }
+
+    const filtersTrigger = page.getByTestId("transactions-filters-trigger");
+    await filtersTrigger.click();
+    const sheet = page.getByTestId("transactions-filter-sheet");
+    await expect(sheet).toHaveAttribute("role", "dialog");
+    const category = sheet.getByTestId("transactions-category-filter");
+    await category.click();
+    const categoryMenu = page.locator(".piggy-select-menu");
+    const categorySearch = categoryMenu.getByRole("combobox", {
+      name: /search categories/i,
+    });
+    await expect(categorySearch).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Boolean(
+            document.activeElement?.closest(
+              '[data-testid="transactions-filter-sheet"], .piggy-select-menu',
+            ),
+          ),
+        ),
+      )
+      .toBe(true);
+    await page.keyboard.press("Shift+Tab");
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Boolean(
+            document.activeElement?.closest(
+              '[data-testid="transactions-filter-sheet"], .piggy-select-menu',
+            ),
+          ),
+        ),
+      )
+      .toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(categoryMenu).toBeHidden();
+    await expect(sheet).toBeVisible();
+    await expect(category).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await expect(filtersTrigger).toBeFocused();
+
+    await filtersTrigger.click();
+    const allLinesResponse = waitForTransactionsResponse(page, () =>
+      chooseSelectOption(
+        sheet.getByTestId("transactions-inclusion-filter"),
+        "All lines",
+        "all",
+      ),
+    );
+    await allLinesResponse;
+    await page.getByTestId("transactions-filter-close").click();
+    const inclusionChip = page.getByTestId(
+      "transactions-filter-chip-inclusion",
+    );
+    await expect(inclusionChip).toContainText(/all lines/i);
+
+    await waitForTransactionsResponse(page, () => inclusionChip.click());
+    await expect(inclusionChip).toBeHidden();
+    await filtersTrigger.click();
+    await waitForTransactionsResponse(page, () =>
+      chooseSelectOption(
+        sheet.getByTestId("transactions-inclusion-filter"),
+        "All lines",
+        "all",
+      ),
+    );
+    await page.getByTestId("transactions-filter-close").click();
+
+    const rows = page.locator(
+      '[data-testid^="transactions-result-"]:not([data-testid="transactions-result-list"])',
+    );
+    await expect(rows).toHaveCount(10);
+    await expect
+      .poll(async () => {
+        const text =
+          (await page
+            .getByTestId("transactions-visible-count")
+            .textContent()) ?? "";
+        return Number(text.match(/of\s+(\d+)/i)?.[1] ?? 0);
+      })
+      .toBeGreaterThanOrEqual(23);
+    await expect
+      .poll(() =>
+        page.locator('[data-testid^="transactions-date-group-"]').count(),
+      )
+      .toBeGreaterThanOrEqual(3);
+    await expect(
+      page.getByRole("button", { name: /GH-66 Ledger Merchant 01/i }),
+    ).toContainText(/pending/i);
+    await expect(
+      page.getByRole("button", { name: /GH-66 Ledger Merchant 01/i }),
+    ).toContainText(/excluded/i);
+    await expect(
+      page.getByRole("button", { name: /GH-66 Manual Cash Adjustment/i }),
+    ).toContainText(/manual/i);
+
+    const showMore = page.getByTestId("transactions-show-more");
+    await expect(showMore).toBeVisible();
+    await showMore.scrollIntoViewIfNeeded();
+    const scrollBefore = await page.evaluate(() => scrollY);
+    await showMore.click();
+    await expect(rows).toHaveCount(20);
+    await expect(
+      page.getByTestId("transactions-pagination-status"),
+    ).toContainText(/20.*visible|showing.*20/i);
+    expect(await page.evaluate(() => scrollY)).toBe(scrollBefore);
+
+    const fixtureRow = page.getByRole("button", { name: /E2E Grocer/i });
+    await fixtureRow.click();
+    const detail = page.getByTestId("transaction-detail-sheet");
+    const metadata = page.getByTestId("transaction-detail-metadata");
+    await expect(detail).toBeVisible();
+    for (const value of [
+      /250\.00/,
+      /E2E Dashboard Grocery Purchase/i,
+      /E2E Family Chequing/i,
+      /Family/i,
+      /Posted/i,
+      /Spending/i,
+      /Connected account/i,
+      /FOOD_AND_DRINK_GROCERIES/i,
+      /E2E Dashboard Groceries/i,
+      /Included/i,
+      /GH-66 complete metadata fixture/i,
+    ]) {
+      await expect(metadata).toContainText(value);
+    }
+    await expect(
+      detail.getByRole("button", {
+        name: /edit|delete|categor|export|manage/i,
+      }),
+    ).toHaveCount(0);
+    await page.getByTestId("transaction-detail-close").click();
+    await expect(fixtureRow).toBeFocused();
+
+    await context.setOffline(true);
+    await fixtureRow.click();
+    await expect(page.getByTestId("transaction-detail-error")).toBeVisible();
+    await context.setOffline(false);
+    await page.getByTestId("transaction-detail-retry").click();
+    await expect(metadata).toContainText(/GH-66 complete metadata fixture/i);
+    await page.getByTestId("transaction-detail-close").click();
+
+    await expect(page.getByTestId("transactions-export-csv")).toBeHidden();
+    await expect(page.getByTestId("transactions-manage-menu")).toBeHidden();
+    for (const control of [
+      filtersTrigger,
+      page.getByTestId("transactions-search"),
+      page.getByTestId("transactions-period-day"),
+      fixtureRow,
+    ]) {
+      const box = await control.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+    await expectNoHorizontalOverflow(page);
+    await capture(page, testInfo, "transactions-information-first-mobile");
+  });
+
+  test("FE-009 retains deterministic desktop review, inline filters, Manage, CSV, grouping, detail, overflow, and screenshot", async ({
+    page,
+  }, testInfo) => {
+    requireDashboardFixture();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openTransactions(page);
+
+    await expect(page.getByTestId("transactions-filters-trigger")).toBeHidden();
+    for (const id of [
+      "transactions-account-filter",
+      "transactions-category-filter",
+      "transactions-status-filter",
+      "transactions-inclusion-filter",
+      "transactions-manage-menu",
+      "transactions-export-csv",
+    ]) {
+      await expect(page.getByTestId(id)).toBeVisible();
+    }
+    await waitForTransactionsResponse(page, () =>
+      chooseSelectOption(
+        page.getByTestId("transactions-inclusion-filter"),
+        "All lines",
+        "all",
+      ),
+    );
+    const rows = page.locator(
+      '[data-testid^="transactions-result-"]:not([data-testid="transactions-result-list"])',
+    );
+    await expect.poll(() => rows.count()).toBeGreaterThanOrEqual(23);
+    await expect
+      .poll(() =>
+        page.locator('[data-testid^="transactions-date-group-"]').count(),
+      )
+      .toBeGreaterThanOrEqual(3);
+    await page.getByRole("button", { name: /E2E Grocer/i }).click();
+    await expect(page.getByTestId("transaction-detail-metadata")).toContainText(
+      /GH-66 complete metadata fixture/i,
+    );
+    await page.getByTestId("transaction-detail-close").click();
+    await expectNoHorizontalOverflow(page);
+    await capture(page, testInfo, "transactions-information-first-desktop");
   });
 });

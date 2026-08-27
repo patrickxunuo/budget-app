@@ -61,24 +61,39 @@ test.describe("GH-64 transaction management routes", () => {
     await expect(page.getByTestId("manual-entry-form")).toHaveCount(0);
     await expect(page.getByTestId(/^category-save-/)).toHaveCount(0);
 
-    const menu = await openManageMenu(page);
+    const mobile = (page.viewportSize()?.width ?? 0) < 768;
+    const menu = page.getByTestId("transactions-manage-menu");
+    if (mobile) {
+      await expect(menu).toBeHidden();
+    } else {
+      await openManageMenu(page);
+    }
     const manualLink = menu.getByTestId("transactions-manage-manual");
     const plaidLink = menu.getByTestId("transactions-manage-plaid");
-    for (const [link, pathname] of [
-      [manualLink, "/transactions/manual"],
-      [plaidLink, "/transactions/plaid"],
+    const manualHref = String(await manualLink.getAttribute("href"));
+    const plaidHref = String(await plaidLink.getAttribute("href"));
+    for (const [href, pathname] of [
+      [manualHref, "/transactions/manual"],
+      [plaidHref, "/transactions/plaid"],
     ] as const) {
-      const target = new URL(
-        String(await link.getAttribute("href")),
-        page.url(),
-      );
+      const target = new URL(href, page.url());
       expect(target.pathname).toBe(pathname);
       expect(target.searchParams.get("scope")).toBe("personal");
       expect(target.searchParams.get("returnTo")).toBe(canonicalOverview);
     }
-    await capture(page, testInfo, "transactions-read-only-manage-menu");
+    await capture(
+      page,
+      testInfo,
+      mobile
+        ? "transactions-read-only-mobile"
+        : "transactions-read-only-manage-menu",
+    );
 
-    await manualLink.click();
+    if (mobile) {
+      await page.goto(manualHref);
+    } else {
+      await page.getByTestId("transactions-manage-manual").click();
+    }
     await expect(page.getByTestId("manual-management-page")).toBeVisible();
     await expect(page.getByTestId("manual-entry-workbench")).toBeVisible();
     await expect(page.getByTestId("transaction-ledger")).toHaveCount(0);
@@ -93,8 +108,12 @@ test.describe("GH-64 transaction management routes", () => {
     );
     await expect(page.getByTestId("transactions-explorer")).toBeVisible();
 
-    const reopened = await openManageMenu(page);
-    await reopened.getByTestId("transactions-manage-plaid").click();
+    if (mobile) {
+      await page.goto(plaidHref);
+    } else {
+      const reopened = await openManageMenu(page);
+      await reopened.getByTestId("transactions-manage-plaid").click();
+    }
     await expect(page.getByTestId("plaid-management-page")).toBeVisible();
     await expect(page.getByTestId("transaction-ledger")).toBeVisible();
     await expect(page.getByTestId("manual-entry-workbench")).toHaveCount(0);
