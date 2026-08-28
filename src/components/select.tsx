@@ -374,18 +374,19 @@ function SelectBase({
     <div
       ref={menuRef}
       data-piggy-select-portal-for={triggerId}
-      className="piggy-select-menu border-line bg-surface text-ink fixed z-[1200] overflow-hidden rounded-xl border shadow-[0_20px_55px_color-mix(in_srgb,var(--ink)_20%,transparent)]"
+      className="piggy-select-menu border-line bg-surface text-ink fixed z-[1200] flex min-h-0 flex-col overflow-hidden rounded-xl border shadow-[0_20px_55px_color-mix(in_srgb,var(--ink)_20%,transparent)]"
       style={{
         left: placement.left,
         top: placement.top,
         bottom: placement.bottom,
         width: placement.width,
+        maxHeight: placement.maxHeight,
         maxWidth: `calc(100vw - ${VIEWPORT_GUTTER * 2}px)`,
       }}
     >
-      <div className="border-brand bg-panel border-t-[3px]">
+      <div className="border-brand bg-panel flex min-h-0 flex-1 flex-col overflow-hidden border-t-[3px]">
         {searchable && (
-          <div className="border-line-soft border-b p-2.5">
+          <div className="border-line-soft shrink-0 border-b p-2.5">
             <div className="border-line bg-background focus-within:border-focus focus-within:outline-focus flex min-h-11 items-center gap-2 rounded-lg border px-3 focus-within:outline-2 focus-within:outline-offset-1">
               <svg
                 aria-hidden="true"
@@ -436,8 +437,7 @@ function SelectBase({
           aria-activedescendant={activeId}
           tabIndex={searchable ? -1 : 0}
           onKeyDown={onListKeyDown}
-          className="divide-line-soft divide-y overflow-y-auto overscroll-contain outline-none"
-          style={{ maxHeight: placement.maxHeight - (searchable ? 69 : 0) }}
+          className="divide-line-soft min-h-0 flex-1 touch-pan-y divide-y overflow-y-auto overscroll-contain outline-none"
         >
           {filteredOptions.length === 0 ? (
             <div className="text-muted px-4 py-8 text-center text-sm">
@@ -460,10 +460,14 @@ function SelectBase({
                   data-active={active ? "true" : "false"}
                   data-selected={selectedOption ? "true" : "false"}
                   data-value={option.value}
-                  onPointerMove={() =>
-                    !option.disabled && setActiveIndex(index)
-                  }
-                  onPointerDown={(event) => event.preventDefault()}
+                  onPointerMove={(event) => {
+                    if (event.pointerType === "mouse" && !option.disabled) {
+                      setActiveIndex(index);
+                    }
+                  }}
+                  onPointerDown={(event) => {
+                    if (event.pointerType === "mouse") event.preventDefault();
+                  }}
                   onClick={() => choose(option)}
                   className="group data-[active=true]:bg-panel data-[selected=true]:text-brand relative grid min-h-12 cursor-default grid-cols-[1fr_1.5rem] items-center gap-3 px-4 py-2.5 text-sm transition-colors aria-disabled:pointer-events-none aria-disabled:opacity-45 data-[active=true]:pl-5 data-[selected=true]:font-semibold"
                 >

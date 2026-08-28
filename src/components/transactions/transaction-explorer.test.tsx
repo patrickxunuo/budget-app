@@ -1319,6 +1319,19 @@ describe("GH-66 mobile transactions information-first", () => {
     expect(sheet).toHaveAttribute("role", "dialog");
     expect(sheet).toHaveAttribute("aria-modal", "true");
     expect(sheet).toHaveAccessibleName(/filters/i);
+    expect(sheet).toHaveClass("flex", "min-h-0", "overflow-hidden");
+    expect(sheet.className).toMatch(/max-h-\[min\(72dvh,34rem\)\]/);
+    expect(
+      within(sheet).getByTestId("transactions-filter-scroll-region"),
+    ).toHaveClass(
+      "min-h-0",
+      "touch-pan-y",
+      "overflow-y-auto",
+      "overscroll-contain",
+    );
+    expect(within(sheet).getByTestId("transactions-filter-grid")).toHaveClass(
+      "grid-cols-2",
+    );
     expect(
       within(sheet).getByTestId("transactions-account-filter"),
     ).toBeVisible();
@@ -1448,6 +1461,13 @@ describe("GH-66 mobile transactions information-first", () => {
 
     const sheet = screen.getByTestId("transaction-detail-sheet");
     expect(sheet).toHaveAttribute("role", "dialog");
+    expect(sheet).toHaveClass("flex", "min-h-0", "overflow-hidden");
+    expect(screen.getByTestId("transaction-detail-scroll-region")).toHaveClass(
+      "min-h-0",
+      "touch-pan-y",
+      "overflow-y-auto",
+      "overscroll-contain",
+    );
     expect(screen.getByTestId("transaction-detail-loading")).toBeVisible();
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       `/api/transactions/detail/plaid/${GH66_PLAID_ID}`,

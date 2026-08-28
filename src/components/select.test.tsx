@@ -232,13 +232,24 @@ describe("GH-26 themed Select acceptance", () => {
     fireEvent.click(trigger());
 
     const listbox = screen.getByRole("listbox");
-    const portal = listbox.closest(".piggy-select-menu")!;
+    const portal = listbox.closest<HTMLElement>(".piggy-select-menu")!;
     expect(document.body).toContainElement(listbox);
-    expect(portal.className).toMatch(/max-w|overflow|z-/);
-    expect(listbox.className).toMatch(/overflow-y|max-h/);
+    expect(portal).toHaveClass("flex", "min-h-0", "overflow-hidden");
+    expect(portal.style.maxHeight).not.toBe("");
+    expect(listbox).toHaveClass(
+      "min-h-0",
+      "flex-1",
+      "touch-pan-y",
+      "overflow-y-auto",
+      "overscroll-contain",
+    );
     expect(`${portal.className} ${listbox.className}`).toMatch(
       /surface|panel|ink|line|brand|motion-reduce/,
     );
+
+    const option = screen.getByRole("option", { name: "Alpha" });
+    expect(fireEvent.pointerDown(option, { pointerType: "touch" })).toBe(true);
+    expect(fireEvent.pointerDown(option, { pointerType: "mouse" })).toBe(false);
   });
 
   it("FE-011 preserves trigger/search/listbox relationships and selected/disabled/invalid semantics", async () => {
