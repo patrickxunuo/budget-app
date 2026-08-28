@@ -504,6 +504,9 @@ test.describe("GH-63 spending-history interactive readings", () => {
     expect(await xTicks.count()).toBeGreaterThanOrEqual(3);
     expect(await xTicks.count()).toBeLessThanOrEqual(4);
     const plot = page.getByTestId("dashboard-comparison-plot");
+    expect(
+      await plot.evaluate((element) => getComputedStyle(element).userSelect),
+    ).toBe("none");
     const box = await plot.boundingBox();
     expect(box).not.toBeNull();
     await plot.dispatchEvent("pointerdown", {
@@ -743,6 +746,78 @@ test.describe("GH-65 complete cursor pagination", () => {
 });
 
 test.describe("GH-66 responsive transactions information-first", () => {
+  test("FE-002 keeps the compact mobile filter and nested category list independently scrollable", async ({
+    page,
+  }, testInfo) => {
+    requireDashboardFixture();
+    await page.setViewportSize({ width: 390, height: 420 });
+    await openTransactions(page);
+
+    await page.getByTestId("transactions-period-custom").click();
+    await page.getByTestId("transactions-filters-trigger").click();
+
+    const sheet = page.getByTestId("transactions-filter-sheet");
+    const sheetBox = await sheet.boundingBox();
+    expect(sheetBox).not.toBeNull();
+    expect(sheetBox!.height).toBeLessThanOrEqual(304);
+
+    const filterGrid = sheet.getByTestId("transactions-filter-grid");
+    const filterPositions = await filterGrid
+      .locator(":scope > label")
+      .evaluateAll((labels) =>
+        labels.map((label) => label.getBoundingClientRect().top),
+      );
+    expect(filterPositions).toHaveLength(4);
+    expect(filterPositions[0]).toBe(filterPositions[1]);
+    expect(filterPositions[2]).toBe(filterPositions[3]);
+    expect(filterPositions[2]).toBeGreaterThan(filterPositions[0]!);
+
+    const scrollRegion = sheet.getByTestId("transactions-filter-scroll-region");
+    const sheetScroll = await scrollRegion.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      overflowY: getComputedStyle(element).overflowY,
+      scrollHeight: element.scrollHeight,
+    }));
+    expect(sheetScroll.overflowY).toMatch(/auto|scroll/);
+    expect(sheetScroll.scrollHeight).toBeGreaterThan(sheetScroll.clientHeight);
+    await scrollRegion.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect
+      .poll(() => scrollRegion.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+    await scrollRegion.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+
+    const category = sheet.getByTestId("transactions-category-filter");
+    await category.click();
+    const categoryList = page
+      .locator(".piggy-select-menu")
+      .getByRole("listbox");
+    await expect(categoryList).toBeVisible();
+    const categoryScroll = await categoryList.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      overflowY: getComputedStyle(element).overflowY,
+      scrollHeight: element.scrollHeight,
+    }));
+    expect(categoryScroll.overflowY).toMatch(/auto|scroll/);
+    expect(categoryScroll.scrollHeight).toBeGreaterThan(
+      categoryScroll.clientHeight,
+    );
+    await categoryList.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect
+      .poll(() => categoryList.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+    await capture(
+      page,
+      testInfo,
+      "transactions-compact-scrollable-filters-mobile",
+    );
+  });
+
   test("FE-009 covers the deterministic real mobile hierarchy, filters, grouping, expansion, details, failure recovery, hidden actions, overflow, targets, and screenshots", async ({
     page,
     context,

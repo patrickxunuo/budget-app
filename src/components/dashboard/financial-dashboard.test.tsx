@@ -562,6 +562,9 @@ describe("GH-63 spending-history axes and interactive readings", () => {
       ).toBe(true);
     }
     expect(screen.queryByTestId("dashboard-comparison-guide")).toBeNull();
+    expect(screen.getByTestId("dashboard-comparison-plot")).toHaveClass(
+      "select-none",
+    );
 
     setDashboardViewport(390);
     rerender(<FinancialDashboard initialModel={multiDayModel} />);

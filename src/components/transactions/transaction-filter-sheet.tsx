@@ -171,7 +171,7 @@ export function TransactionFilterSheet(props: TransactionFilterSheetProps) {
       {open && typeof document !== "undefined"
         ? createPortal(
             <div
-              className="fixed inset-0 z-[1050] flex items-end bg-black/35 backdrop-blur-[2px]"
+              className="fixed inset-0 z-[1050] flex items-end overflow-hidden bg-black/35 backdrop-blur-[2px]"
               onPointerDown={(event) => {
                 if (event.target === event.currentTarget) close();
               }}
@@ -183,20 +183,15 @@ export function TransactionFilterSheet(props: TransactionFilterSheetProps) {
                 aria-labelledby="transaction-filter-title"
                 data-testid="transactions-filter-sheet"
                 tabIndex={-1}
-                className="border-line bg-surface max-h-[88dvh] w-full overflow-y-auto rounded-t-[1.75rem] border px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-24px_70px_color-mix(in_srgb,var(--ink)_22%,transparent)]"
+                className="border-line bg-surface flex max-h-[min(72dvh,34rem)] min-h-0 w-full flex-col overflow-hidden rounded-t-[1.5rem] border shadow-[0_-24px_70px_color-mix(in_srgb,var(--ink)_22%,transparent)]"
               >
-                <div className="mb-5 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-utility text-brand text-[.58rem] font-semibold tracking-[.16em] uppercase">
-                      Refine the ledger
-                    </p>
-                    <h2
-                      id="transaction-filter-title"
-                      className="font-display mt-1 text-2xl font-semibold"
-                    >
-                      Advanced filters
-                    </h2>
-                  </div>
+                <div className="border-line-soft flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3">
+                  <h2
+                    id="transaction-filter-title"
+                    className="font-display text-xl font-semibold"
+                  >
+                    Filters
+                  </h2>
                   <button
                     ref={closeRef}
                     type="button"
@@ -208,10 +203,19 @@ export function TransactionFilterSheet(props: TransactionFilterSheetProps) {
                     <span aria-hidden="true">×</span>
                   </button>
                 </div>
-                <div className="grid gap-4">
-                  <AdvancedFields {...props} />
+                <div
+                  data-testid="transactions-filter-scroll-region"
+                  className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
+                  style={{ WebkitOverflowScrolling: "touch" }}
+                >
+                  <div
+                    data-testid="transactions-filter-grid"
+                    className="grid grid-cols-2 gap-x-3 gap-y-3"
+                  >
+                    <AdvancedFields {...props} />
+                  </div>
                   {props.filters.period === "custom" && (
-                    <div className="border-line bg-panel grid gap-3 rounded-xl border p-3">
+                    <div className="border-line bg-panel mt-3 grid grid-cols-2 gap-3 rounded-xl border p-3">
                       <label className={fieldLabel}>
                         From
                         <input
@@ -241,7 +245,7 @@ export function TransactionFilterSheet(props: TransactionFilterSheetProps) {
                         data-testid="transactions-custom-apply"
                         onClick={props.onApplyCustomRange}
                         disabled={!props.customRangeReady}
-                        className="bg-brand text-on-accent focus-visible:outline-focus min-h-11 rounded-full px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+                        className="bg-brand text-on-accent focus-visible:outline-focus col-span-2 min-h-11 rounded-full px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
                       >
                         Apply range
                       </button>

@@ -138,7 +138,7 @@ export function TransactionDetailSheet({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[1100] flex items-end justify-center bg-black/35 p-0 backdrop-blur-[2px] md:items-center md:p-6"
+      className="fixed inset-0 z-[1100] flex items-end justify-center overflow-hidden bg-black/35 p-0 backdrop-blur-[2px] md:items-center md:p-6"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) close();
       }}
@@ -150,9 +150,9 @@ export function TransactionDetailSheet({
         aria-labelledby="transaction-detail-title"
         data-testid="transaction-detail-sheet"
         tabIndex={-1}
-        className="border-line bg-surface text-ink max-h-[88dvh] w-full overflow-y-auto rounded-t-[1.75rem] border shadow-[0_-24px_70px_color-mix(in_srgb,var(--ink)_22%,transparent)] md:max-w-xl md:rounded-2xl md:shadow-[0_24px_80px_color-mix(in_srgb,var(--ink)_22%,transparent)]"
+        className="border-line bg-surface text-ink flex max-h-[88dvh] min-h-0 w-full flex-col overflow-hidden rounded-t-[1.75rem] border shadow-[0_-24px_70px_color-mix(in_srgb,var(--ink)_22%,transparent)] md:max-w-xl md:rounded-2xl md:shadow-[0_24px_80px_color-mix(in_srgb,var(--ink)_22%,transparent)]"
       >
-        <div className="border-line-soft sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-[color:var(--surface)] px-5 py-4">
+        <div className="border-line-soft flex shrink-0 items-start justify-between gap-4 border-b bg-[color:var(--surface)] px-5 py-4">
           <div className="min-w-0">
             <p className="font-utility text-brand text-[.58rem] font-semibold tracking-[.16em] uppercase">
               Read-only ledger record
@@ -176,7 +176,11 @@ export function TransactionDetailSheet({
           </button>
         </div>
 
-        <div className="px-5 py-5 md:px-6">
+        <div
+          data-testid="transaction-detail-scroll-region"
+          className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-5 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:px-6"
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
           {loading && (
             <div
               data-testid="transaction-detail-loading"

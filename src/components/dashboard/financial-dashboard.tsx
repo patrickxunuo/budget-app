@@ -317,7 +317,7 @@ function SpendingHistoryChart({
         tabIndex={0}
         aria-label="Inspect spending history by day"
         aria-describedby="dashboard-comparison-reading"
-        className="focus-visible:outline-brand relative mt-4 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4"
+        className="focus-visible:outline-brand relative mt-4 rounded-xl select-none focus-visible:outline-2 focus-visible:outline-offset-4"
         style={{ touchAction: "pan-y" }}
         onPointerDown={(event) =>
           selectPointer(
