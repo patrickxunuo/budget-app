@@ -1277,7 +1277,7 @@ describe("GH-66 mobile transactions information-first", () => {
     const spending = screen.getByTestId("transactions-summary-spending");
     const net = screen.getByTestId("transactions-summary-net");
     const pending = screen.getByTestId("transactions-summary-pending");
-    const period = screen.getByTestId("transactions-period-month");
+    const period = screen.getByTestId("transactions-period-select-mobile");
     const search = screen.getByTestId("transactions-search");
     const filters = screen.getByTestId("transactions-filters-trigger");
     const feed = screen.getByTestId("transactions-result-list");
@@ -1292,6 +1292,10 @@ describe("GH-66 mobile transactions information-first", () => {
     for (const total of [income, spending, net, pending])
       expect(total).toBeVisible();
     expect(income.parentElement?.parentElement).toHaveClass("grid-cols-2");
+    expect(period).toHaveAttribute("data-value", "month");
+    expect(
+      screen.getByTestId("transactions-period-month").parentElement,
+    ).toHaveClass("hidden");
     const firstRow = screen.getByTestId(`transactions-result-${GH66_PLAID_ID}`);
     for (const content of [
       within(firstRow).getByText("Green Market"),
@@ -1313,14 +1317,19 @@ describe("GH-66 mobile transactions information-first", () => {
     renderExplorer(informationFirstModel);
     const trigger = screen.getByTestId("transactions-filters-trigger");
 
-    fireEvent.click(screen.getByTestId("transactions-period-custom"));
+    chooseFilter("transactions-period-select-mobile", "Custom");
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("transactions-period-select-mobile"),
+      ).toHaveFocus(),
+    );
     fireEvent.click(trigger);
     const sheet = screen.getByTestId("transactions-filter-sheet");
     expect(sheet).toHaveAttribute("role", "dialog");
     expect(sheet).toHaveAttribute("aria-modal", "true");
     expect(sheet).toHaveAccessibleName(/filters/i);
     expect(sheet).toHaveClass("flex", "min-h-0", "overflow-hidden");
-    expect(sheet.className).toMatch(/max-h-\[min\(72dvh,34rem\)\]/);
+    expect(sheet.className).toMatch(/max-h-\[min\(60dvh,28rem\)\]/);
     expect(
       within(sheet).getByTestId("transactions-filter-scroll-region"),
     ).toHaveClass(

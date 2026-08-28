@@ -183,9 +183,9 @@ export function TransactionFilterSheet(props: TransactionFilterSheetProps) {
                 aria-labelledby="transaction-filter-title"
                 data-testid="transactions-filter-sheet"
                 tabIndex={-1}
-                className="border-line bg-surface flex max-h-[min(72dvh,34rem)] min-h-0 w-full flex-col overflow-hidden rounded-t-[1.5rem] border shadow-[0_-24px_70px_color-mix(in_srgb,var(--ink)_22%,transparent)]"
+                className="border-line bg-surface flex max-h-[min(60dvh,28rem)] min-h-0 w-full flex-col overflow-hidden rounded-t-[1.5rem] border shadow-[0_-24px_70px_color-mix(in_srgb,var(--ink)_22%,transparent)]"
               >
-                <div className="border-line-soft flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3">
+                <div className="border-line-soft flex shrink-0 items-center justify-between gap-3 border-b px-3 py-2">
                   <h2
                     id="transaction-filter-title"
                     className="font-display text-xl font-semibold"
@@ -205,12 +205,12 @@ export function TransactionFilterSheet(props: TransactionFilterSheetProps) {
                 </div>
                 <div
                   data-testid="transactions-filter-scroll-region"
-                  className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
+                  className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 pt-2 pb-[max(.75rem,env(safe-area-inset-bottom))]"
                   style={{ WebkitOverflowScrolling: "touch" }}
                 >
                   <div
                     data-testid="transactions-filter-grid"
-                    className="grid grid-cols-2 gap-x-3 gap-y-3"
+                    className="grid grid-cols-2 gap-2"
                   >
                     <AdvancedFields {...props} />
                   </div>

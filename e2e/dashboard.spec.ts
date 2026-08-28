@@ -99,6 +99,21 @@ async function closeAdvancedTransactionFilters(page: Page) {
   await expect(page.getByTestId("transactions-filter-sheet")).toBeHidden();
 }
 
+async function chooseTransactionPeriod(
+  page: Page,
+  period: "day" | "week" | "month" | "custom",
+) {
+  if ((page.viewportSize()?.width ?? 0) < 768) {
+    await chooseSelectOption(
+      page.getByTestId("transactions-period-select-mobile"),
+      period[0]!.toUpperCase() + period.slice(1),
+      period,
+    );
+    return;
+  }
+  await page.getByTestId(`transactions-period-${period}`).click();
+}
+
 test.describe("GH-30 transaction exploration regression", () => {
   test("FE-002 previous, next, week, and custom period navigation refreshes real calendar ranges", async ({
     page,
@@ -113,13 +128,15 @@ test.describe("GH-30 transaction exploration regression", () => {
     await waitForTransactionsResponse(page, () =>
       page.getByTestId("transactions-next-period").click(),
     );
-    await expect(
-      page.getByTestId("transactions-period-week"),
-    ).toHaveAccessibleName(/monday|week/i);
+    const periodControl =
+      (page.viewportSize()?.width ?? 0) < 768
+        ? page.getByTestId("transactions-period-select-mobile")
+        : page.getByTestId("transactions-period-week");
+    await expect(periodControl).toHaveAccessibleName(/accounting period|week/i);
     await waitForTransactionsResponse(page, () =>
-      page.getByTestId("transactions-period-week").click(),
+      chooseTransactionPeriod(page, "week"),
     );
-    await page.getByTestId("transactions-period-custom").click();
+    await chooseTransactionPeriod(page, "custom");
     const advancedFilters = await openAdvancedTransactionFilters(page);
     await advancedFilters
       .getByTestId("transactions-custom-from")
@@ -207,18 +224,16 @@ test.describe("GH-30 transaction exploration regression", () => {
     const activeText = await page.locator(":focus").textContent();
     expect(`${activeName ?? ""}${activeText ?? ""}`.trim()).not.toBe("");
     await expectNoHorizontalOverflow(page);
-    for (const id of [
+    const mobileControls = [
       "transactions-scope-family",
       "transactions-scope-personal",
-      "transactions-period-day",
-      "transactions-period-week",
-      "transactions-period-month",
-      "transactions-period-custom",
+      "transactions-period-select-mobile",
       "transactions-previous-period",
       "transactions-next-period",
       "transactions-search",
       "transactions-filters-trigger",
-    ]) {
+    ];
+    for (const id of mobileControls) {
       const control = page.getByTestId(id);
       await expect(control).toHaveAccessibleName(/.+/);
       const box = await control.boundingBox();
@@ -710,10 +725,9 @@ test.describe("GH-65 complete cursor pagination", () => {
       "aria-pressed",
       "true",
     );
-    await expect(page.getByTestId("transactions-period-month")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(
+      page.getByTestId("transactions-period-select-mobile"),
+    ).toHaveAttribute("data-value", "month");
     await expect(visibleCount).toHaveText(
       `${Math.min(10, defaultTotal)} of ${defaultTotal} transactions visible`,
     );
@@ -753,13 +767,19 @@ test.describe("GH-66 responsive transactions information-first", () => {
     await page.setViewportSize({ width: 390, height: 420 });
     await openTransactions(page);
 
-    await page.getByTestId("transactions-period-custom").click();
+    const controlsBox = await page
+      .getByTestId("transactions-control-panel")
+      .boundingBox();
+    expect(controlsBox).not.toBeNull();
+    expect(controlsBox!.height).toBeLessThanOrEqual(126);
+
+    await chooseTransactionPeriod(page, "custom");
     await page.getByTestId("transactions-filters-trigger").click();
 
     const sheet = page.getByTestId("transactions-filter-sheet");
     const sheetBox = await sheet.boundingBox();
     expect(sheetBox).not.toBeNull();
-    expect(sheetBox!.height).toBeLessThanOrEqual(304);
+    expect(sheetBox!.height).toBeLessThanOrEqual(254);
 
     const filterGrid = sheet.getByTestId("transactions-filter-grid");
     const filterPositions = await filterGrid
@@ -806,7 +826,26 @@ test.describe("GH-66 responsive transactions information-first", () => {
       categoryScroll.clientHeight,
     );
     await categoryList.evaluate((element) => {
-      element.scrollTop = element.scrollHeight;
+      element.scrollTop = 0;
+    });
+    const categoryBox = await categoryList.boundingBox();
+    expect(categoryBox).not.toBeNull();
+    const touch = await page.context().newCDPSession(page);
+    const touchX = categoryBox!.x + categoryBox!.width / 2;
+    const touchStartY = categoryBox!.y + categoryBox!.height - 20;
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: touchX, y: touchStartY }],
+    });
+    for (const offset of [35, 70, 105]) {
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: touchX, y: touchStartY - offset }],
+      });
+    }
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
     });
     await expect
       .poll(() => categoryList.evaluate((element) => element.scrollTop))
@@ -838,7 +877,7 @@ test.describe("GH-66 responsive transactions information-first", () => {
         '[data-testid="transactions-visible-count"]',
         '[data-testid="transactions-scope-family"]',
         '[data-testid="transactions-summary-income"]',
-        '[data-testid="transactions-period-month"]',
+        '[data-testid="transactions-period-select-mobile"]',
         '[data-testid="transactions-search"]',
         '[data-testid="transactions-filters-trigger"]',
         '[data-testid="transactions-result-list"]',
@@ -1010,7 +1049,7 @@ test.describe("GH-66 responsive transactions information-first", () => {
     for (const control of [
       filtersTrigger,
       page.getByTestId("transactions-search"),
-      page.getByTestId("transactions-period-day"),
+      page.getByTestId("transactions-period-select-mobile"),
       fixtureRow,
     ]) {
       const box = await control.boundingBox();
