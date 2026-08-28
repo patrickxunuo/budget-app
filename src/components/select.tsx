@@ -438,6 +438,11 @@ function SelectBase({
           tabIndex={searchable ? -1 : 0}
           onKeyDown={onListKeyDown}
           className="divide-line-soft min-h-0 flex-1 touch-pan-y divide-y overflow-y-auto overscroll-contain outline-none"
+          style={{
+            maxHeight: placement.maxHeight - (searchable ? 69 : 0),
+            WebkitOverflowScrolling: "touch",
+            touchAction: "pan-y",
+          }}
         >
           {filteredOptions.length === 0 ? (
             <div className="text-muted px-4 py-8 text-center text-sm">
@@ -460,14 +465,7 @@ function SelectBase({
                   data-active={active ? "true" : "false"}
                   data-selected={selectedOption ? "true" : "false"}
                   data-value={option.value}
-                  onPointerMove={(event) => {
-                    if (event.pointerType === "mouse" && !option.disabled) {
-                      setActiveIndex(index);
-                    }
-                  }}
-                  onPointerDown={(event) => {
-                    if (event.pointerType === "mouse") event.preventDefault();
-                  }}
+                  onMouseMove={() => !option.disabled && setActiveIndex(index)}
                   onClick={() => choose(option)}
                   className="group data-[active=true]:bg-panel data-[selected=true]:text-brand relative grid min-h-12 cursor-default grid-cols-[1fr_1.5rem] items-center gap-3 px-4 py-2.5 text-sm transition-colors aria-disabled:pointer-events-none aria-disabled:opacity-45 data-[active=true]:pl-5 data-[selected=true]:font-semibold"
                 >

@@ -720,12 +720,27 @@ export function TransactionExplorer({
         </p>
       </div>
 
-      <div className="border-line bg-surface grid min-w-0 gap-4 rounded-2xl border p-4 md:p-5">
-        <div className="grid min-w-0 gap-3 md:flex md:flex-wrap md:items-center">
+      <div
+        data-testid="transactions-control-panel"
+        className="border-line bg-surface grid min-w-0 gap-2 rounded-2xl border p-3 md:gap-4 md:p-5"
+      >
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 md:flex md:flex-wrap">
+          <div className="min-w-0 md:hidden">
+            <Select
+              data-testid="transactions-period-select-mobile"
+              value={filters.period}
+              onValueChange={(period) => choosePeriod(period as ExplorerPeriod)}
+              options={PERIODS.map((period) => ({
+                value: period.value,
+                label: period.label,
+              }))}
+              aria-label="Accounting period"
+            />
+          </div>
           <div
             role="group"
             aria-label="Accounting period"
-            className="grid min-w-0 grid-cols-4 gap-1.5 md:flex md:flex-wrap md:gap-2"
+            className="hidden min-w-0 md:flex md:flex-wrap md:gap-2"
           >
             {PERIODS.map((period) => (
               <button
@@ -751,7 +766,7 @@ export function TransactionExplorer({
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-2 md:ml-auto md:flex">
+          <div className="contents md:ml-auto md:flex md:gap-2">
             <button
               type="button"
               data-testid="transactions-previous-period"
@@ -842,8 +857,10 @@ export function TransactionExplorer({
         )}
 
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 md:grid-cols-1">
-          <label className={fieldLabel}>
-            Search
+          <label className="min-w-0 md:grid md:gap-1.5">
+            <span className="font-utility text-muted sr-only text-[.62rem] font-semibold tracking-[.14em] uppercase md:not-sr-only">
+              Search
+            </span>
             <input
               data-testid="transactions-search"
               type="search"

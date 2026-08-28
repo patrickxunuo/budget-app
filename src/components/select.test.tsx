@@ -243,13 +243,16 @@ describe("GH-26 themed Select acceptance", () => {
       "overflow-y-auto",
       "overscroll-contain",
     );
+    expect(listbox.style.maxHeight).not.toBe("");
+    expect(listbox.style.touchAction).toBe("pan-y");
     expect(`${portal.className} ${listbox.className}`).toMatch(
       /surface|panel|ink|line|brand|motion-reduce/,
     );
 
     const option = screen.getByRole("option", { name: "Alpha" });
     expect(fireEvent.pointerDown(option, { pointerType: "touch" })).toBe(true);
-    expect(fireEvent.pointerDown(option, { pointerType: "mouse" })).toBe(false);
+    expect(fireEvent.pointerDown(option, { pointerType: "mouse" })).toBe(true);
+    expect(fireEvent.touchMove(option)).toBe(true);
   });
 
   it("FE-011 preserves trigger/search/listbox relationships and selected/disabled/invalid semantics", async () => {
