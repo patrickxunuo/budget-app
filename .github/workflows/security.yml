@@ -36,6 +36,14 @@ jobs:
 
   audit:
     name: Dependency audit
+    # A full audit reports every known advisory in the tree, including ones a
+    # pull request did not introduce, so a newly disclosed advisory used to turn
+    # every open pull request red until main was fixed. Dependency review above
+    # already answers "does this change add a vulnerability"; the audit answers
+    # "is main vulnerable" and belongs on main and the weekly schedule. Skipping
+    # with a job-level condition reports the required check as successful,
+    # whereas an event filter would leave it pending and block merging.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

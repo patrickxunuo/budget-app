@@ -1,0 +1,73 @@
+name: Dependabot auto-merge
+
+# Dependency updates used to wait for a manual review that, with one maintainer,
+# often did not happen for months; a critical advisory then sat unpatched on
+# main. Low-risk tiers now merge themselves once the required checks pass.
+# Anything outside those tiers is left for a human, exactly as before.
+
+on: pull_request
+
+# Least privilege by default; the job widens only what it needs.
+permissions: {}
+
+jobs:
+  auto-merge:
+    name: Approve and enable auto-merge
+    # Both conditions matter. The author check limits this to Dependabot pull
+    # requests; the actor check stops it approving commits a person pushed onto
+    # a Dependabot branch, which no longer carry Dependabot's guarantees.
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Read update metadata
+        id: metadata
+        # Pinned to a commit because this job can approve and merge.
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Decide whether the update is low risk
+        id: tier
+        env:
+          ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          DEPENDENCY_TYPE: ${{ steps.metadata.outputs.dependency-type }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          # update-type is the highest semver change in the pull request, so a
+          # grouped update is judged by its riskiest member.
+          eligible=false
+          case "$ECOSYSTEM" in
+            github_actions | github-actions)
+              # Action bumps are CI-only and cannot reach production.
+              eligible=true
+              ;;
+            *)
+              case "$DEPENDENCY_TYPE:$UPDATE_TYPE" in
+                direct:development:version-update:semver-patch | \
+                direct:development:version-update:semver-minor | \
+                direct:production:version-update:semver-patch)
+                  eligible=true
+                  ;;
+              esac
+              ;;
+          esac
+          echo "eligible=$eligible" >> "$GITHUB_OUTPUT"
+          echo "ecosystem=$ECOSYSTEM type=$DEPENDENCY_TYPE update=$UPDATE_TYPE eligible=$eligible" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Approve and enable auto-merge
+        if: steps.tier.outputs.eligible == 'true'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Auto-merge only completes after every required status check passes,
+          # so a failing build still blocks the update.
+          gh pr review --approve "$PR_URL"
+          gh pr merge --auto --squash "$PR_URL"

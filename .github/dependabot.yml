@@ -9,6 +9,11 @@ updates:
       time: "06:00"
       timezone: America/Toronto
     open-pull-requests-limit: 5
+    # Wait a week after a release before proposing it, so a compromised or
+    # broken release is usually caught and pulled before it reaches this
+    # repository. Security updates ignore the cooldown and still open at once.
+    cooldown:
+      default-days: 7
     versioning-strategy: increase
     commit-message:
       prefix: chore
@@ -43,6 +48,11 @@ updates:
       time: "06:00"
       timezone: America/Toronto
     open-pull-requests-limit: 5
+    # Wait a week after a release before proposing it, so a compromised or
+    # broken release is usually caught and pulled before it reaches this
+    # repository. Security updates ignore the cooldown and still open at once.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: chore
       include: scope
