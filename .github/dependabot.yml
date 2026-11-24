@@ -26,6 +26,14 @@ updates:
       - dependency-name: "@types/node"
         update-types:
           - version-update:semver-major
+      # plaid 51 reshaped the SDK's exports (Configuration, PlaidApi and the
+      # root-level types moved or were renamed), so a major bump fails type-check
+      # and needs a deliberate migration of src/lib/plaid. Without this entry
+      # Dependabot reopens a failing pull request for every new major. Remove it
+      # when the migration is done. Security updates are not affected.
+      - dependency-name: "plaid"
+        update-types:
+          - version-update:semver-major
     groups:
       # One pull request per ecosystem-sized concern keeps the review surface
       # small; security updates stay ungrouped so they can land on their own.
