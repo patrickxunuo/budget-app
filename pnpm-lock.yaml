@@ -18,8 +18,8 @@ dependencies:
     specifier: ^10.6.1
     version: 10.6.1
   plaid:
-    specifier: ^46.0.0
-    version: 46.0.0
+    specifier: ^51.0.0
+    version: 51.0.0
   react:
     specifier: 19.3.1
     version: 19.3.1
@@ -4046,9 +4046,9 @@ packages:
     engines: {node: '>=12'}
     dev: true
 
-  /plaid@46.0.0:
-    resolution: {integrity: sha512-MMLtie70amJjZdrislGohyG9hkm30X3tdPNUD/cC62kGXZsvOlc8N2hWeg2tJBG99iPRW6xxfL3HrJUkvVeHQg==}
-    engines: {node: '>=10.0.0'}
+  /plaid@51.0.0:
+    resolution: {integrity: sha512-ONPdfy1O7xv4bXnqtWwrKQQnKHNwDNcNag/lFL6HuRSHf0gZzp32nAiSRg8KsTjoKV2VAulJv/dIYEJaXZnZIg==}
+    engines: {node: '>=18.0.0'}
     dependencies:
       axios: 1.21.1
     transitivePeerDependencies:
